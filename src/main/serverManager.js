@@ -411,7 +411,7 @@ class ServerManager extends EventEmitter {
     const c = this.getConfig(id);
     if (!c || !c.discordAlert || !c.discordWebhook || !c[flag]) return;
     const body = JSON.stringify({
-      username: 'Node.WGSM',
+      username: 'NodeGSM',
       embeds: [{ title: message, description: c.discordMessage || undefined, color: flag === 'crashAlert' ? 0xe74c3c : 0x2ecc71,
         fields: [{ name: 'Server', value: `#${id} ${c.name}`, inline: true }, { name: 'Game', value: (byId(c.game) || {}).name || c.game, inline: true }],
         timestamp: new Date().toISOString() }],
@@ -426,7 +426,7 @@ class ServerManager extends EventEmitter {
   // ---------- Windows firewall ----------
   firewall(id, enable = true) {
     const c = this.getConfig(id);
-    const name = `Node.WGSM #${id} ${c.name}`;
+    const name = `NodeGSM #${id} ${c.name}`;
     const ports = [...new Set([c.port, c.queryPort].filter(Boolean))].join(',');
     spawnSync('netsh', ['advfirewall', 'firewall', 'delete', 'rule', `name=${name}`], { windowsHide: true });
     if (!enable) return { ok: true };

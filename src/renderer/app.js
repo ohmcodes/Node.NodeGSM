@@ -145,7 +145,7 @@ function tabAutomation(b, s) {
   b.innerHTML = `
     <h4>Automation</h4>
     <div class="grid">
-      ${check('autoStart', 'Auto start with Node.WGSM', s)}${check('autoRestart', 'Auto restart on crash', s)}
+      ${check('autoStart', 'Auto start with NodeGSM', s)}${check('autoRestart', 'Auto restart on crash', s)}
       ${check('autoUpdate', 'Auto update (checks every 30 min)', s)}${check('updateOnStart', 'Update on start', s)}
       ${check('backupOnStart', 'Backup on start', s)}${check('restartCrontab', 'Restart crontab', s)}
     </div>

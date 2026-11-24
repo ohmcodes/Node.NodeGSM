@@ -1,4 +1,4 @@
-# Node.WGSM2026
+# NodeGSM - Node Game Server Manager
 
 An Electron rewrite of [WindowsGSM](https://github.com/WindowsGSM/WindowsGSM) - manage game servers with a GUI: install, import, start, stop, restart, update and automate multiple servers.
 
@@ -8,7 +8,7 @@ npm install
 npm start
 npm test      # headless smoke test of the server manager
 ```
-Data (servers, backups, SteamCMD) lives in `%APPDATA%/node-wgsm2026/WGSM` (override with the `WGSM_DATA` env var).
+Data (servers, backups, SteamCMD) lives in `%APPDATA%/NodeGSM` (override with the `NODEGSM_DATA` env var; installs made before the rename keep using `%APPDATA%/node-wgsm2026/WGSM`).
 
 ## Feature status (vs. original)
 | Feature | Status |

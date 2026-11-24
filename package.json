@@ -1,7 +1,7 @@
 {
-  "name": "node-wgsm2026",
+  "name": "nodegsm",
   "version": "0.1.0",
-  "description": "WindowsGSM reimagined on Electron - manage game servers with one click",
+  "description": "NodeGSM - Node Game Server Manager. Install, run and automate game servers with one click.",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
@@ -19,8 +19,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.node.wgsm2026",
-    "productName": "Node.WGSM2026",
+    "appId": "com.nodegsm.app",
+    "productName": "NodeGSM",
     "directories": {
       "output": "dist"
     },

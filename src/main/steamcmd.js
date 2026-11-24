@@ -9,7 +9,7 @@ const STEAMCMD_URL = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.
 
 function download(url, dest, redirects = 5) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Node.WGSM2026' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'NodeGSM' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) {
         res.resume();
         return resolve(download(new URL(res.headers.location, url).toString(), dest, redirects - 1));
@@ -26,7 +26,7 @@ function download(url, dest, redirects = 5) {
 
 function fetchText(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Node.WGSM2026' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'NodeGSM' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
         return resolve(fetchText(new URL(res.headers.location, url).toString()));

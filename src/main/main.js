@@ -4,7 +4,10 @@ const path = require('path');
 const { ServerManager } = require('./serverManager');
 const { GAMES } = require('./games');
 
-const dataDir = process.env.WGSM_DATA || path.join(app.getPath('userData'), 'WGSM');
+// Keep using the pre-rename data folder if it exists so existing servers/downloads are not orphaned.
+const legacyDir = path.join(app.getPath('appData'), 'node-wgsm2026', 'WGSM');
+const dataDir = process.env.NODEGSM_DATA || process.env.WGSM_DATA ||
+  (require('fs').existsSync(legacyDir) ? legacyDir : path.join(app.getPath('appData'), 'NodeGSM'));
 let mgr; let win; let tray; let quitting = false;
 
 function publicGames() {
@@ -14,7 +17,7 @@ function publicGames() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: '#14161c', title: 'Node.WGSM2026',
+    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: '#14161c', title: 'NodeGSM',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.setMenuBarVisibility(false);
@@ -90,7 +93,7 @@ app.whenReady().then(() => {
 
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'games', 'csgo.png')).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
-  tray.setToolTip('Node.WGSM2026');
+  tray.setToolTip('NodeGSM');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show', click: () => { win.show(); } },
     { label: 'Quit', click: () => { quitting = true; app.quit(); } },
