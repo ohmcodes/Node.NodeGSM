@@ -41,7 +41,7 @@ fs.writeFileSync(path.join(fakeDir, 'x.js'), '');
   // cron tick should not throw
   m.saveConfig(s.id, { restartCrontab: true, crontabFormat: '* * * * *' }); m.cronTick();
   await m.remove(s.id, true);
-  console.log('smoke test passed');
+  const AdmZip=require('adm-zip');const P=require('../src/main/plugins');const z=new AdmZip();z.addLocalFolder(path.join(__dirname,'..','examples','palworld'),'palworld-plugin');const zf=path.join(dir,'p.zip');z.writeZip(zf);const id=m.installPlugin(zf);assert.strictEqual(id,'palworld');assert(GAMES.find(x=>x.id==='palworld'),'plugin loaded');const pc=m.create('palworld','My Pal');m.saveConfig(pc.id,{ip:'',name:'My Pal',param:'-publiclobby'});const pa=m.buildLaunch(pc.id).args;assert.deepStrictEqual(pa,['-publiclobby','-port=8211','-publicport=8211','-players=32','-servername=My Pal']);fs.mkdirSync(path.join(m.pluginsDir,'bad'));fs.writeFileSync(path.join(m.pluginsDir,'bad','plugin.json'),'{"id":"x"}');assert(m.reloadPlugins().errors.length===1,'bad plugin reported');console.log('smoke test passed');
   fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

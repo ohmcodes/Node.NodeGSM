@@ -50,3 +50,5 @@ table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1p
 #toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px}
 #toast div{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--accent);padding:8px 12px;border-radius:6px;max-width:420px}
 #toast div.err{border-left-color:var(--bad)}
+
+#plErr .err{color:var(--bad);font-size:12px;padding:4px 0}

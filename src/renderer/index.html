@@ -12,6 +12,7 @@
   <div class="spacer"></div>
   <span id="metrics" class="muted"></span>
   <button id="btnAdd" class="primary">+ Add Server</button>
+  <button id="btnPlugins">Plugins</button>
   <button id="btnSettings">Settings</button>
 </header>
 <main>
@@ -48,6 +49,16 @@
     <label class="check"><input type="checkbox" id="setLogin"> Start Node.WGSM on Windows login (servers flagged Auto Start will launch)</label>
     <label class="check"><input type="checkbox" id="setTray"> Minimize to tray on close</label>
     <div class="row end"><button type="button" id="setCancel">Close</button><button type="submit" id="setOk" class="primary">Save</button></div>
+  </form>
+</dialog>
+<dialog id="dlgPlugins">
+  <form method="dialog" onsubmit="return false">
+    <h3>Plugins</h3>
+    <p class="muted">Add support for more games: install a plugin zip/folder (or copy it into the plugins folder and click Reload).</p>
+    <div id="plList"></div><div id="plErr"></div>
+    <div class="row"><button type="button" id="plZip" class="primary">Install from ZIP</button><button type="button" id="plFolder">Install from folder</button>
+    <button type="button" id="plReload">Reload</button><button type="button" id="plOpen">Open plugins folder</button></div>
+    <div class="row end"><button type="button" id="plClose">Close</button></div>
   </form>
 </dialog>
 <div id="toast"></div>

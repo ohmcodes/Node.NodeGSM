@@ -36,10 +36,15 @@ class ServerManager extends EventEmitter {
     fs.mkdirSync(this.serversDir, { recursive: true });
     fs.mkdirSync(this.backupsDir, { recursive: true });
     this.steam = new SteamCMD(dataDir);
+    this.pluginsDir = path.join(dataDir, 'plugins');
+    this.pluginInfo = require('./plugins').loadAll(this.pluginsDir);
     this.runtime = new Map(); // id -> { proc, console:[], status, startedAt, stopping, busy }
     this.timers = [];
     this.settings = this.loadSettings();
   }
+
+  reloadPlugins() { this.pluginInfo = require('./plugins').loadAll(this.pluginsDir); return this.pluginInfo; }
+  installPlugin(src) { const id = require('./plugins').installFrom(src, this.pluginsDir); this.reloadPlugins(); return id; }
 
   // ---------- settings / paths ----------
   loadSettings() {
@@ -81,7 +86,7 @@ class ServerManager extends EventEmitter {
     const used = new Set();
     for (const id of this.ids()) { const c = this.getConfig(id); used.add(+c.port); used.add(+c.queryPort); }
     let p = parseInt(game[field], 10);
-    const inc = game.engine === 'source' || game.engine === 'goldsource' ? 1 : 1;
+    const inc = game.portIncrement || 1;
     while (used.has(p)) p += inc;
     return String(p);
   }
@@ -96,7 +101,7 @@ class ServerManager extends EventEmitter {
     return {
       ...c,
       gameName: g ? g.name : c.game,
-      icon: g ? g.icon : null,
+      icon: g ? (g.iconData || g.icon) : null,
       status: rt ? rt.status : 'Stopped',
       pid: rt && rt.proc ? rt.proc.pid : null,
       startedAt: rt ? rt.startedAt : null,
@@ -154,7 +159,8 @@ class ServerManager extends EventEmitter {
         const code = await this.steam.install(this.filesDir(id), g.appId, { validate: true, ...opts }, log);
         if (code !== 0 && code !== 7) throw new Error(`SteamCMD exited with code ${code}`);
       } else {
-        await (INSTALLERS[g.installer] || INSTALLERS.manual)(this.filesDir(id), log);
+        if (g.hooks && g.hooks.install) await g.hooks.install(this.filesDir(id), log, this.getConfig(id));
+        else await (INSTALLERS[g.installer] || INSTALLERS.manual)(this.filesDir(id), log);
       }
       if (!fs.existsSync(path.join(this.filesDir(id), g.exe))) log(`Warning: ${g.exe} not found after install.`);
       this.writeDefaultConfig(id, g);
@@ -217,7 +223,7 @@ class ServerManager extends EventEmitter {
     let cmd = path.join(dir, g.exe);
     let args = g.args(c, ctx).filter((a) => a !== undefined && a !== '');
     if (g.launcher === 'java') cmd = 'java';
-    return { cmd, args, cwd: g.id === 'gta5' ? path.join(dir, 'server') : dir, g, c };
+    return { cmd, args, cwd: g.id === 'gta5' ? path.join(dir, 'server') : (g.cwd ? path.join(dir, g.cwd) : dir), g, c };
   }
 
   async start(id) {
@@ -278,7 +284,7 @@ class ServerManager extends EventEmitter {
     rt.stopping = true;
     this.setStatus(id, 'Stopping');
     const exited = new Promise((res) => proc.once('exit', res));
-    const graceful = { mc: 'stop', mcpe: 'stop', mcbe: 'stop' }[g.id] || 'quit';
+    const graceful = g.stopCommand || { mc: 'stop', mcpe: 'stop', mcbe: 'stop' }[g.id] || 'quit';
     try { if (proc.stdin && proc.stdin.writable) proc.stdin.write(graceful + '\n'); } catch {}
     // soft taskkill (WM_CLOSE to windows), then hard kill
     spawnSync('taskkill', ['/PID', String(proc.pid), '/T'], { windowsHide: true });
@@ -323,7 +329,7 @@ class ServerManager extends EventEmitter {
       const remote = await this.steam.getRemoteBuild(g.appId);
       return { local, remote, available: !!(local && remote && local !== remote) };
     }
-    const inst = INSTALLERS[g.installer];
+    const inst = (g.hooks && g.hooks.latest) ? { latest: g.hooks.latest, local: g.hooks.local } : INSTALLERS[g.installer];
     if (inst && inst.latest && inst.local) {
       const local = inst.local(this.filesDir(id)); const remote = await inst.latest();
       return { local, remote, available: !!(local && remote && local !== remote) };
@@ -345,7 +351,8 @@ class ServerManager extends EventEmitter {
         const code = await this.steam.install(this.filesDir(id), g.appId, { validate }, (l) => this.log(id, l));
         if (code !== 0 && code !== 7) throw new Error(`SteamCMD exited with code ${code}`);
       } else {
-        await INSTALLERS[g.installer](this.filesDir(id), (l) => this.log(id, l));
+        if (g.hooks && g.hooks.install) await g.hooks.install(this.filesDir(id), (l) => this.log(id, l), this.getConfig(id));
+        else await INSTALLERS[g.installer](this.filesDir(id), (l) => this.log(id, l));
       }
       this.log(id, 'Update finished.');
     } finally {

@@ -15,7 +15,7 @@ function toast(msg, err) {
 async function run(name, ...args) {
   try { return await api.call(name, ...args); } catch (e) { toast(e.message, true); return undefined; }
 }
-const iconSrc = (i) => (i ? `../../assets/games/${i}.png` : '');
+const iconSrc = (i) => (!i ? '' : i.startsWith('data:') ? i : `../../assets/games/${i}.png`);
 
 // ---------- list ----------
 function renderList() {
@@ -243,6 +243,26 @@ $('#addForm').onsubmit = async (e) => {
 };
 
 // ---------- app settings ----------
+// ---------- plugins ----------
+async function renderPlugins() {
+  const info = (await run('pluginsInfo')) || { loaded: [], errors: [] };
+  $('#plList').innerHTML = info.loaded.length
+    ? '<table><tr><th>Plugin</th><th>Author</th><th>Version</th></tr>' + info.loaded.map((p) => `<tr><td>${esc(p.name)}</td><td>${esc(p.author || '')}</td><td>${esc(p.version || '')}</td></tr>`).join('') + '</table>'
+    : '<p class="muted">No plugins installed.</p>';
+  $('#plErr').innerHTML = info.errors.map((e) => `<div class="err">${esc(e.folder)}: ${esc(e.error)}</div>`).join('');
+}
+async function afterPluginChange(msg) {
+  state.games = (await run('games')) || state.games;
+  await renderPlugins();
+  if (msg) toast(msg);
+}
+$('#btnPlugins').onclick = async () => { await renderPlugins(); $('#dlgPlugins').showModal(); };
+$('#plClose').onclick = () => $('#dlgPlugins').close();
+$('#plZip').onclick = async () => { const id = await run('pluginsInstallZip'); if (id) await afterPluginChange(`Plugin "${id}" installed`); };
+$('#plFolder').onclick = async () => { const id = await run('pluginsInstallFolder'); if (id) await afterPluginChange(`Plugin "${id}" installed`); };
+$('#plReload').onclick = async () => { await run('pluginsReload'); await afterPluginChange('Plugins reloaded'); };
+$('#plOpen').onclick = () => run('pluginsFolder');
+
 $('#btnSettings').onclick = async () => {
   const s = (await run('settings')) || {};
   $('#setLogin').checked = !!s.startOnLogin; $('#setTray').checked = !!s.minimizeToTray;

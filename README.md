@@ -27,7 +27,7 @@ Data (servers, backups, SteamCMD) lives in `%APPDATA%/node-wgsm2026/WGSM` (overr
 | Server query (A2S, UT3, FiveM) -> player counts / Starting vs Started | ✅ |
 | Firewall rule helper (netsh) | ✅ |
 | File browser / config editor | ✅ |
-| Discord bot remote control, plugin system, mod manager, Bedrock auto-install, GTA5/FiveM 7z extraction w/o tar | ⏳ not yet |
+| Discord bot remote control, mod manager, Bedrock auto-install, GTA5/FiveM 7z extraction w/o tar | ⏳ not yet |
 
 ## Notes
 - Minecraft installer writes `eula.txt` with `eula=true`; using it means you accept Mojang's EULA.
