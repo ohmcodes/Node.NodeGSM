@@ -51,7 +51,12 @@ class SteamCMD {
     await download(STEAMCMD_URL, zip);
     new AdmZip(zip).extractAllTo(this.dir, true);
     fs.unlinkSync(zip);
-    onLog('SteamCMD extracted.');
+    onLog('SteamCMD extracted. Running first-time self-update ...');
+    await new Promise((res) => {
+      const p = spawn(this.exe, ['+quit'], { cwd: this.dir, windowsHide: true });
+      p.stdout.on('data', (d) => d.toString().split(/\r?\n/).filter(Boolean).forEach(onLog));
+      p.on('error', res); p.on('close', res);
+    });
   }
 
   buildArgs(installDir, appId, { validate = true, user, pass, beta } = {}) {
@@ -71,7 +76,18 @@ class SteamCMD {
     const args = this.buildArgs(installDir, appId, opts);
     return new Promise((resolve) => {
       const p = spawn(this.exe, args, { cwd: this.dir, windowsHide: true });
-      const pipe = (s) => s.on('data', (d) => d.toString().split(/\r?\n/).filter(Boolean).forEach(onLog));
+      let lastPct = -10;
+      const handle = (line) => {
+        const m = /progress:\s*([\d.]+)\s*\((\d+)\s*\/\s*(\d+)\)/.exec(line);
+        if (m) {
+          const pct = parseFloat(m[1]);
+          if (opts.onProgress) opts.onProgress({ percent: pct, done: +m[2], total: +m[3] });
+          if (pct - lastPct < 1) return; // don't flood the console
+          lastPct = pct;
+        }
+        onLog(line);
+      };
+      const pipe = (s) => s.on('data', (d) => d.toString().split(/\r?\n/).filter(Boolean).forEach(handle));
       pipe(p.stdout); pipe(p.stderr);
       p.on('error', (e) => { onLog(`SteamCMD failed to start: ${e.message}`); resolve(-1); });
       p.on('close', (code) => resolve(code));

@@ -108,6 +108,7 @@ class ServerManager extends EventEmitter {
       players: rt ? rt.players : null,
       maxPlayersLive: rt ? rt.maxPlayersLive : null,
       pending: rt && rt.busy ? rt.busy : null,
+      progress: rt && rt.busy ? rt.progress || null : null,
       ip_display: c.ip || '0.0.0.0',
     };
   }
@@ -156,13 +157,15 @@ class ServerManager extends EventEmitter {
     const log = (l) => this.log(id, l);
     try {
       if (g.appId) {
-        const code = await this.steam.install(this.filesDir(id), g.appId, { validate: true, ...opts }, log);
-        if (code !== 0 && code !== 7) throw new Error(`SteamCMD exited with code ${code}`);
+        const onProgress = (p) => { rt.progress = p; this.emit('status', this.view(id)); };
+        const code = await this.steam.install(this.filesDir(id), g.appId, { validate: true, onProgress, ...opts }, log);
+        rt.progress = null;
+        if (code !== 0) throw new Error(`SteamCMD exited with code ${code} - the download did not complete`);
       } else {
         if (g.hooks && g.hooks.install) await g.hooks.install(this.filesDir(id), log, this.getConfig(id));
         else await (INSTALLERS[g.installer] || INSTALLERS.manual)(this.filesDir(id), log);
       }
-      if (!fs.existsSync(path.join(this.filesDir(id), g.exe))) log(`Warning: ${g.exe} not found after install.`);
+      if (!fs.existsSync(path.join(this.filesDir(id), g.exe))) throw new Error(`Install incomplete: ${g.exe} was not found in ${this.filesDir(id)}. Run Install/Verify again.`);
       this.writeDefaultConfig(id, g);
       log('Install finished.');
       return true;
@@ -348,8 +351,10 @@ class ServerManager extends EventEmitter {
     try {
       const g = byId(this.getConfig(id).game);
       if (g.appId) {
-        const code = await this.steam.install(this.filesDir(id), g.appId, { validate }, (l) => this.log(id, l));
-        if (code !== 0 && code !== 7) throw new Error(`SteamCMD exited with code ${code}`);
+        const onProgress = (p) => { rt.progress = p; this.emit('status', this.view(id)); };
+        const code = await this.steam.install(this.filesDir(id), g.appId, { validate, onProgress }, (l) => this.log(id, l));
+        rt.progress = null;
+        if (code !== 0) throw new Error(`SteamCMD exited with code ${code} - the update did not complete`);
       } else {
         if (g.hooks && g.hooks.install) await g.hooks.install(this.filesDir(id), (l) => this.log(id, l), this.getConfig(id));
         else await INSTALLERS[g.installer](this.filesDir(id), (l) => this.log(id, l));

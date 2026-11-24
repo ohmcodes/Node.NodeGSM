@@ -26,7 +26,7 @@ function renderList() {
     <li data-id="${esc(s.id)}" class="${s.id === state.sel ? 'sel' : ''}">
       <img src="${iconSrc(s.icon)}" alt="">
       <div><div class="nm">${esc(s.name)}</div>
-      <div class="sub">#${esc(s.id)} · ${esc(s.port)}${s.players != null ? ` · ${s.players}/${s.maxPlayersLive || s.maxPlayers}` : ''}</div></div>
+      <div class="sub">#${esc(s.id)} · ${esc(s.port)}${s.players != null ? ` · ${s.players}/${s.maxPlayersLive || s.maxPlayers}` : ''}${s.progress ? ` · ${s.progress.percent.toFixed(0)}%` : ''}</div></div>
       <span class="dot ${esc(s.status)}" title="${esc(s.status)}"></span>
     </li>`).join('');
   ul.querySelectorAll('li').forEach((li) => (li.onclick = () => select(li.dataset.id)));
@@ -52,7 +52,7 @@ function renderDetail() {
     <div class="dhead">
       <img src="${iconSrc(s.icon)}" alt="">
       <div><h2>${esc(s.name)}</h2>
-        <div class="muted">${esc(s.gameName)} · ${esc(s.ip_display)}:${esc(s.port)} · <span class="badge ${esc(s.status)}">${esc(s.status)}</span>
+        <div class="muted">${esc(s.gameName)} · ${esc(s.ip_display)}:${esc(s.port)} · <span class="badge ${esc(s.status)}">${esc(s.status)}${s.progress ? ` ${s.progress.percent.toFixed(1)}% (${(s.progress.done / 2 ** 30).toFixed(1)} / ${(s.progress.total / 2 ** 30).toFixed(1)} GB)` : ''}</span>
         ${s.pid ? ` · PID ${s.pid}` : ''}${s.players != null ? ` · ${s.players}/${s.maxPlayersLive || s.maxPlayers} players` : ''}</div></div>
       <div class="actions">
         <button id="aStart" class="primary" ${running || busy ? 'disabled' : ''}>Start</button>
@@ -70,12 +70,12 @@ function renderDetail() {
   $('#aStart').onclick = async () => { await run('start', id); };
   $('#aStop').onclick = () => run('stop', id);
   $('#aRestart').onclick = () => run('restart', id);
-  $('#aInstall').onclick = async () => { toast('Installing...'); await run('install', id); toast('Install finished'); };
+  $('#aInstall').onclick = async () => { toast('Installing...'); if ((await run('install', id)) !== undefined) toast('Install finished'); };
   $('#aUpdate').onclick = async () => {
     const r = await run('checkUpdate', id);
     if (!r) return;
     if (!r.available && r.local) { if (!confirm(`Already latest (build ${r.local}). Update/verify anyway?`)) return; }
-    await run('update', id, false); toast('Update finished');
+    if ((await run('update', id, false)) !== undefined) toast('Update finished');
   };
   $('#aFolder').onclick = () => run('openFolder', id);
   $('#aDelete').onclick = async () => {
@@ -237,8 +237,7 @@ $('#addForm').onsubmit = async (e) => {
     if (!v) return;
     state.servers.set(v.id, v); await select(v.id); state.tab = 'console'; renderDetail();
     toast('Installing - watch the console');
-    await run('install', v.id);
-    toast('Install finished');
+    if ((await run('install', v.id)) !== undefined) toast('Install finished');
   }
 };
 
