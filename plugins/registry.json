@@ -1,0 +1,1700 @@
+{
+  "schema": 1,
+  "count": 46,
+  "plugins": [
+    {
+      "id": "7dtd",
+      "name": "7 Days to Die Dedicated Server",
+      "description": "Dedicated server support for 7 Days to Die. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/294420/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "294420",
+      "ports": {
+        "game": "26900",
+        "query": "26900"
+      },
+      "maxPlayers": "8",
+      "query": null,
+      "configs": [
+        {
+          "name": "serverconfig.xml",
+          "path": "serverconfig.xml",
+          "format": "xml"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server log",
+          "path": "7DaysToDieServer_Data/output_log_dedi*.txt"
+        }
+      ],
+      "media": {
+        "icon": "plugins/7dtd/icon.png",
+        "banner": null,
+        "readme": "plugins/7dtd/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/7dtd"
+    },
+    {
+      "id": "arkse",
+      "name": "ARK: Survival Evolved Dedicated Server",
+      "description": "Dedicated server support for ARK: Survival Evolved. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/376030/info/",
+      "tags": [
+        "unreal",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "376030",
+      "ports": {
+        "game": "7777",
+        "query": "27015"
+      },
+      "maxPlayers": "16",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "GameUserSettings.ini",
+          "path": "ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini",
+          "format": "ini"
+        },
+        {
+          "name": "Game.ini",
+          "path": "ShooterGame/Saved/Config/WindowsServer/Game.ini",
+          "format": "ini"
+        }
+      ],
+      "logs": [
+        {
+          "name": "ShooterGame.log",
+          "path": "ShooterGame/Saved/Logs/ShooterGame.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/arkse/icon.png",
+        "banner": null,
+        "readme": "plugins/arkse/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/arkse"
+    },
+    {
+      "id": "avorion",
+      "name": "Avorion Dedicated Server",
+      "description": "Dedicated server support for Avorion. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/565060/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "565060",
+      "ports": {
+        "game": "27000",
+        "query": "27003"
+      },
+      "maxPlayers": "10",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/avorion/icon.png",
+        "banner": null,
+        "readme": "plugins/avorion/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/avorion"
+    },
+    {
+      "id": "bt",
+      "name": "Barotrauma Dedicated Server",
+      "description": "Dedicated server support for Barotrauma. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/1026340/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "1026340",
+      "ports": {
+        "game": "27015",
+        "query": "27016"
+      },
+      "maxPlayers": "10",
+      "query": null,
+      "configs": [
+        {
+          "name": "serversettings.xml",
+          "path": "serversettings.xml",
+          "format": "xml"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/bt/icon.png",
+        "banner": null,
+        "readme": "plugins/bt/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/bt"
+    },
+    {
+      "id": "bw",
+      "name": "BlackWake Dedicated Server",
+      "description": "Dedicated server support for BlackWake. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/423410/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "423410",
+      "ports": {
+        "game": "25001",
+        "query": "25002"
+      },
+      "maxPlayers": "54",
+      "query": null,
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/bw/icon.png",
+        "banner": null,
+        "readme": "plugins/bw/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/bw"
+    },
+    {
+      "id": "ce",
+      "name": "Conan Exiles Dedicated Server",
+      "description": "Dedicated server support for Conan Exiles. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/443030/info/",
+      "tags": [
+        "unreal",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "443030",
+      "ports": {
+        "game": "7777",
+        "query": "27015"
+      },
+      "maxPlayers": "40",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "ServerSettings.ini",
+          "path": "ConanSandbox/Saved/Config/WindowsServer/ServerSettings.ini",
+          "format": "ini"
+        },
+        {
+          "name": "Engine.ini",
+          "path": "ConanSandbox/Saved/Config/WindowsServer/Engine.ini",
+          "format": "ini"
+        },
+        {
+          "name": "Game.ini",
+          "path": "ConanSandbox/Saved/Config/WindowsServer/Game.ini",
+          "format": "ini"
+        }
+      ],
+      "logs": [
+        {
+          "name": "ConanSandbox.log",
+          "path": "ConanSandbox/Saved/Logs/ConanSandbox.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/ce/icon.png",
+        "banner": null,
+        "readme": "plugins/ce/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/ce"
+    },
+    {
+      "id": "cs",
+      "name": "Counter-Strike: 1.6 Dedicated Server",
+      "description": "Dedicated server support for Counter-Strike: 1.6. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/90/info/",
+      "tags": [
+        "goldsource",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "90",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "cstrike/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "cstrike/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/cs/icon.png",
+        "banner": null,
+        "readme": "plugins/cs/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/cs"
+    },
+    {
+      "id": "cscz",
+      "name": "Counter-Strike: Condition Zero Dedicated Server",
+      "description": "Dedicated server support for Counter-Strike: Condition Zero. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/90/info/",
+      "tags": [
+        "goldsource",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "90",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "czero/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "czero/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/cscz/icon.png",
+        "banner": null,
+        "readme": "plugins/cscz/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/cscz"
+    },
+    {
+      "id": "csgo",
+      "name": "Counter-Strike: Global Offensive Dedicated Server",
+      "description": "Dedicated server support for Counter-Strike: Global Offensive. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/740/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "740",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "csgo/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "csgo/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/csgo/icon.png",
+        "banner": null,
+        "readme": "plugins/csgo/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/csgo"
+    },
+    {
+      "id": "css",
+      "name": "Counter-Strike: Source Dedicated Server",
+      "description": "Dedicated server support for Counter-Strike: Source. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/232330/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "232330",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "cstrike/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "cstrike/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/css/icon.png",
+        "banner": null,
+        "readme": "plugins/css/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/css"
+    },
+    {
+      "id": "dod",
+      "name": "Day of Defeat Dedicated Server",
+      "description": "Dedicated server support for Day of Defeat. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/90/info/",
+      "tags": [
+        "goldsource",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "90",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "dod/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "dod/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/dod/icon.png",
+        "banner": null,
+        "readme": "plugins/dod/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/dod"
+    },
+    {
+      "id": "dods",
+      "name": "Day of Defeat: Source Dedicated Server",
+      "description": "Dedicated server support for Day of Defeat: Source. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/232290/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "232290",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "dod/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "dod/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/dods/icon.png",
+        "banner": null,
+        "readme": "plugins/dods/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/dods"
+    },
+    {
+      "id": "dayz",
+      "name": "DayZ Dedicated Server",
+      "description": "Dedicated server support for DayZ. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/223350/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "223350",
+      "ports": {
+        "game": "2302",
+        "query": "27016"
+      },
+      "maxPlayers": "60",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "serverDZ.cfg",
+          "path": "serverDZ.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/dayz/icon.png",
+        "banner": null,
+        "readme": "plugins/dayz/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/dayz"
+    },
+    {
+      "id": "dmc",
+      "name": "Deathmatch Classic Dedicated Server",
+      "description": "Dedicated server support for Deathmatch Classic. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/90/info/",
+      "tags": [
+        "goldsource",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "90",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "dmc/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "dmc/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/dmc/icon.png",
+        "banner": null,
+        "readme": "plugins/dmc/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/dmc"
+    },
+    {
+      "id": "eco",
+      "name": "Eco Dedicated Server",
+      "description": "Dedicated server support for Eco. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/739590/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "739590",
+      "ports": {
+        "game": "3000",
+        "query": "3001"
+      },
+      "maxPlayers": "-1",
+      "query": null,
+      "configs": [
+        {
+          "name": "Network.eco",
+          "path": "Configs/Network.eco",
+          "format": "json"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/eco/icon.png",
+        "banner": null,
+        "readme": "plugins/eco/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/eco"
+    },
+    {
+      "id": "egs",
+      "name": "Empyrion - Galactic Survival Dedicated Server",
+      "description": "Dedicated server support for Empyrion - Galactic Survival. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/530870/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "530870",
+      "ports": {
+        "game": "30000",
+        "query": "30001"
+      },
+      "maxPlayers": "8",
+      "query": null,
+      "configs": [
+        {
+          "name": "dedicated.yaml",
+          "path": "dedicated.yaml",
+          "format": "yaml"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/egs/icon.png",
+        "banner": null,
+        "readme": "plugins/egs/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/egs"
+    },
+    {
+      "id": "gmod",
+      "name": "Garry's Mod Dedicated Server",
+      "description": "Dedicated server support for Garry's Mod. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/4020/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "4020",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "garrysmod/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "garrysmod/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/gmod/icon.png",
+        "banner": null,
+        "readme": "plugins/gmod/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/gmod"
+    },
+    {
+      "id": "gta5",
+      "name": "Grand Theft Auto V Dedicated Server (FiveM)",
+      "description": "Dedicated server support for Grand Theft Auto V (FiveM). Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "",
+      "tags": [
+        "fivem",
+        "download"
+      ],
+      "install": "download",
+      "steamAppId": null,
+      "ports": {
+        "game": "30120",
+        "query": "30120"
+      },
+      "maxPlayers": "32",
+      "query": "fivem",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "server/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/gta5/icon.png",
+        "banner": null,
+        "readme": "plugins/gta5/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/gta5"
+    },
+    {
+      "id": "hl2dm",
+      "name": "Half-Life 2: Deathmatch Dedicated Server",
+      "description": "Dedicated server support for Half-Life 2: Deathmatch. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/232370/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "232370",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "hl2mp/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "hl2mp/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/hl2dm/icon.png",
+        "banner": null,
+        "readme": "plugins/hl2dm/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/hl2dm"
+    },
+    {
+      "id": "hlof",
+      "name": "Half-Life: Opposing Force Dedicated Server",
+      "description": "Dedicated server support for Half-Life: Opposing Force. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/90/info/",
+      "tags": [
+        "goldsource",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "90",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "gearbox/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "gearbox/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/hlof/icon.png",
+        "banner": null,
+        "readme": "plugins/hlof/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/hlof"
+    },
+    {
+      "id": "heat",
+      "name": "Heat Dedicated Server",
+      "description": "Dedicated server support for Heat. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/996600/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "996600",
+      "ports": {
+        "game": "7450",
+        "query": "7450"
+      },
+      "maxPlayers": "40",
+      "query": null,
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/heat/icon.png",
+        "banner": null,
+        "readme": "plugins/heat/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/heat"
+    },
+    {
+      "id": "ins",
+      "name": "Insurgency Dedicated Server",
+      "description": "Dedicated server support for Insurgency. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/237410/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "237410",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "insurgency/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "insurgency/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/ins/icon.png",
+        "banner": null,
+        "readme": "plugins/ins/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/ins"
+    },
+    {
+      "id": "inss",
+      "name": "Insurgency: Sandstorm Dedicated Server",
+      "description": "Dedicated server support for Insurgency: Sandstorm. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/581330/info/",
+      "tags": [
+        "unreal",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "581330",
+      "ports": {
+        "game": "27102",
+        "query": "27131"
+      },
+      "maxPlayers": "28",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/inss/icon.png",
+        "banner": null,
+        "readme": "plugins/inss/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/inss"
+    },
+    {
+      "id": "l4d2",
+      "name": "Left 4 Dead 2 Dedicated Server",
+      "description": "Dedicated server support for Left 4 Dead 2. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/222860/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "222860",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "left4dead2/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "left4dead2/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/l4d2/icon.png",
+        "banner": null,
+        "readme": "plugins/l4d2/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/l4d2"
+    },
+    {
+      "id": "mcbe",
+      "name": "Minecraft: Bedrock Edition Server",
+      "description": "Dedicated server support for Minecraft: Bedrock Edition. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "",
+      "tags": [
+        "minecraft",
+        "bedrock",
+        "download"
+      ],
+      "install": "download",
+      "steamAppId": null,
+      "ports": {
+        "game": "19132",
+        "query": "19132"
+      },
+      "maxPlayers": "10",
+      "query": null,
+      "configs": [
+        {
+          "name": "server.properties",
+          "path": "server.properties",
+          "format": "properties"
+        },
+        {
+          "name": "allowlist.json",
+          "path": "allowlist.json",
+          "format": "json"
+        },
+        {
+          "name": "permissions.json",
+          "path": "permissions.json",
+          "format": "json"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/mcbe/icon.png",
+        "banner": null,
+        "readme": "plugins/mcbe/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/mcbe"
+    },
+    {
+      "id": "mc",
+      "name": "Minecraft: Java Edition Server",
+      "description": "Dedicated server support for Minecraft: Java Edition. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "",
+      "tags": [
+        "minecraft",
+        "java",
+        "download"
+      ],
+      "install": "download",
+      "steamAppId": null,
+      "ports": {
+        "game": "25565",
+        "query": "25565"
+      },
+      "maxPlayers": "20",
+      "query": "ut3",
+      "configs": [
+        {
+          "name": "server.properties",
+          "path": "server.properties",
+          "format": "properties"
+        },
+        {
+          "name": "ops.json",
+          "path": "ops.json",
+          "format": "json"
+        },
+        {
+          "name": "whitelist.json",
+          "path": "whitelist.json",
+          "format": "json"
+        }
+      ],
+      "logs": [
+        {
+          "name": "latest.log",
+          "path": "logs/latest.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/mc/icon.png",
+        "banner": null,
+        "readme": "plugins/mc/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/mc"
+    },
+    {
+      "id": "mcpe",
+      "name": "Minecraft: Pocket Edition Server (PocketMine-MP)",
+      "description": "Dedicated server support for Minecraft: Pocket Edition (PocketMine-MP). Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "",
+      "tags": [
+        "minecraft",
+        "pocketmine"
+      ],
+      "install": "manual",
+      "steamAppId": null,
+      "ports": {
+        "game": "19132",
+        "query": "19132"
+      },
+      "maxPlayers": "20",
+      "query": "ut3",
+      "configs": [
+        {
+          "name": "pocketmine.yml",
+          "path": "pocketmine.yml",
+          "format": "yaml"
+        },
+        {
+          "name": "server.properties",
+          "path": "server.properties",
+          "format": "properties"
+        }
+      ],
+      "logs": [
+        {
+          "name": "server.log",
+          "path": "server.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/mcpe/icon.png",
+        "banner": null,
+        "readme": "plugins/mcpe/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/mcpe"
+    },
+    {
+      "id": "mordhau",
+      "name": "Mordhau Dedicated Server",
+      "description": "Dedicated server support for Mordhau. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/629800/info/",
+      "tags": [
+        "unreal",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "629800",
+      "ports": {
+        "game": "7777",
+        "query": "27015"
+      },
+      "maxPlayers": "16",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/mordhau/icon.png",
+        "banner": null,
+        "readme": "plugins/mordhau/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/mordhau"
+    },
+    {
+      "id": "nmrih",
+      "name": "No More Room in Hell Dedicated Server",
+      "description": "Dedicated server support for No More Room in Hell. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/317670/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "317670",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "nmrih/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "nmrih/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/nmrih/icon.png",
+        "banner": null,
+        "readme": "plugins/nmrih/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/nmrih"
+    },
+    {
+      "id": "onset",
+      "name": "Onset Dedicated Server",
+      "description": "Dedicated server support for Onset. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/1204170/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "1204170",
+      "ports": {
+        "game": "7777",
+        "query": "7776"
+      },
+      "maxPlayers": "100",
+      "query": null,
+      "configs": [
+        {
+          "name": "server_config.json",
+          "path": "server_config.json",
+          "format": "json"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/onset/icon.png",
+        "banner": null,
+        "readme": "plugins/onset/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/onset"
+    },
+    {
+      "id": "olow",
+      "name": "Outlaws of the Old West Dedicated Server",
+      "description": "Dedicated server support for Outlaws of the Old West. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/915070/info/",
+      "tags": [
+        "unreal",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "915070",
+      "ports": {
+        "game": "27374",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/olow/icon.png",
+        "banner": null,
+        "readme": "plugins/olow/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/olow"
+    },
+    {
+      "id": "palworld",
+      "name": "Palworld Dedicated Server",
+      "description": "Palworld Dedicated Server",
+      "author": "ohmcodes",
+      "version": "1.1.4",
+      "url": "https://github.com/ohmcodes/WindowsGSM.Palworld",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "2394010",
+      "ports": {
+        "game": "8211",
+        "query": "8212"
+      },
+      "maxPlayers": "32",
+      "query": null,
+      "configs": [
+        {
+          "name": "PalWorldSettings.ini",
+          "path": "Pal/Saved/Config/WindowsServer/PalWorldSettings.ini",
+          "format": "ini"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "Pal/Saved/Logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/palworld/icon.png",
+        "banner": null,
+        "readme": "plugins/palworld/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/palworld"
+    },
+    {
+      "id": "ps",
+      "name": "Post Scriptum Dedicated Server",
+      "description": "Dedicated server support for Post Scriptum. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/746200/info/",
+      "tags": [
+        "unreal",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "746200",
+      "ports": {
+        "game": "10027",
+        "query": "10037"
+      },
+      "maxPlayers": "80",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/ps/icon.png",
+        "banner": null,
+        "readme": "plugins/ps/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/ps"
+    },
+    {
+      "id": "rok",
+      "name": "Reign Of Kings Dedicated Server",
+      "description": "Dedicated server support for Reign Of Kings. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/381690/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "381690",
+      "ports": {
+        "game": "7350",
+        "query": "7350"
+      },
+      "maxPlayers": "30",
+      "query": null,
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/rok/icon.png",
+        "banner": null,
+        "readme": "plugins/rok/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/rok"
+    },
+    {
+      "id": "rcc",
+      "name": "Ricochet Dedicated Server",
+      "description": "Dedicated server support for Ricochet. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/90/info/",
+      "tags": [
+        "goldsource",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "90",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "ricochet/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "ricochet/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/rcc/icon.png",
+        "banner": null,
+        "readme": "plugins/rcc/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/rcc"
+    },
+    {
+      "id": "ror2",
+      "name": "Risk of Rain 2 Dedicated Server",
+      "description": "Dedicated server support for Risk of Rain 2. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/1180760/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "1180760",
+      "ports": {
+        "game": "27015",
+        "query": "27016"
+      },
+      "maxPlayers": "4",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/ror2/icon.png",
+        "banner": null,
+        "readme": "plugins/ror2/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/ror2"
+    },
+    {
+      "id": "rust",
+      "name": "Rust Dedicated Server",
+      "description": "Dedicated server support for Rust. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/258550/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "258550",
+      "ports": {
+        "game": "28015",
+        "query": "28016"
+      },
+      "maxPlayers": "50",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/rust/icon.png",
+        "banner": null,
+        "readme": "plugins/rust/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/rust"
+    },
+    {
+      "id": "se",
+      "name": "Space Engineers Dedicated Server",
+      "description": "Dedicated server support for Space Engineers. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/298740/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "298740",
+      "ports": {
+        "game": "27016",
+        "query": "27017"
+      },
+      "maxPlayers": "4",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/se/icon.png",
+        "banner": null,
+        "readme": "plugins/se/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/se"
+    },
+    {
+      "id": "sq",
+      "name": "Squad Dedicated Server",
+      "description": "Dedicated server support for Squad. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/403240/info/",
+      "tags": [
+        "unreal",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "403240",
+      "ports": {
+        "game": "7787",
+        "query": "27165"
+      },
+      "maxPlayers": "80",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "Server.cfg",
+          "path": "SquadGame/ServerConfig/Server.cfg",
+          "format": "cfg"
+        },
+        {
+          "name": "Admins.cfg",
+          "path": "SquadGame/ServerConfig/Admins.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "SquadGame.log",
+          "path": "SquadGame/Saved/Logs/SquadGame.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/sq/icon.png",
+        "banner": null,
+        "readme": "plugins/sq/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/sq"
+    },
+    {
+      "id": "sw",
+      "name": "Stormworks Dedicated Server",
+      "description": "Dedicated server support for Stormworks. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/1247090/info/",
+      "tags": [
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "1247090",
+      "ports": {
+        "game": "25564",
+        "query": "25564"
+      },
+      "maxPlayers": "32",
+      "query": null,
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/sw/icon.png",
+        "banner": null,
+        "readme": "plugins/sw/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/sw"
+    },
+    {
+      "id": "tf2",
+      "name": "Team Fortress 2 Dedicated Server",
+      "description": "Dedicated server support for Team Fortress 2. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/232250/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "232250",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "tf/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "tf/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/tf2/icon.png",
+        "banner": null,
+        "readme": "plugins/tf2/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/tf2"
+    },
+    {
+      "id": "tfc",
+      "name": "Team Fortress Classic Dedicated Server",
+      "description": "Dedicated server support for Team Fortress Classic. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/90/info/",
+      "tags": [
+        "goldsource",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "90",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "tfc/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "tfc/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/tfc/icon.png",
+        "banner": null,
+        "readme": "plugins/tfc/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/tfc"
+    },
+    {
+      "id": "tf",
+      "name": "The Forest Dedicated Server",
+      "description": "Dedicated server support for The Forest. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/556450/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "556450",
+      "ports": {
+        "game": "27015",
+        "query": "27016"
+      },
+      "maxPlayers": "4",
+      "query": null,
+      "configs": [
+        {
+          "name": "Server.cfg",
+          "path": "Server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [],
+      "media": {
+        "icon": "plugins/tf/icon.png",
+        "banner": null,
+        "readme": "plugins/tf/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/tf"
+    },
+    {
+      "id": "unt",
+      "name": "Unturned Dedicated Server",
+      "description": "Dedicated server support for Unturned. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/1110390/info/",
+      "tags": [
+        "unity",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "1110390",
+      "ports": {
+        "game": "27015",
+        "query": "27016"
+      },
+      "maxPlayers": "20",
+      "query": "a2s",
+      "configs": [],
+      "logs": [],
+      "media": {
+        "icon": "plugins/unt/icon.png",
+        "banner": null,
+        "readme": "plugins/unt/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/unt"
+    },
+    {
+      "id": "vts",
+      "name": "Vintage Story Dedicated Server",
+      "description": "Dedicated server support for Vintage Story. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "",
+      "tags": [
+        "download"
+      ],
+      "install": "download",
+      "steamAppId": null,
+      "ports": {
+        "game": "42420",
+        "query": "42420"
+      },
+      "maxPlayers": "16",
+      "query": null,
+      "configs": [
+        {
+          "name": "serverconfig.json",
+          "path": "data/serverconfig.json",
+          "format": "json"
+        }
+      ],
+      "logs": [
+        {
+          "name": "server-main.txt",
+          "path": "data/Logs/server-main.txt"
+        }
+      ],
+      "media": {
+        "icon": "plugins/vts/icon.png",
+        "banner": null,
+        "readme": "plugins/vts/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/vts"
+    },
+    {
+      "id": "zps",
+      "name": "Zombie Panic Source Dedicated Server",
+      "description": "Dedicated server support for Zombie Panic Source. Install, run, configure and monitor it from NodeGSM.",
+      "author": "WindowsGSM contributors (ported to NodeGSM)",
+      "version": "1.0.0",
+      "url": "https://steamdb.info/app/17505/info/",
+      "tags": [
+        "source",
+        "steamcmd"
+      ],
+      "install": "steamcmd",
+      "steamAppId": "17505",
+      "ports": {
+        "game": "27015",
+        "query": "27015"
+      },
+      "maxPlayers": "24",
+      "query": "a2s",
+      "configs": [
+        {
+          "name": "server.cfg",
+          "path": "zps/cfg/server.cfg",
+          "format": "cfg"
+        }
+      ],
+      "logs": [
+        {
+          "name": "Server logs",
+          "path": "zps/logs/*.log"
+        }
+      ],
+      "media": {
+        "icon": "plugins/zps/icon.png",
+        "banner": null,
+        "readme": "plugins/zps/README.md",
+        "screenshots": []
+      },
+      "folder": "plugins/zps"
+    }
+  ]
+}

@@ -52,3 +52,25 @@ table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1p
 #toast div.err{border-left-color:var(--bad)}
 
 #plErr .err{color:var(--bad);font-size:12px;padding:4px 0}
+
+.small{font-size:12px}.row.wrap{flex-wrap:wrap}
+.split{display:grid;grid-template-columns:280px 1fr;gap:12px;height:100%;min-height:0}
+.split .tree{border:1px solid var(--line);border-radius:6px;overflow:auto;padding:4px}
+.split .tree div{padding:8px;border-radius:4px;cursor:pointer}.split .tree div:hover{background:var(--panel2)}.split .tree div.sel{background:var(--panel2);outline:1px solid var(--accent)}
+.view{display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0}
+.logout{flex:1;background:#0b0c10;border:1px solid var(--line);border-radius:6px;padding:8px;overflow:auto;font:12px/1.35 Consolas,monospace;white-space:pre-wrap;word-break:break-all;min-height:240px}
+.logout .lerr{color:#ff7b72}.logout .lwarn{color:#f1c40f}
+#cfgEd{flex:1;min-height:300px;font:12px/1.4 Consolas,monospace;resize:none;white-space:pre;overflow:auto}
+dialog.wide{width:min(1180px,96vw);height:min(760px,92vh);padding:0}
+.gb{display:grid;grid-template-columns:320px 1fr;height:100%}
+.gb-left{border-right:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0}
+#gbList{overflow:auto;flex:1}
+#gbList>div{display:flex;gap:10px;align-items:center;padding:6px;border-radius:6px;cursor:pointer}
+#gbList>div:hover{background:var(--panel2)}#gbList>div.sel{background:var(--panel2);outline:1px solid var(--accent)}
+#gbList img{width:32px;height:32px;border-radius:6px}
+.gb-right{padding:12px 16px;overflow:auto;min-width:0}
+#gbErr .err{color:var(--bad);font-size:12px;padding:4px 0}
+.dhead.nopad{padding:0 0 10px;border:0}.banner{width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin-bottom:10px}
+.shots{display:flex;gap:8px;overflow:auto}.shots img{height:140px;border-radius:6px;cursor:zoom-in;border:1px solid var(--line)}.shots img.zoom{height:auto;max-width:100%;cursor:zoom-out}
+.md h2,.md h3,.md h4{margin:14px 0 6px}.md code,code{background:#10121a;padding:1px 5px;border-radius:4px}.md a,a[data-url]{color:var(--accent);text-decoration:none}
+.md ul,.gb-right ul{padding-left:20px;margin:6px 0}

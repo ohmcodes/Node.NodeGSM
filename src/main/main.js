@@ -2,7 +2,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { ServerManager } = require('./serverManager');
-const { GAMES } = require('./games');
+const { GAMES, detail: pluginDetail } = require('./plugins');
 
 // Keep using the pre-rename data folder if it exists so existing servers/downloads are not orphaned.
 const legacyDir = path.join(app.getPath('appData'), 'node-wgsm2026', 'WGSM');
@@ -11,8 +11,8 @@ const dataDir = process.env.NODEGSM_DATA || process.env.WGSM_DATA ||
 let mgr; let win; let tray; let quitting = false;
 
 function publicGames() {
-  return GAMES.map(({ id, name, icon, iconData, port, queryPort, map, maxPlayers, additional, appId, query, gslt, plugin, author, version }) =>
-    ({ id, name, icon: iconData || icon, port, queryPort, map, maxPlayers, additional, appId, query, gslt: !!gslt, plugin: !!plugin, author, version }));
+  return GAMES.map(({ id, name, icon, description, tags, port, queryPort, map, maxPlayers, additional, appId, query, gslt, source, author, version, overrides }) =>
+    ({ id, name, icon, description, tags, port, queryPort, map, maxPlayers, additional, appId, query, gslt: !!gslt, source, author, version, overrides: !!overrides }));
 }
 
 function createWindow() {
@@ -21,6 +21,8 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.setMenuBarVisibility(false);
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.on('close', (e) => { if (!quitting && mgr.settings.minimizeToTray) { e.preventDefault(); win.hide(); } });
 }
@@ -39,6 +41,7 @@ app.whenReady().then(() => {
   mgr.on('status', (v) => send('status', v));
   mgr.on('console', (m) => send('console', m));
   mgr.on('removed', (id) => send('removed', id));
+  mgr.on('logLines', (m) => send('logLines', m));
 
   handle('games', () => publicGames());
   handle('list', () => mgr.list());
@@ -64,6 +67,15 @@ app.whenReady().then(() => {
   handle('readFile', (id, rel) => mgr.readTextFile(id, rel));
   handle('writeFile', (id, rel, t) => mgr.writeTextFile(id, rel, t));
   handle('openFolder', (id) => shell.openPath(mgr.filesDir(id)));
+  handle('configList', (id) => mgr.configList(id));
+  handle('configRead', (id, c) => mgr.readConfig(id, c));
+  handle('configWrite', (id, c, t) => mgr.writeConfig(id, c, t));
+  handle('configCreate', (id, c) => mgr.createConfig(id, c));
+  handle('logsList', (id) => mgr.logsList(id));
+  handle('logStart', (id, l) => mgr.logStart(id, l));
+  handle('logStop', (id, l) => mgr.logStop(id, l));
+  handle('pluginDetail', (id) => pluginDetail(id));
+  handle('openExternal', (u) => { if (!/^https?:\/\//i.test(String(u))) throw new Error('Only http(s) links can be opened'); return shell.openExternal(String(u)); });
   handle('pluginsInfo', () => mgr.pluginInfo);
   handle('pluginsReload', () => mgr.reloadPlugins());
   handle('pluginsInstallZip', async () => {
@@ -91,7 +103,7 @@ app.whenReady().then(() => {
   mgr.startScheduler();
   mgr.autoStartAll();
 
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'games', 'csgo.png')).resize({ width: 16, height: 16 });
+  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'icon.png')).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('NodeGSM');
   tray.setContextMenu(Menu.buildFromTemplate([

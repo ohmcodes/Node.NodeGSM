@@ -1,0 +1,70 @@
+{
+  "$schema": "../plugin.schema.json",
+  "id": "mc",
+  "name": "Minecraft: Java Edition Server",
+  "description": "Dedicated server support for Minecraft: Java Edition. Install, run, configure and monitor it from NodeGSM.",
+  "author": "WindowsGSM contributors (ported to NodeGSM)",
+  "version": "1.0.0",
+  "url": "",
+  "tags": ["minecraft", "java", "download"],
+  "media": {
+    "icon": "icon.png",
+    "readme": "README.md",
+    "screenshots": []
+  },
+  "install": {
+    "steps": [
+      {
+        "type": "script"
+      },
+      {
+        "type": "write",
+        "path": "server.properties",
+        "content": "server-port={port}\nmax-players={maxPlayers}\nlevel-name={map}\nmotd={name}\nenable-query=true\nquery.port={queryPort}\n"
+      }
+    ]
+  },
+  "run": {
+    "exe": "server.jar",
+    "command": "java",
+    "stopCommand": "stop",
+    "args": ["{param}", "-jar", "server.jar", "nogui"]
+  },
+  "defaults": {
+    "port": "25565",
+    "queryPort": "25565",
+    "map": "world",
+    "maxPlayers": "20",
+    "additional": "-Xmx1024M -Xms1024M"
+  },
+  "query": "ut3",
+  "configs": [
+    {
+      "id": "server-properties",
+      "name": "server.properties",
+      "path": "server.properties",
+      "format": "properties",
+      "description": "Ports, difficulty, MOTD, whitelist, ..."
+    },
+    {
+      "id": "ops",
+      "name": "ops.json",
+      "path": "ops.json",
+      "format": "json",
+      "description": "Operators"
+    },
+    {
+      "id": "whitelist",
+      "name": "whitelist.json",
+      "path": "whitelist.json",
+      "format": "json"
+    }
+  ],
+  "logs": [
+    {
+      "id": "latest",
+      "name": "latest.log",
+      "path": "logs/latest.log"
+    }
+  ]
+}

@@ -12,7 +12,7 @@
   <div class="spacer"></div>
   <span id="metrics" class="muted"></span>
   <button id="btnAdd" class="primary">+ Add Server</button>
-  <button id="btnPlugins">Plugins</button>
+  <button id="btnPlugins">Games</button>
   <button id="btnSettings">Settings</button>
 </header>
 <main>
@@ -51,15 +51,23 @@
     <div class="row end"><button type="button" id="setCancel">Close</button><button type="submit" id="setOk" class="primary">Save</button></div>
   </form>
 </dialog>
-<dialog id="dlgPlugins">
-  <form method="dialog" onsubmit="return false">
-    <h3>Plugins</h3>
-    <p class="muted">Add support for more games: install a plugin zip/folder (or copy it into the plugins folder and click Reload).</p>
-    <div id="plList"></div><div id="plErr"></div>
-    <div class="row"><button type="button" id="plZip" class="primary">Install from ZIP</button><button type="button" id="plFolder">Install from folder</button>
-    <button type="button" id="plReload">Reload</button><button type="button" id="plOpen">Open plugins folder</button></div>
-    <div class="row end"><button type="button" id="plClose">Close</button></div>
-  </form>
+<dialog id="dlgPlugins" class="wide">
+  <div class="gb">
+    <div class="gb-left">
+      <input id="gbSearch" placeholder="Search games, tags...">
+      <div id="gbCount" class="muted small"></div>
+      <div id="gbList"></div>
+    </div>
+    <div class="gb-right">
+      <div class="row wrap">
+        <button type="button" id="plZip" class="primary">Install plugin (ZIP)</button><button type="button" id="plFolder">Install plugin (folder)</button>
+        <button type="button" id="plReload">Reload</button><button type="button" id="plOpen">Plugins folder</button>
+        <span class="spacer"></span><button type="button" id="plClose">Close</button>
+      </div>
+      <div id="gbErr"></div>
+      <div id="gbDetail"><p class="muted">Select a game to see its description, config files, logs, screenshots and README. Every game is a plugin - you can add or edit them (see PLUGINS.md / CONTRIBUTING.md).</p></div>
+    </div>
+  </div>
 </dialog>
 <div id="toast"></div>
 <script src="app.js"></script>

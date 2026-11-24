@@ -1,0 +1,42 @@
+{
+  "$schema": "../plugin.schema.json",
+  "id": "rust",
+  "name": "Rust Dedicated Server",
+  "description": "Dedicated server support for Rust. Install, run, configure and monitor it from NodeGSM.",
+  "author": "WindowsGSM contributors (ported to NodeGSM)",
+  "version": "1.0.0",
+  "url": "https://steamdb.info/app/258550/info/",
+  "tags": ["unity", "steamcmd"],
+  "media": {
+    "icon": "icon.png",
+    "readme": "README.md",
+    "screenshots": []
+  },
+  "install": {
+    "type": "steamcmd",
+    "appId": "258550"
+  },
+  "run": {
+    "exe": "RustDedicated.exe",
+    "args": [
+      "-nographics",
+      "-batchmode",
+      "-silent-crashes",
+      ["+server.hostname", "{name}"],
+      ["+server.ip", "{ip}"],
+      ["+server.port", "{port}"],
+      ["+server.queryport", "{queryPort}"],
+      ["+server.level", "{map}"],
+      ["+server.maxplayers", "{maxPlayers}"],
+      "{param}"
+    ]
+  },
+  "defaults": {
+    "port": "28015",
+    "queryPort": "28016",
+    "map": "Procedural Map",
+    "maxPlayers": "50",
+    "additional": ""
+  },
+  "query": "a2s"
+}

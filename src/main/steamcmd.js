@@ -59,13 +59,17 @@ class SteamCMD {
     });
   }
 
-  buildArgs(installDir, appId, { validate = true, user, pass, beta } = {}) {
+  buildArgs(installDir, appId, { validate = true, user, pass, beta, mod, repeat = 1 } = {}) {
     const a = ['+force_install_dir', installDir];
     a.push('+login', ...(user ? [user, pass || ''] : ['anonymous']));
-    let upd = `+app_update ${appId}`;
-    if (beta) upd += ` -beta ${beta}`;
-    if (validate) upd += ' validate';
-    a.push(...upd.split(' '), '+quit');
+    // GoldSource games are a "mod" of the HLDS app (90): +app_set_config 90 mod <game>
+    if (mod) a.push('+app_set_config', '90', 'mod', mod);
+    for (let i = 0; i < Math.max(1, repeat); i++) {
+      a.push('+app_update', String(appId));
+      if (beta) a.push('-beta', beta);
+      if (validate) a.push('validate');
+    }
+    a.push('+quit');
     return a;
   }
 

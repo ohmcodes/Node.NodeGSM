@@ -7,9 +7,10 @@ const { spawn, spawnSync, execFile } = require('child_process');
 const { EventEmitter } = require('events');
 const AdmZip = require('adm-zip');
 const cronParser = require('cron-parser');
-const { GAMES, byId } = require('./games');
+const { GAMES, byId } = require('./plugins');
 const { SteamCMD } = require('./steamcmd');
-const { INSTALLERS } = require('./installers');
+const { runInstall, fetchJson, fetchText } = require('./installRunner');
+const { LogTail } = require('./logTail');
 const { query } = require('./query');
 
 const MAX_SERVERS = 100;
@@ -38,6 +39,8 @@ class ServerManager extends EventEmitter {
     this.steam = new SteamCMD(dataDir);
     this.pluginsDir = path.join(dataDir, 'plugins');
     this.pluginInfo = require('./plugins').loadAll(this.pluginsDir);
+    this.logTail = new LogTail();
+    this.logTail.on('lines', (m) => this.emit('logLines', m));
     this.runtime = new Map(); // id -> { proc, console:[], status, startedAt, stopping, busy }
     this.timers = [];
     this.settings = this.loadSettings();
@@ -101,7 +104,7 @@ class ServerManager extends EventEmitter {
     return {
       ...c,
       gameName: g ? g.name : c.game,
-      icon: g ? (g.iconData || g.icon) : null,
+      icon: g ? g.icon : null,
       status: rt ? rt.status : 'Stopped',
       pid: rt && rt.proc ? rt.proc.pid : null,
       startedAt: rt ? rt.startedAt : null,
@@ -147,7 +150,21 @@ class ServerManager extends EventEmitter {
     return cfg;
   }
 
-  async install(id, opts = {}) {
+  /** Run the plugin's install steps. mode: 'install' (all steps) | 'update' (steamcmd steps only when the game has one). */
+  async runSteps(id, { validate = true, mode = 'install' } = {}) {
+    const g = byId(this.getConfig(id).game);
+    const rt = this.rt(id);
+    const steam = g.steps.some((x) => x.type === 'steamcmd');
+    let steps = g.steps;
+    if (mode === 'update' && steam) steps = steps.filter((x) => x.type === 'steamcmd');
+    steps = steps.map((x) => (x.type === 'steamcmd' ? { ...x, validate } : x));
+    const onProgress = (p) => { rt.progress = p; this.emit('status', this.view(id)); };
+    try {
+      await runInstall({ ...g, steps }, { dir: this.filesDir(id), cfg: this.getConfig(id), log: (l) => this.log(id, l), steam: this.steam, onProgress });
+    } finally { rt.progress = null; }
+  }
+
+  async install(id) {
     const c = this.getConfig(id);
     const g = byId(c.game);
     const rt = this.rt(id);
@@ -156,40 +173,18 @@ class ServerManager extends EventEmitter {
     this.setStatus(id, 'Installing');
     const log = (l) => this.log(id, l);
     try {
-      if (g.appId) {
-        const onProgress = (p) => { rt.progress = p; this.emit('status', this.view(id)); };
-        const code = await this.steam.install(this.filesDir(id), g.appId, { validate: true, onProgress, ...opts }, log);
-        rt.progress = null;
-        if (code !== 0) throw new Error(`SteamCMD exited with code ${code} - the download did not complete`);
-      } else {
-        if (g.hooks && g.hooks.install) await g.hooks.install(this.filesDir(id), log, this.getConfig(id));
-        else await (INSTALLERS[g.installer] || INSTALLERS.manual)(this.filesDir(id), log);
-      }
+      if (!g.steps.length && !g.hooks.install) throw new Error('This game has no automatic installer. Use "Import" to point NodeGSM at an existing install.');
+      await this.runSteps(id, { validate: true, mode: 'install' });
       if (!fs.existsSync(path.join(this.filesDir(id), g.exe))) throw new Error(`Install incomplete: ${g.exe} was not found in ${this.filesDir(id)}. Run Install/Verify again.`);
-      this.writeDefaultConfig(id, g);
       log('Install finished.');
       return true;
     } catch (e) {
       log(`Install failed: ${e.message}`);
-      this.setStatus(id, 'Stopped');
       throw e;
     } finally {
       rt.busy = null;
-      if (rt.status === 'Installing') this.setStatus(id, 'Stopped');
+      this.setStatus(id, 'Stopped');
     }
-  }
-
-  writeDefaultConfig(id, g) {
-    try {
-      const dir = this.filesDir(id);
-      if (g.id === 'mc') {
-        const f = path.join(dir, 'server.properties');
-        if (!fs.existsSync(f)) {
-          const c = this.getConfig(id);
-          fs.writeFileSync(f, `server-port=${c.port}\nmax-players=${c.maxPlayers}\nlevel-name=${c.map}\nmotd=${c.name}\nenable-query=true\nquery.port=${c.queryPort}\n`);
-        }
-      }
-    } catch { /* non fatal */ }
   }
 
   /** Import an existing server directory (no copy: points installDir at it) */
@@ -210,6 +205,7 @@ class ServerManager extends EventEmitter {
     } else {
       fs.rmSync(path.join(this.serverRoot(id), 'configs'), { recursive: true, force: true });
     }
+    this.logTail.stopAll(id);
     this.runtime.delete(String(id));
     this.emit('removed', String(id));
     return true;
@@ -223,10 +219,9 @@ class ServerManager extends EventEmitter {
     const g = byId(c.game);
     const dir = this.filesDir(id);
     const ctx = { serverFiles: dir };
-    let cmd = path.join(dir, g.exe);
-    let args = g.args(c, ctx).filter((a) => a !== undefined && a !== '');
-    if (g.launcher === 'java') cmd = 'java';
-    return { cmd, args, cwd: g.id === 'gta5' ? path.join(dir, 'server') : (g.cwd ? path.join(dir, g.cwd) : dir), g, c };
+    const cmd = g.command || path.join(dir, g.exe);
+    const args = g.args(c, ctx).filter((a) => a !== undefined && a !== '');
+    return { cmd, args, cwd: g.cwd ? path.join(dir, g.cwd) : dir, g, c };
   }
 
   async start(id) {
@@ -241,14 +236,14 @@ class ServerManager extends EventEmitter {
     if (c.updateOnStart && g.appId) await this.update(id).catch((e) => this.log(id, `Update failed: ${e.message}`));
 
     const { cmd, args, cwd } = this.buildLaunch(id);
-    if (g.launcher !== 'java' && !fs.existsSync(cmd)) { const m = `${g.exe} not found (${cmd})`; this.log(id, m); throw new Error(m); }
+    const exePath = path.join(this.filesDir(id), g.exe);
+    if (!fs.existsSync(exePath)) { const m = `${g.exe} not found (${exePath}). Install the server first.`; this.log(id, m); throw new Error(m); }
     this.log(id, `> ${path.basename(cmd)} ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`);
 
     this.setStatus(id, 'Started', { startedAt: Date.now(), stopping: false, players: null });
-    const sourceLike = g.engine === 'source' || g.engine === 'goldsource';
     let proc;
     try {
-      proc = spawn(cmd, args, { cwd, windowsHide: true, stdio: [sourceLike ? 'ignore' : 'pipe', 'pipe', 'pipe'], windowsVerbatimArguments: false });
+      proc = spawn(cmd, args, { cwd, windowsHide: true, stdio: [g.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], windowsVerbatimArguments: false });
     } catch (e) { this.setStatus(id, 'Stopped'); throw e; }
     rt.proc = proc;
     const pipe = (s) => { s.setEncoding('utf8'); s.on('data', (d) => this.log(id, d)); };
@@ -287,7 +282,7 @@ class ServerManager extends EventEmitter {
     rt.stopping = true;
     this.setStatus(id, 'Stopping');
     const exited = new Promise((res) => proc.once('exit', res));
-    const graceful = g.stopCommand || { mc: 'stop', mcpe: 'stop', mcbe: 'stop' }[g.id] || 'quit';
+    const graceful = g.stopCommand || 'quit';
     try { if (proc.stdin && proc.stdin.writable) proc.stdin.write(graceful + '\n'); } catch {}
     // soft taskkill (WM_CLOSE to windows), then hard kill
     spawnSync('taskkill', ['/PID', String(proc.pid), '/T'], { windowsHide: true });
@@ -332,9 +327,8 @@ class ServerManager extends EventEmitter {
       const remote = await this.steam.getRemoteBuild(g.appId);
       return { local, remote, available: !!(local && remote && local !== remote) };
     }
-    const inst = (g.hooks && g.hooks.latest) ? { latest: g.hooks.latest, local: g.hooks.local } : INSTALLERS[g.installer];
-    if (inst && inst.latest && inst.local) {
-      const local = inst.local(this.filesDir(id)); const remote = await inst.latest();
+    if (g.hooks.latest && g.hooks.local) {
+      const local = await g.hooks.local(this.filesDir(id)); const remote = await g.hooks.latest({ fetchJson, fetchText });
       return { local, remote, available: !!(local && remote && local !== remote) };
     }
     return { local: null, remote: null, available: false };
@@ -349,16 +343,7 @@ class ServerManager extends EventEmitter {
     rt.busy = 'Updating';
     this.setStatus(id, 'Updating');
     try {
-      const g = byId(this.getConfig(id).game);
-      if (g.appId) {
-        const onProgress = (p) => { rt.progress = p; this.emit('status', this.view(id)); };
-        const code = await this.steam.install(this.filesDir(id), g.appId, { validate, onProgress }, (l) => this.log(id, l));
-        rt.progress = null;
-        if (code !== 0) throw new Error(`SteamCMD exited with code ${code} - the update did not complete`);
-      } else {
-        if (g.hooks && g.hooks.install) await g.hooks.install(this.filesDir(id), (l) => this.log(id, l), this.getConfig(id));
-        else await INSTALLERS[g.installer](this.filesDir(id), (l) => this.log(id, l));
-      }
+      await this.runSteps(id, { validate, mode: 'update' });
       this.log(id, 'Update finished.');
     } finally {
       rt.busy = null;
@@ -459,6 +444,68 @@ class ServerManager extends EventEmitter {
     fs.writeFileSync(target, text);
   }
 
+  // ---------- plugin-declared config files ----------
+  pluginPath(id, rel) {
+    const root = path.resolve(this.filesDir(id));
+    const p = path.resolve(root, rel);
+    if (p !== root && !p.startsWith(root + path.sep)) throw new Error('Invalid path');
+    return p;
+  }
+  cfgDef(id, cid) {
+    const g = byId(this.getConfig(id).game);
+    const def = g.configs.find((x) => x.id === cid);
+    if (!def) throw new Error('Unknown config file');
+    return { g, def, file: this.pluginPath(id, def.path) };
+  }
+  configList(id) {
+    const g = byId(this.getConfig(id).game);
+    return g.configs.map((d) => {
+      const f = this.pluginPath(id, d.path);
+      const ex = fs.existsSync(f);
+      return { id: d.id, name: d.name, path: d.path, format: d.format || 'text', description: d.description || '', exists: ex, size: ex ? fs.statSync(f).size : 0, hasTemplate: !!d.template };
+    });
+  }
+  readConfig(id, cid) {
+    const { def, file } = this.cfgDef(id, cid);
+    if (!fs.existsSync(file)) return { id: cid, name: def.name, format: def.format || 'text', path: def.path, exists: false, text: '' };
+    if (fs.statSync(file).size > 2 * 1024 * 1024) throw new Error('File too large to edit (2MB limit)');
+    return { id: cid, name: def.name, format: def.format || 'text', path: def.path, exists: true, text: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '') };
+  }
+  writeConfig(id, cid, text) {
+    const { def, file } = this.cfgDef(id, cid);
+    if ((def.format || 'text') === 'json') {
+      try { JSON.parse(text); } catch (e) { throw new Error(`Not valid JSON: ${e.message}`); }
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (fs.existsSync(file)) fs.copyFileSync(file, file + '.bak'); // keep one backup of the previous version
+    fs.writeFileSync(file, text);
+    return true;
+  }
+  createConfig(id, cid) {
+    const { g, def, file } = this.cfgDef(id, cid);
+    if (fs.existsSync(file)) return true;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (def.template) {
+      const t = path.resolve(g.dir, def.template);
+      if (!t.startsWith(path.resolve(g.dir) + path.sep)) throw new Error('Invalid template path');
+      fs.copyFileSync(t, file);
+    } else fs.writeFileSync(file, def.format === 'json' ? '{}\n' : '');
+    return true;
+  }
+
+  // ---------- plugin-declared logs (live view) ----------
+  logsList(id) {
+    const g = byId(this.getConfig(id).game);
+    return this.logTail.list(path.resolve(this.filesDir(id)), g.logs);
+  }
+  logStart(id, logId) {
+    const g = byId(this.getConfig(id).game);
+    const def = g.logs.find((x) => x.id === logId);
+    if (!def) throw new Error('Unknown log');
+    return this.logTail.start(id, logId, path.resolve(this.filesDir(id)), def.path);
+  }
+  logStop(id, logId) { this.logTail.stop(id, logId); }
+
   // ---------- Scheduler / monitoring ----------
   startScheduler() {
     // status polling (query + process liveness) every 15s
@@ -524,6 +571,7 @@ class ServerManager extends EventEmitter {
 
   async shutdown() {
     this.stopScheduler();
+    this.logTail.shutdown();
     await Promise.all([...this.runtime.keys()].filter((id) => this.rt(id).proc).map((id) => this.stop(id)));
   }
 

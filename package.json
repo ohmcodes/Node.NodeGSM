@@ -5,9 +5,11 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test/smoke.js",
+    "test": "node test/smoke.js && node scripts/validate-plugins.js --check",
     "dist": "electron-builder --win",
-    "pack": "electron-builder --win --dir"
+    "pack": "electron-builder --win --dir",
+    "validate:plugins": "node scripts/validate-plugins.js",
+    "registry": "node scripts/build-registry.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -26,8 +28,10 @@
     },
     "files": [
       "src/**",
+      "plugins/**",
       "assets/**",
-      "package.json"
+      "package.json",
+      "!plugins/_template/**"
     ],
     "win": {
       "target": [

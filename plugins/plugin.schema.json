@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NodeGSM plugin",
+  "description": "plugins/<game>/plugin.json - describes how NodeGSM installs, runs, configures and monitors one game server.",
+  "type": "object",
+  "required": ["id", "name", "install", "run"],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{1,31}$", "description": "Unique id. Must equal the folder name." },
+    "name": { "type": "string", "description": "Title shown in the game browser, e.g. Palworld Dedicated Server." },
+    "description": { "type": "string", "description": "One or two sentences for the game browser / website card." },
+    "author": { "type": "string" },
+    "version": { "type": "string", "description": "Plugin version (semver)." },
+    "url": { "type": "string", "description": "Homepage, docs or repository of the plugin/game." },
+    "color": { "type": "string", "description": "Accent colour, e.g. #1E8449." },
+    "tags": { "type": "array", "items": { "type": "string" }, "description": "Search tags, e.g. survival, steamcmd." },
+    "media": {
+      "type": "object",
+      "description": "Files inside the plugin folder shown in the game browser and on the website.",
+      "properties": {
+        "icon": { "type": "string", "default": "icon.png", "description": "Square PNG, 64x64 or larger." },
+        "banner": { "type": "string", "description": "Wide image (optional), e.g. banner.png." },
+        "readme": { "type": "string", "default": "README.md" },
+        "screenshots": { "type": "array", "items": { "type": "string" }, "description": "e.g. screenshots/1.png" }
+      }
+    },
+    "install": {
+      "description": "How to get the server files. Shorthands: {type: steamcmd, appId} or {type: manual}; or a list of steps.",
+      "oneOf": [
+        { "type": "object", "required": ["type", "appId"], "properties": { "type": { "const": "steamcmd" }, "appId": { "type": "string", "pattern": "^\\d+$" } } },
+        { "type": "object", "required": ["type"], "properties": { "type": { "enum": ["manual", "script"] } } },
+        { "type": "object", "required": ["steps"], "properties": { "steps": { "type": "array", "items": { "$ref": "#/definitions/step" } } } }
+      ]
+    },
+    "run": {
+      "type": "object",
+      "required": ["exe"],
+      "properties": {
+        "exe": { "type": "string", "description": "Server executable relative to the server files folder (use /)." },
+        "command": { "type": "string", "description": "Run this program instead (e.g. java); exe is then only used to check the install." },
+        "workingDir": { "type": "string", "description": "Working directory relative to the server files folder." },
+        "args": { "type": "array", "items": { "$ref": "#/definitions/arg" }, "description": "Argument templates. See PLUGINS.md." },
+        "stdin": { "type": "boolean", "default": true, "description": "false for srcds/hlds (console input breaks them)." },
+        "stopCommand": { "type": "string", "default": "quit", "description": "Text written to the console to stop gracefully." }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "port": { "type": "string" },
+        "queryPort": { "type": "string" },
+        "map": { "type": "string" },
+        "maxPlayers": { "type": "string" },
+        "additional": { "type": "string", "description": "Default Start parameters." },
+        "portIncrement": { "type": "integer", "minimum": 1, "description": "Ports reserved per instance." }
+      }
+    },
+    "query": { "enum": ["a2s", "ut3", "fivem", null], "description": "Query protocol for player counts." },
+    "gslt": { "type": "boolean", "description": "Show a Game Server Login Token field." },
+    "configs": {
+      "type": "array",
+      "description": "Config files users can edit in the app (INI, JSON, ...). Any number.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "path": { "type": "string", "description": "Relative to the server files folder." },
+          "format": { "enum": ["ini", "json", "xml", "properties", "cfg", "yaml", "text"] },
+          "description": { "type": "string" },
+          "template": { "type": "string", "description": "File in the plugin folder copied when the user clicks Create." }
+        }
+      }
+    },
+    "logs": {
+      "type": "array",
+      "description": "Log files shown live in the app. Any number. Wildcards * ? allowed in the file name (newest match is followed).",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "arg": {
+      "description": "A string, or an array of strings that is kept or dropped as a group when a {placeholder} is empty.",
+      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+    },
+    "step": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["steamcmd", "download", "extract", "run", "write", "mkdir", "script"] },
+        "appId": { "type": "string" },
+        "mod": { "type": "string" },
+        "repeat": { "type": "integer" },
+        "validate": { "type": "boolean" },
+        "url": { "type": "string" },
+        "to": { "type": "string" },
+        "from": { "type": "string" },
+        "extract": { "type": "boolean" },
+        "extractTo": { "type": "string" },
+        "exe": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "ignoreExit": { "type": "boolean" },
+        "path": { "type": "string" },
+        "content": { "type": "string" },
+        "overwrite": { "type": "boolean" }
+      }
+    }
+  }
+}

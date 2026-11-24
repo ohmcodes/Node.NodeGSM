@@ -1,0 +1,21 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  plugins-and-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install (skip the Electron download)
+        run: npm ci --ignore-scripts
+      - name: Validate plugins and registry
+        run: node scripts/validate-plugins.js --check
+      - name: Tests
+        run: node test/smoke.js

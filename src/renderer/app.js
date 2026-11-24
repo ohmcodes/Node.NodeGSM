@@ -15,7 +15,7 @@ function toast(msg, err) {
 async function run(name, ...args) {
   try { return await api.call(name, ...args); } catch (e) { toast(e.message, true); return undefined; }
 }
-const iconSrc = (i) => (!i ? '' : i.startsWith('data:') ? i : `../../assets/games/${i}.png`);
+const iconSrc = (i) => i || '';
 
 // ---------- list ----------
 function renderList() {
@@ -33,6 +33,7 @@ function renderList() {
 }
 
 async function select(id) {
+  stopLog();
   state.sel = id;
   state.consoleBuf = (await run('console', id)) || [];
   renderList();
@@ -40,9 +41,10 @@ async function select(id) {
 }
 
 // ---------- detail ----------
-const TABS = [['console', 'Console'], ['settings', 'Settings'], ['automation', 'Automation'], ['backups', 'Backups'], ['files', 'Files']];
+const TABS = [['console', 'Console'], ['logs', 'Logs'], ['configs', 'Config Files'], ['settings', 'Settings'], ['automation', 'Automation'], ['backups', 'Backups'], ['files', 'Files']];
 
 function renderDetail() {
+  if (state.tab !== 'logs') stopLog();
   const s = state.servers.get(state.sel);
   const d = $('#detail');
   if (!s) { d.innerHTML = '<div class="muted pad center">Select a server</div>'; return; }
@@ -88,7 +90,7 @@ function renderDetail() {
 
 function renderTab(s) {
   const b = $('#tabbody');
-  ({ console: tabConsole, settings: tabSettings, automation: tabAutomation, backups: tabBackups, files: tabFiles }[state.tab])(b, s);
+  ({ console: tabConsole, logs: tabLogs, configs: tabConfigs, settings: tabSettings, automation: tabAutomation, backups: tabBackups, files: tabFiles }[state.tab])(b, s);
 }
 
 function tabConsole(b, s) {
@@ -199,10 +201,89 @@ async function tabFiles(b, s) {
   load('');
 }
 
+// ---------- logs tab (live) ----------
+const logState = { sid: null, id: null, lines: [], filter: '' };
+function stopLog() {
+  if (logState.id) api.call('logStop', logState.sid, logState.id).catch(() => {});
+  logState.id = null; logState.sid = null; logState.lines = [];
+}
+const logCls = (l) => (/\b(error|exception|fatal|crash)/i.test(l) ? 'lerr' : /\bwarn/i.test(l) ? 'lwarn' : '');
+function paintLog() {
+  const out = $('#logOut'); if (!out) return;
+  const f = logState.filter.toLowerCase();
+  const lines = f ? logState.lines.filter((l) => l.toLowerCase().includes(f)) : logState.lines;
+  out.innerHTML = lines.map((l) => `<div class="${logCls(l)}">${esc(l)}</div>`).join('');
+  if (!$('#logPause').checked) out.scrollTop = out.scrollHeight;
+  $('#logCount').textContent = `${lines.length} lines`;
+}
+async function tabLogs(b, s) {
+  const list = (await run('logsList', s.id)) || [];
+  if (!list.length) { b.innerHTML = '<p class="muted">This game plugin does not declare any log files. Plugin authors can add a <code>logs</code> list to plugin.json.</p>'; return; }
+  b.innerHTML = `<div class="split"><div class="tree" id="logList">${list.map((l) => `<div data-l="${esc(l.id)}"><b>${esc(l.name)}</b><br><span class="muted small">${l.file ? esc(l.file) : 'not found yet'}</span></div>`).join('')}</div>
+    <div class="view"><div class="row"><input id="logFilter" placeholder="Filter lines..."><label class="check"><input type="checkbox" id="logPause"> Pause</label><button id="logClear">Clear</button><span id="logCount" class="muted"></span></div>
+    <div id="logFile" class="muted small"></div><div id="logOut" class="logout"></div></div></div>`;
+  const open = async (id) => {
+    stopLog();
+    const r = await run('logStart', s.id, id);
+    if (!r) return;
+    Object.assign(logState, { sid: s.id, id, lines: r.lines });
+    $('#logFile').textContent = r.file ? `Following ${r.file}` : 'Waiting for the file to appear ...';
+    b.querySelectorAll('#logList div').forEach((d) => d.classList.toggle('sel', d.dataset.l === id));
+    paintLog();
+  };
+  b.querySelectorAll('#logList div').forEach((d) => (d.onclick = () => open(d.dataset.l)));
+  $('#logFilter').oninput = (e) => { logState.filter = e.target.value; paintLog(); };
+  $('#logClear').onclick = () => { logState.lines = []; paintLog(); };
+  open(list[0].id);
+}
+
+// ---------- config files tab (INI / JSON / ... declared by the plugin) ----------
+async function tabConfigs(b, s) {
+  const list = (await run('configList', s.id)) || [];
+  if (!list.length) { b.innerHTML = '<p class="muted">This game plugin does not declare config files. Use the <b>Files</b> tab, or ask the plugin author to add a <code>configs</code> list.</p>'; return; }
+  b.innerHTML = `<div class="split"><div class="tree" id="cfgList">${list.map((c) => `<div data-c="${esc(c.id)}"><b>${esc(c.name)}</b> <span class="badge">${esc(c.format)}</span><br><span class="muted small">${esc(c.path)}${c.exists ? '' : ' - missing'}</span></div>`).join('')}</div>
+    <div class="view"><div id="cfgHead" class="muted">Select a config file</div>
+    <div class="row"><button id="cfgSave" class="primary" disabled>Save</button><button id="cfgReload" disabled>Reload</button><button id="cfgFmt" hidden>Format JSON</button><button id="cfgCreate" hidden>Create file</button><span id="cfgStatus" class="muted"></span></div>
+    <textarea id="cfgEd" spellcheck="false" disabled></textarea></div></div>`;
+  let cur = null; let dirty = false;
+  const ed = $('#cfgEd');
+  const status = (t, bad) => { const e = $('#cfgStatus'); e.textContent = t; e.style.color = bad ? 'var(--bad)' : ''; };
+  const check = () => {
+    if (!cur || cur.format !== 'json') return;
+    try { JSON.parse(ed.value); status('Valid JSON'); } catch (e) { status(`Invalid JSON: ${e.message}`, true); }
+  };
+  const load = async (id) => {
+    if (dirty && !confirm('Discard unsaved changes?')) return;
+    const c = await run('configRead', s.id, id);
+    if (!c) return;
+    const def = list.find((x) => x.id === id);
+    cur = c; dirty = false;
+    b.querySelectorAll('#cfgList div').forEach((d) => d.classList.toggle('sel', d.dataset.c === id));
+    $('#cfgHead').innerHTML = `<b>${esc(c.name)}</b> · ${esc(c.path)}${def.description ? ' · ' + esc(def.description) : ''}`;
+    ed.value = c.text; ed.disabled = !c.exists;
+    $('#cfgSave').disabled = true; $('#cfgReload').disabled = false;
+    $('#cfgCreate').hidden = c.exists; $('#cfgFmt').hidden = !(c.format === 'json' && c.exists);
+    status(c.exists ? '' : 'File does not exist yet (the game may create it on first start).');
+    check();
+  };
+  const save = async () => {
+    if (!cur || ed.disabled) return;
+    if ((await run('configWrite', s.id, cur.id, ed.value)) !== undefined) { dirty = false; $('#cfgSave').disabled = true; status('Saved (previous version kept as .bak)'); }
+  };
+  ed.oninput = () => { dirty = true; $('#cfgSave').disabled = false; check(); };
+  ed.onkeydown = (e) => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); save(); } };
+  $('#cfgSave').onclick = save;
+  $('#cfgReload').onclick = () => { dirty = false; load(cur.id); };
+  $('#cfgFmt').onclick = () => { try { ed.value = JSON.stringify(JSON.parse(ed.value), null, 2) + '\n'; dirty = true; $('#cfgSave').disabled = false; check(); } catch (e) { status(`Invalid JSON: ${e.message}`, true); } };
+  $('#cfgCreate').onclick = async () => { if ((await run('configCreate', s.id, cur.id)) !== undefined) { dirty = false; await load(cur.id); } };
+  b.querySelectorAll('#cfgList div').forEach((d) => (d.onclick = () => load(d.dataset.c)));
+  load(list[0].id);
+}
+
 // ---------- add dialog ----------
-function openAdd() {
-  state.pickGame = null;
-  $('#addName').value = ''; $('#addDir').value = ''; $('#addFilter').value = '';
+function openAdd(pre) {
+  state.pickGame = typeof pre === 'string' ? pre : null;
+  $('#addName').value = state.pickGame ? (state.games.find((g) => g.id === state.pickGame) || {}).name || '' : ''; $('#addDir').value = ''; $('#addFilter').value = '';
   renderGamePick();
   $('#dlgAdd').showModal();
 }
@@ -217,7 +298,7 @@ function renderGamePick() {
   }));
 }
 
-$('#btnAdd').onclick = openAdd;
+$('#btnAdd').onclick = () => openAdd();
 $('#addCancel').onclick = () => $('#dlgAdd').close();
 $('#addFilter').oninput = renderGamePick;
 $('#addMode').onchange = () => { $('#addDirRow').hidden = $('#addMode').value !== 'import'; };
@@ -242,20 +323,75 @@ $('#addForm').onsubmit = async (e) => {
 };
 
 // ---------- app settings ----------
-// ---------- plugins ----------
-async function renderPlugins() {
+// ---------- game browser (all games are plugins) ----------
+function md(src) {
+  const inline = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, a, u) => `<a href="#" data-url="${u}">${a}</a>`).replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1');
+  const lines = String(src).replace(/\r/g, '').split('\n');
+  let html = ''; let list = false; let rows = [];
+  const endList = () => { if (list) { html += '</ul>'; list = false; } };
+  const endTable = () => {
+    if (!rows.length) return;
+    const sep = rows.length > 1 && /^[\s|:-]+$/.test(rows[1]);
+    html += '<table>' + rows.filter((r, i) => !(sep && i === 1)).map((r, i) => '<tr>' + r.replace(/^\||\|$/g, '').split('|').map((c) => `<${sep && i === 0 ? 'th' : 'td'}>${inline(c.trim())}</${sep && i === 0 ? 'th' : 'td'}>`).join('') + '</tr>').join('') + '</table>';
+    rows = [];
+  };
+  for (const l of lines) {
+    if (/^\s*\|/.test(l)) { endList(); rows.push(l.trim()); continue; }
+    endTable();
+    let m;
+    if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { endList(); html += `<h${m[1].length + 1}>${inline(m[2])}</h${m[1].length + 1}>`; }
+    else if ((m = /^\s*[-*]\s+(.*)$/.exec(l))) { if (!list) { html += '<ul>'; list = true; } html += `<li>${inline(m[1])}</li>`; }
+    else if (!l.trim()) endList();
+    else { endList(); html += `<p>${inline(l)}</p>`; }
+  }
+  endList(); endTable();
+  return html;
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-url]');
+  if (a) { e.preventDefault(); run('openExternal', a.dataset.url); }
+});
+
+state.gbSel = null;
+async function renderBrowser() {
   const info = (await run('pluginsInfo')) || { loaded: [], errors: [] };
-  $('#plList').innerHTML = info.loaded.length
-    ? '<table><tr><th>Plugin</th><th>Author</th><th>Version</th></tr>' + info.loaded.map((p) => `<tr><td>${esc(p.name)}</td><td>${esc(p.author || '')}</td><td>${esc(p.version || '')}</td></tr>`).join('') + '</table>'
-    : '<p class="muted">No plugins installed.</p>';
-  $('#plErr').innerHTML = info.errors.map((e) => `<div class="err">${esc(e.folder)}: ${esc(e.error)}</div>`).join('');
+  $('#gbErr').innerHTML = info.errors.map((e) => `<div class="err">Plugin "${esc(e.folder)}" failed to load: ${esc(e.error)}</div>`).join('');
+  const q = $('#gbSearch').value.toLowerCase();
+  const items = state.games.filter((g) => `${g.name} ${(g.tags || []).join(' ')} ${g.description || ''}`.toLowerCase().includes(q));
+  $('#gbCount').textContent = `${items.length} of ${state.games.length} games`;
+  $('#gbList').innerHTML = items.map((g) => `<div data-g="${esc(g.id)}" class="${state.gbSel === g.id ? 'sel' : ''}"><img src="${iconSrc(g.icon)}" alt=""><div><b>${esc(g.name)}</b>
+    <div class="muted small">${g.source === 'user' ? (g.overrides ? 'Local override' : 'Installed plugin') : 'Built-in'} · v${esc(g.version || '?')}</div></div></div>`).join('');
+  $('#gbList').querySelectorAll('[data-g]').forEach((d) => (d.onclick = () => showDetail(d.dataset.g)));
+}
+async function showDetail(id) {
+  const d = await run('pluginDetail', id);
+  if (!d) return;
+  state.gbSel = id;
+  $('#gbList').querySelectorAll('[data-g]').forEach((x) => x.classList.toggle('sel', x.dataset.g === id));
+  const list = (arr, fn) => (arr.length ? `<ul>${arr.map(fn).join('')}</ul>` : '<p class="muted">None declared.</p>');
+  $('#gbDetail').innerHTML = `${d.banner ? `<img class="banner" src="${d.banner}" alt="">` : ''}
+    <div class="dhead nopad"><img src="${d.icon || ''}" alt=""><div><h2>${esc(d.name)}</h2>
+      <div class="muted">by ${esc(d.author || 'unknown')} · v${esc(d.version || '?')} · ${d.source === 'user' ? (d.overrides ? 'local override of a built-in plugin' : 'installed plugin') : 'built-in'}</div>
+      <div>${(d.tags || []).map((t) => `<span class="badge">${esc(t)}</span>`).join(' ')}</div></div>
+      <div class="actions"><button class="primary" id="gbAdd">Add server</button>${/^https?:/.test(d.url) ? `<a href="#" data-url="${esc(d.url)}"><button>Open link</button></a>` : ''}</div></div>
+    <p>${esc(d.description)}</p>
+    <h4>Defaults</h4><table><tr><td>Steam app</td><td>${esc(d.appId || '-')}</td><td>Game port</td><td>${esc(d.port || '-')}</td></tr>
+      <tr><td>Query</td><td>${esc(d.query || 'none')}</td><td>Query port</td><td>${esc(d.queryPort || '-')}</td></tr></table>
+    <h4>Config files (${d.configs.length})</h4>${list(d.configs, (c) => `<li><b>${esc(c.name)}</b> <span class="badge">${esc(c.format || 'text')}</span> <code>${esc(c.path)}</code></li>`)}
+    <h4>Live logs (${d.logs.length})</h4>${list(d.logs, (c) => `<li><b>${esc(c.name)}</b> <code>${esc(c.path)}</code></li>`)}
+    ${d.screenshots.length ? `<h4>Screenshots</h4><div class="shots">${d.screenshots.map((x) => `<img src="${x}" alt="">`).join('')}</div>` : ''}
+    <h4>README</h4><div class="md">${d.readme ? md(d.readme) : '<p class="muted">No README.</p>'}</div>`;
+  $('#gbAdd').onclick = () => { $('#dlgPlugins').close(); openAdd(id); };
+  $('#gbDetail').querySelectorAll('.shots img').forEach((im) => (im.onclick = () => im.classList.toggle('zoom')));
 }
 async function afterPluginChange(msg) {
   state.games = (await run('games')) || state.games;
-  await renderPlugins();
+  await renderBrowser();
   if (msg) toast(msg);
 }
-$('#btnPlugins').onclick = async () => { await renderPlugins(); $('#dlgPlugins').showModal(); };
+$('#btnPlugins').onclick = async () => { await renderBrowser(); $('#dlgPlugins').showModal(); };
+$('#gbSearch').oninput = renderBrowser;
 $('#plClose').onclick = () => $('#dlgPlugins').close();
 $('#plZip').onclick = async () => { const id = await run('pluginsInstallZip'); if (id) await afterPluginChange(`Plugin "${id}" installed`); };
 $('#plFolder').onclick = async () => { const id = await run('pluginsInstallFolder'); if (id) await afterPluginChange(`Plugin "${id}" installed`); };
@@ -300,6 +436,14 @@ api.on('console', ({ id, line }) => {
     out.textContent += (out.textContent ? '\n' : '') + line;
     if (atBottom) out.scrollTop = out.scrollHeight;
   }
+});
+api.on('logLines', ({ id, logId, reset, file, lines }) => {
+  if (id !== logState.sid || logId !== logState.id || state.tab !== 'logs') return;
+  if (reset) logState.lines = [];
+  logState.lines.push(...lines);
+  if (logState.lines.length > 5000) logState.lines.splice(0, logState.lines.length - 5000);
+  if (file && $('#logFile')) $('#logFile').textContent = `Following ${file}`;
+  paintLog();
 });
 api.on('removed', (id) => {
   state.servers.delete(id);

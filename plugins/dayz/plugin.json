@@ -1,0 +1,41 @@
+{
+  "$schema": "../plugin.schema.json",
+  "id": "dayz",
+  "name": "DayZ Dedicated Server",
+  "description": "Dedicated server support for DayZ. Install, run, configure and monitor it from NodeGSM.",
+  "author": "WindowsGSM contributors (ported to NodeGSM)",
+  "version": "1.0.0",
+  "url": "https://steamdb.info/app/223350/info/",
+  "tags": ["steamcmd"],
+  "media": {
+    "icon": "icon.png",
+    "readme": "README.md",
+    "screenshots": []
+  },
+  "install": {
+    "type": "steamcmd",
+    "appId": "223350"
+  },
+  "run": {
+    "exe": "DayZServer_x64.exe",
+    "args": ["-ip={ip}", "-port={port}", "{param}"]
+  },
+  "defaults": {
+    "port": "2302",
+    "queryPort": "27016",
+    "map": "dayzOffline.chernarusplus",
+    "maxPlayers": "60",
+    "additional": "-config=serverDZ.cfg -doLogs -adminLog -netLog",
+    "portIncrement": 2
+  },
+  "query": "a2s",
+  "configs": [
+    {
+      "id": "serverdz",
+      "name": "serverDZ.cfg",
+      "path": "serverDZ.cfg",
+      "format": "cfg",
+      "description": "Hostname, password, max players, mission template"
+    }
+  ]
+}

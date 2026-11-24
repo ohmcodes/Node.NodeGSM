@@ -1,0 +1,68 @@
+{
+  "$schema": "../plugin.schema.json",
+  "id": "tfc",
+  "name": "Team Fortress Classic Dedicated Server",
+  "description": "Dedicated server support for Team Fortress Classic. Install, run, configure and monitor it from NodeGSM.",
+  "author": "WindowsGSM contributors (ported to NodeGSM)",
+  "version": "1.0.0",
+  "url": "https://steamdb.info/app/90/info/",
+  "tags": ["goldsource", "steamcmd"],
+  "media": {
+    "icon": "icon.png",
+    "readme": "README.md",
+    "screenshots": []
+  },
+  "install": {
+    "steps": [
+      {
+        "type": "steamcmd",
+        "appId": "90",
+        "mod": "tfc",
+        "repeat": 5
+      },
+      {
+        "type": "write",
+        "path": "steam_appid.txt",
+        "content": "20"
+      }
+    ]
+  },
+  "run": {
+    "exe": "hlds.exe",
+    "stdin": false,
+    "args": [
+      "-console",
+      ["-game", "tfc"],
+      ["-ip", "{ip}"],
+      ["-port", "{port}"],
+      ["-maxplayers", "{maxPlayers}"],
+      ["+sv_setsteamaccount", "{gslt}"],
+      "{param}",
+      ["+map", "{map}"]
+    ]
+  },
+  "defaults": {
+    "port": "27015",
+    "queryPort": "27015",
+    "map": "dustbowl",
+    "maxPlayers": "24",
+    "additional": ""
+  },
+  "query": "a2s",
+  "configs": [
+    {
+      "id": "server-cfg",
+      "name": "server.cfg",
+      "path": "tfc/server.cfg",
+      "format": "cfg",
+      "description": "Main server config (hostname, rcon_password, ...)"
+    }
+  ],
+  "logs": [
+    {
+      "id": "server-logs",
+      "name": "Server logs",
+      "path": "tfc/logs/*.log"
+    }
+  ]
+}

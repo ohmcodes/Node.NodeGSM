@@ -1,0 +1,31 @@
+{
+  "$schema": "../plugin.schema.json",
+  "id": "unt",
+  "name": "Unturned Dedicated Server",
+  "description": "Dedicated server support for Unturned. Install, run, configure and monitor it from NodeGSM.",
+  "author": "WindowsGSM contributors (ported to NodeGSM)",
+  "version": "1.0.0",
+  "url": "https://steamdb.info/app/1110390/info/",
+  "tags": ["unity", "steamcmd"],
+  "media": {
+    "icon": "icon.png",
+    "readme": "README.md",
+    "screenshots": []
+  },
+  "install": {
+    "type": "steamcmd",
+    "appId": "1110390"
+  },
+  "run": {
+    "exe": "Unturned.exe",
+    "args": ["-batchmode", "--nographics", "-port:{port}", "-players:{maxPlayers}", "-{map}", "{param}"]
+  },
+  "defaults": {
+    "port": "27015",
+    "queryPort": "27016",
+    "map": "pei",
+    "maxPlayers": "20",
+    "additional": "+secureserver/Default"
+  },
+  "query": "a2s"
+}
