@@ -1,4 +1,4 @@
-# Writing a plugin
+# Writing a NodeGSM plugin
 
 A plugin = a folder with a `plugin.json` (and optionally `icon.png` and `plugin.js`). No compiling, no app update.
 Users install it by **Plugins -> Install from ZIP / folder**, or by copying the folder into the plugins folder
