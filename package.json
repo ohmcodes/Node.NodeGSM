@@ -5,7 +5,9 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js",
+    "dist": "electron-builder --win",
+    "pack": "electron-builder --win --dir"
   },
   "license": "MIT",
   "dependencies": {
@@ -13,6 +15,30 @@
     "cron-parser": "^4.9.0"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.node.wgsm2026",
+    "productName": "Node.WGSM2026",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**",
+      "assets/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
