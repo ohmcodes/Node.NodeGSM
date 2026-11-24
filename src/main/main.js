@@ -8,8 +8,8 @@ const dataDir = process.env.WGSM_DATA || path.join(app.getPath('userData'), 'WGS
 let mgr; let win; let tray; let quitting = false;
 
 function publicGames() {
-  return GAMES.map(({ id, name, icon: iconData || icon, port, queryPort, map, maxPlayers, additional, appId, query, gslt, plugin, author, version }) =>
-    ({ id, name, icon, iconData, port, queryPort, map, maxPlayers, additional, appId, query, gslt: !!gslt, plugin: !!plugin, author, version }));
+  return GAMES.map(({ id, name, icon, iconData, port, queryPort, map, maxPlayers, additional, appId, query, gslt, plugin, author, version }) =>
+    ({ id, name, icon: iconData || icon, port, queryPort, map, maxPlayers, additional, appId, query, gslt: !!gslt, plugin: !!plugin, author, version }));
 }
 
 function createWindow() {
