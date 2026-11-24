@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>Node.WGSM2026</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="brand">Node.<b>WGSM</b>2026</div>
+  <div class="spacer"></div>
+  <span id="metrics" class="muted"></span>
+  <button id="btnAdd" class="primary">+ Add Server</button>
+  <button id="btnSettings">Settings</button>
+</header>
+<main>
+  <aside>
+    <div class="list-title">Servers</div>
+    <ul id="serverList"></ul>
+    <div id="emptyHint" class="muted pad">No servers yet. Click <b>+ Add Server</b> to install one.</div>
+  </aside>
+  <section id="detail"><div class="muted pad center">Select a server</div></section>
+</main>
+
+<dialog id="dlgAdd">
+  <form method="dialog" id="addForm">
+    <h3>Add Server</h3>
+    <label>Mode
+      <select id="addMode"><option value="install">Install new (download)</option><option value="import">Import existing folder</option></select>
+    </label>
+    <label>Game <input id="addFilter" placeholder="Filter games..."></label>
+    <div id="gamePick" class="gamepick"></div>
+    <label>Server name <input id="addName" placeholder="My server"></label>
+    <label id="addDirRow" hidden>Existing folder
+      <div class="row"><input id="addDir" readonly><button type="button" id="addBrowse">Browse</button></div>
+    </label>
+    <div class="row end">
+      <button type="button" id="addCancel">Cancel</button>
+      <button type="submit" id="addOk" class="primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgSettings">
+  <form method="dialog">
+    <h3>Application Settings</h3>
+    <label class="check"><input type="checkbox" id="setLogin"> Start Node.WGSM on Windows login (servers flagged Auto Start will launch)</label>
+    <label class="check"><input type="checkbox" id="setTray"> Minimize to tray on close</label>
+    <div class="row end"><button type="button" id="setCancel">Close</button><button type="submit" id="setOk" class="primary">Save</button></div>
+  </form>
+</dialog>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

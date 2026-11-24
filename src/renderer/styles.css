@@ -1,0 +1,52 @@
+:root{--bg:#14161c;--panel:#1c1f27;--panel2:#232733;--line:#2e3340;--text:#e6e8ee;--muted:#8b93a7;--accent:#4f8cff;--ok:#2ecc71;--warn:#f1c40f;--bad:#e74c3c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 "Segoe UI",system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{font-size:18px;letter-spacing:.5px}.brand b{color:var(--accent)}
+.spacer{flex:1}.muted{color:var(--muted)}.pad{padding:14px}.center{text-align:center;margin-top:30vh}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer;font:inherit}
+button:hover:not(:disabled){border-color:var(--accent)}button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.danger{border-color:var(--bad);color:var(--bad)}
+input,select,textarea{background:#10121a;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;width:100%}
+input[type=checkbox]{width:auto}
+main{flex:1;display:flex;min-height:0}
+aside{width:290px;background:var(--panel);border-right:1px solid var(--line);overflow:auto}
+.list-title{padding:10px 14px;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:1px}
+#serverList{list-style:none;margin:0;padding:0}
+#serverList li{display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer;border-left:3px solid transparent}
+#serverList li:hover{background:var(--panel2)}#serverList li.sel{background:var(--panel2);border-left-color:var(--accent)}
+#serverList img{width:32px;height:32px;border-radius:6px;background:#000}
+#serverList .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+#serverList .sub{font-size:12px;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:#555;margin-left:auto;flex:none}
+.dot.Started{background:var(--ok)}.dot.Starting,.dot.Updating,.dot.Installing,.dot.Stopping{background:var(--warn)}.dot.Stopped{background:#555}
+#detail{flex:1;display:flex;flex-direction:column;min-width:0}
+.dhead{display:flex;gap:14px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dhead img{width:48px;height:48px;border-radius:8px}.dhead h2{margin:0;font-size:18px}
+.dhead .actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:#333}
+.badge.Started{background:#17402a;color:var(--ok)}.badge.Starting,.badge.Updating,.badge.Installing,.badge.Stopping{background:#4a3f10;color:var(--warn)}
+.tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line)}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 14px}
+.tabs button.on{border-bottom-color:var(--accent);color:var(--accent)}
+.tabbody{flex:1;overflow:auto;padding:16px 18px;min-height:0}
+#con{height:100%;display:flex;flex-direction:column;gap:8px}
+#conOut{flex:1;background:#0b0c10;border:1px solid var(--line);border-radius:6px;padding:8px;overflow:auto;font:12px/1.35 Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+label.check{flex-direction:row;align-items:center;gap:8px;color:var(--text);font-size:14px}
+.row{display:flex;gap:8px;align-items:center}.row.end{justify-content:flex-end;margin-top:14px}
+h4{margin:18px 0 8px;color:var(--accent);font-size:13px;text-transform:uppercase;letter-spacing:1px}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;width:620px;max-width:92vw}
+dialog::backdrop{background:#000a}dialog form{display:flex;flex-direction:column;gap:10px}dialog h3{margin:0}
+.gamepick{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;max-height:250px;overflow:auto}
+.gamepick div{display:flex;gap:8px;align-items:center;padding:6px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:12px}
+.gamepick div.sel{border-color:var(--accent);background:var(--panel2)}.gamepick img{width:24px;height:24px}
+table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+.files{display:grid;grid-template-columns:260px 1fr;gap:12px;height:100%}
+.tree{border:1px solid var(--line);border-radius:6px;overflow:auto;padding:4px}.tree div{padding:3px 6px;cursor:pointer;border-radius:4px}.tree div:hover{background:var(--panel2)}
+#fileEd{width:100%;height:calc(100% - 40px);font:12px Consolas,monospace;resize:none}
+#toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:6px}
+#toast div{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--accent);padding:8px 12px;border-radius:6px;max-width:420px}
+#toast div.err{border-left-color:var(--bad)}

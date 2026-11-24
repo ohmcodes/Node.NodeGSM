@@ -1,0 +1,18 @@
+{
+  "name": "node-wgsm2026",
+  "version": "0.1.0",
+  "description": "WindowsGSM reimagined on Electron - manage game servers with one click",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/smoke.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "cron-parser": "^4.9.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

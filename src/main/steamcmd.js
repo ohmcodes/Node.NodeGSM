@@ -1,0 +1,107 @@
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const { spawn } = require('child_process');
+const AdmZip = require('adm-zip');
+
+const STEAMCMD_URL = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip';
+
+function download(url, dest, redirects = 5) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': 'Node.WGSM2026' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) {
+        res.resume();
+        return resolve(download(new URL(res.headers.location, url).toString(), dest, redirects - 1));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode} for ${url}`)); }
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const out = fs.createWriteStream(dest);
+      res.pipe(out);
+      out.on('finish', () => out.close(() => resolve(dest)));
+      out.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+function fetchText(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': 'Node.WGSM2026' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return resolve(fetchText(new URL(res.headers.location, url).toString()));
+      }
+      let d = '';
+      res.on('data', (c) => (d += c));
+      res.on('end', () => (res.statusCode === 200 ? resolve(d) : reject(new Error(`HTTP ${res.statusCode}`))));
+    }).on('error', reject);
+  });
+}
+
+class SteamCMD {
+  constructor(dataDir) {
+    this.dir = path.join(dataDir, 'bin', 'steamcmd');
+    this.exe = path.join(this.dir, 'steamcmd.exe');
+  }
+
+  async ensure(onLog = () => {}) {
+    if (fs.existsSync(this.exe)) return;
+    onLog('Downloading steamcmd.zip ...');
+    const zip = path.join(this.dir, 'steamcmd.zip');
+    await download(STEAMCMD_URL, zip);
+    new AdmZip(zip).extractAllTo(this.dir, true);
+    fs.unlinkSync(zip);
+    onLog('SteamCMD extracted.');
+  }
+
+  buildArgs(installDir, appId, { validate = true, user, pass, beta } = {}) {
+    const a = ['+force_install_dir', installDir];
+    a.push('+login', ...(user ? [user, pass || ''] : ['anonymous']));
+    let upd = `+app_update ${appId}`;
+    if (beta) upd += ` -beta ${beta}`;
+    if (validate) upd += ' validate';
+    a.push(...upd.split(' '), '+quit');
+    return a;
+  }
+
+  /** Install or update an app. Returns promise of exit code. */
+  async install(installDir, appId, opts = {}, onLog = () => {}) {
+    await this.ensure(onLog);
+    fs.mkdirSync(installDir, { recursive: true });
+    const args = this.buildArgs(installDir, appId, opts);
+    return new Promise((resolve) => {
+      const p = spawn(this.exe, args, { cwd: this.dir, windowsHide: true });
+      const pipe = (s) => s.on('data', (d) => d.toString().split(/\r?\n/).filter(Boolean).forEach(onLog));
+      pipe(p.stdout); pipe(p.stderr);
+      p.on('error', (e) => { onLog(`SteamCMD failed to start: ${e.message}`); resolve(-1); });
+      p.on('close', (code) => resolve(code));
+    });
+  }
+
+  /** Reads buildid from steamapps/appmanifest_<id>.acf */
+  getLocalBuild(installDir, appId) {
+    try {
+      const f = path.join(installDir, 'steamapps', `appmanifest_${appId}.acf`);
+      const m = /"buildid"\s+"(\d+)"/.exec(fs.readFileSync(f, 'utf8'));
+      return m ? m[1] : null;
+    } catch { return null; }
+  }
+
+  /** Public branch build id via steamcmd app_info_print */
+  async getRemoteBuild(appId) {
+    await this.ensure();
+    return new Promise((resolve) => {
+      const args = ['+login', 'anonymous', '+app_info_update', '1', '+app_info_print', String(appId), '+quit'];
+      const p = spawn(this.exe, args, { cwd: this.dir, windowsHide: true });
+      let out = '';
+      p.stdout.on('data', (d) => (out += d));
+      p.on('error', () => resolve(null));
+      p.on('close', () => {
+        const m = /"branches"\s*\{\s*"public"\s*\{\s*"buildid"\s*"(\d+)"/s.exec(out);
+        resolve(m ? m[1] : null);
+      });
+    });
+  }
+}
+
+module.exports = { SteamCMD, download, fetchText };
