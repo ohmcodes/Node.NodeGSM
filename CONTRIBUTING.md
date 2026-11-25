@@ -21,6 +21,7 @@ You can also fix a game locally without a PR: put the edited folder in the app's
 3. `npm test` must pass. With every change update the **Changelog and tables in FEATURES.md**, README.md, PLUGINS.md, this file and any affected guide in `docs/`.
 4. If you change the plugin format (`src/main/plugins.js`), also port the rule to the Catalogue's `scripts/lib/validate.js` and mirror [PLUGINS.md](PLUGINS.md) there.
 5. Open the pull request; the template has a checklist.
+6. Maintainers: to release, run `npm version <patch|minor|major>` then `git push --follow-tags`; `.github/workflows/release.yml` builds the exe and publishes the GitHub Release.
 
 ## Project layout (for code contributions)
 ```

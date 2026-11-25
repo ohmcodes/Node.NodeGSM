@@ -1,0 +1,69 @@
+name: Release
+
+# Push a version tag (for example `v0.2.0`, made by `npm version minor`) and this builds the
+# Windows installer + portable exe and publishes them as a GitHub Release.
+# Tags that contain a dash (v0.2.0-beta.1) are published as pre-releases.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build and release, e.g. v0.2.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ohmcodes/Node.NodeGSM.Catalogue
+          path: catalogue
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Tag must match package.json version
+        shell: bash
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$v" ]; then
+            echo "Tag $TAG does not match package.json version $v (run 'npm version' to bump it)." >&2
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Tests (plugins come from the catalogue checkout)
+        run: node test/smoke.js
+        env:
+          NODEGSM_BUNDLED_PLUGINS: ${{ github.workspace }}/catalogue/plugins
+
+      - name: Build installer and portable exe
+        run: npx electron-builder --win --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Publish the GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          flags=""
+          case "$TAG" in *-*) flags="--prerelease" ;; esac
+          files=(dist/*.exe dist/*.exe.blockmap dist/latest.yml)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" "${files[@]}" --title "NodeGSM $TAG" --generate-notes $flags
+          fi

@@ -29,6 +29,13 @@ npm run serve          # http://127.0.0.1:8730 - the first start prints the acce
 npm run dist    # installer + portable exe in dist/
 npm run pack    # unpacked folder only (faster, for testing)
 ```
+**Release on GitHub (automatic).** Bump the version and push the tag; the Release workflow does the rest:
+```
+npm version minor              # or patch / major: edits package.json, commits, tags v0.x.0
+git push --follow-tags         # the tag triggers .github/workflows/release.yml
+```
+It runs the tests, builds the installer and portable exe and publishes them to a GitHub Release (a tag with a dash, like `v0.2.0-beta.1`, becomes a pre-release). Do not push a tag that does not match the `package.json` version: the workflow stops with an error.
+
 Builds are unsigned. The NodeGSM icon is configured (`build.win.icon` = `build/icon.ico`) and is used by the window, taskbar and tray. electron-builder can only write it into the `.exe` itself when `signAndEditExecutable` is on, which needs Windows Developer Mode (or an elevated shell) to unpack its helper tools; that is why `package.json` keeps `"signAndEditExecutable": false`, so `npm run pack` / `npm run dist` work on any machine and the `.exe` file icon stays the Electron one. To get the logo on the `.exe`: enable Developer Mode and remove that line.
 
 The logo is hand-written SVG in [`assets/`](assets) (`logo.svg` mark, `logo-wordmark.svg`, `icon.svg`). `npm run icons` redraws it to `assets/icon*.png`, `build/icon.ico` and `website/assets/` (no dependencies); commit the generated files when you change the design.

@@ -133,12 +133,26 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 | Logo in the app: header mark (inline SVG, follows the accent colour), window and taskbar icon, tray icon (16 + 32 px) | 🧪 | `assets/icon*.png`; the `.exe` file icon stays the Electron one while `signAndEditExecutable` is false (README) |
 | External links open in the default browser; in-app navigation blocked | ✅ | |
 | Legacy data folder kept after rename | ✅ | `%APPDATA%\node-wgsm2026\WGSM` if present, else `%APPDATA%\NodeGSM`; on Linux `$XDG_DATA_HOME/NodeGSM` (default `~/.local/share/NodeGSM`); Settings can move it to the NodeGSM folder |
+| Automated GitHub release on a version tag | 🧪 | `.github/workflows/release.yml` builds the installer + portable exe and publishes a GitHub Release; written but not yet run on GitHub |
 | Choose the data folder (Settings -> Data location) | ✅ | **Change folder...** copies everything to an empty folder with progress, then restarts; **Use existing data...** points at a folder that already holds NodeGSM data; **Use the standard folder**; the old folder is never deleted; refused while a server runs or an install / update is in progress; stored in `data-location.txt` outside the data folder; `NODEGSM_DATA` overrides it |
 | Installer asks for the data folder | ✅ | NSIS page after the install-folder page (skipped for silent installs and when a folder was already chosen); the portable .exe uses Settings instead |
 | Documentation: guides, `TECH-api.md` (all IPC channels), `TECH-architecture.md`, `TECH-data-formats.md`, `docs/README.md` index, `OPEN-QUESTIONS.md`, `TESTING-CHECKLIST.md` | ✅ | [docs/README.md](docs/README.md); a test fails when an IPC channel is missing from TECH-api.md |
 
 ## Changelog
 Newest first. Add an entry for every change. One entry = one `### <date> - <unique title>` heading followed by bullets (the website parses this format).
+
+### 2026-11-25 - Community WindowsGSM plugins imported into the Catalogue
+- **Added:** 127 plugins in the Catalogue repository, converted from public `<owner>/WindowsGSM.<Game>` GitHub repos with the website converter (one repo per game: latest push, then most stars). Metadata, app id, executable, start command line and default ports only; no C# was copied. Each README credits the source repo; most carry the `windowsgsm-import` tag, and ones that still need install or hook work also carry `needs-work`.
+- **Not verified:** none of the imported plugins has been run against a real server, and they all use a placeholder icon.
+
+### 2026-11-25 - Guided issue templates
+- **Added:** `.github/ISSUE_TEMPLATE/report-issues.md` and `feature-request.md`, written like the Catalogue's game request (a prefilled body with a prompt per detail), plus `config.yml` linking to "Request a game". The website's issues link ("Report an issue") now opens the `report-issues.md` template directly instead of the raw issue list.
+- **Not verified:** the templates have not been rendered on GitHub yet.
+
+### 2026-11-25 - Automated GitHub releases
+- **Added:** `.github/workflows/release.yml`. Pushing a tag like `v0.2.0` (made by `npm version minor`, then `git push --follow-tags`) runs the tests, checks that the tag equals the `package.json` version, builds the NSIS installer and portable exe with electron-builder and publishes them (plus `latest.yml` and the blockmap) to a GitHub Release with generated notes. Tags with a dash (`v0.2.0-beta.1`) become pre-releases. It can also be started by hand for an existing tag.
+- **Docs:** README "Build an exe" and CONTRIBUTING describe the release steps.
+- **Not verified:** the workflow has not run on GitHub yet. Builds stay unsigned.
 
 ### 2026-11-25 - Choose where NodeGSM keeps its data
 - **Settings -> Data location:** shows the data folder and lets you **Change folder...** (copy to an empty folder with progress, switch, restart), **Use existing data...** (switch without copying) or **Use the standard folder** (moves the pre-NodeGSM folder `%APPDATA%\node-wgsm2026\WGSM` to `%APPDATA%\NodeGSM`). The old folder is kept; the move is refused while servers run, installs / updates are in progress, the target is not empty, the disk is too small, or `NODEGSM_DATA` is set.
