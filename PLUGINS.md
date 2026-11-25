@@ -199,9 +199,9 @@ All of these are optional. They are validated and carried onto the game object n
 | `configs[].protect[]` | keys/lines of that config kept during cluster config sync (lines marked `# NGSM:ignore` are kept too) |
 | `backup.presets[]` | `{ id, name, paths[] }` named "neat-pick" selections for backups |
 | `backup.exclude[]` | paths / wildcard patterns left out of every backup |
-| `events[]` | `{ id, label, default }` extra game-specific events that can be logged / sent to Discord |
+| `events[]` | `{ id, label, default }` extra game-specific events. They show up in the Discord view as `game:<id>` (label shown as "<Game>: <label>", `default` = initial toggle). They fire when a `logging.patterns` entry with the same `id` matches |
 | `logging.logFiles[]` | log files (wildcards allowed) scanned by the NGSM event log |
-| `logging.patterns[]` | `{ id, regex, level }` (`info` / `warn` / `error`); a matching log or console line becomes an event log entry; `regex` must compile |
+| `logging.patterns[]` | `{ id, regex, level }` (`info` / `warn` / `error`); a matching **console line** becomes an event log entry (case-insensitive, at most once per pattern per server per 10 s); `regex` must compile. If the pattern `id` equals an `events[].id`, the entry is the event `game:<id>` and can be sent to Discord |
 | `consoles[]` | `{ id, name, type, source }` extra consoles; `type` is `process`, `log` (`source` = id of a declared log) or `rcon` |
 | `update.validateArgs` | per-installer text used for "Validate", e.g. `{ "steamcmd": "validate" }` |
 | `files.autoClear[]` | `{ path, pattern, olderThanDays, intervalMin, default }` rules that delete old files periodically (`olderThanDays` >= 0, `intervalMin` >= 1) |
@@ -244,3 +244,13 @@ The NodeGSM website ([`website/`](website)) consumes it: `npm run catalog` turns
 | `Stop()` sending `^c` / `quit` | `run.stopCommand` |
 | `RedirectStandardInput = false` (srcds) | `run.stdin: false` |
 | `CreateServerCFG()` writing files | `install.steps` -> `write`, or `configs[].template` |
+
+### Example: alert Discord when a player joins
+```json
+"events": [{ "id": "player-join", "label": "Player joined", "default": true }],
+"logging": { "patterns": [
+  { "id": "player-join", "regex": "(\\S+) joined the game", "level": "info" },
+  { "id": "sudden-stop", "regex": "stopped suddenly", "level": "error" }
+] }
+```
+`player-join` has the same id as an event, so each matching console line is logged as `game:player-join` and (if toggled on in the Discord view) sent to Discord; the matching line is available as `{message}` in the template. `sudden-stop` is only logged as `pattern:sudden-stop` in the **Logs** screen. A crashed process is always logged as `server:crashed` without any pattern.

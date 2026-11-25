@@ -21,7 +21,7 @@ const DEFAULTS = {
   dashboardChart: 'players',  // players | cpu | memory
   ui: { leftCollapsed: false, rightCollapsed: false, bottomCollapsed: false, navCollapsed: false }, // panel collapse state
   headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
-  discord: { webhookUrl: '', botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], allowRawCommands: false, events: {} },
+  discord: { webhookUrl: '', botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], allowRawCommands: false, events: {}, templates: {} },
   logging: { retentionDays: 30 }, // NGSM event log retention
 };
 const VIEWS = ['servers', 'table', 'dashboard'];
@@ -34,15 +34,71 @@ const idList = (v) => (Array.isArray(v) ? [...new Set(v.map((x) => String(x).tri
 const UI_KEYS = ['leftCollapsed', 'rightCollapsed', 'bottomCollapsed', 'navCollapsed'];
 const STAT_KEYS = ['cpu', 'ram', 'disk', 'servers', 'players', 'tick'];
 
-function sanitizeDiscord(v) {
-  v = v && typeof v === 'object' ? v : {};
-  const events = {};
-  if (v.events && typeof v.events === 'object') {
-    for (const [k, x] of Object.entries(v.events).slice(0, 100)) if (/^[a-z0-9:_.-]{1,60}$/i.test(k)) events[k] = !!x;
+const EVENT_KEY = /^[a-z0-9:_.-]{1,60}$/i;
+const WEBHOOK_HOSTS = ['discord.com', 'ptb.discord.com', 'canary.discord.com', 'discordapp.com'];
+
+/** True for https://discord.com/api/webhooks/<id>/<token> (and discordapp.com / ptb / canary). Anything else is refused. */
+function isDiscordWebhook(u) {
+  try {
+    const x = new URL(String(u));
+    return x.protocol === 'https:' && WEBHOOK_HOSTS.includes(x.hostname) && !x.username && !x.password && !x.port && /^\/api\/webhooks\/\d+\/[\w-]+\/?$/.test(x.pathname);
+  } catch { return false; }
+}
+/** Webhook field: trimmed, or '' when it is not a Discord webhook URL. */
+const webhook = (v) => { const s = str(v, 500); return isDiscordWebhook(s) ? s : ''; };
+/** Image / thumbnail: https URL up to 500 characters, else ''. */
+const httpsUrl = (v) => { const s = str(v, 500); try { return new URL(s).protocol === 'https:' ? s : ''; } catch { return ''; } };
+const color = (v) => (typeof v === 'string' && HEX.test(v.trim()) ? v.trim().toLowerCase() : '');
+
+/** One embed / simple-message template. Strict types and length caps (Discord limits are larger; we stay well below). */
+function sanitizeTemplate(t) {
+  t = t && typeof t === 'object' ? t : {};
+  const fields = [];
+  if (Array.isArray(t.fields)) {
+    for (const f of t.fields.slice(0, 10)) {
+      if (!f || typeof f !== 'object') continue;
+      const name = str(f.name, 100); const value = str(f.value, 500);
+      if (name && value) fields.push({ name, value, inline: f.inline === true });
+    }
   }
   return {
-    webhookUrl: str(v.webhookUrl, 500), botToken: str(v.botToken, 200), applicationId: str(v.applicationId, 30), guildId: str(v.guildId, 30),
-    allowedUserIds: idList(v.allowedUserIds), adminRoleIds: idList(v.adminRoleIds), allowRawCommands: v.allowRawCommands === true, events,
+    mode: t.mode === 'simple' ? 'simple' : 'embed',
+    content: str(t.content, 1000),
+    title: str(t.title, 256), description: str(t.description, 2000), color: color(t.color),
+    thumbnail: httpsUrl(t.thumbnail), image: httpsUrl(t.image), footer: str(t.footer, 200), fields,
+  };
+}
+function sanitizeTemplates(v) {
+  const out = {};
+  if (v && typeof v === 'object') for (const [k, x] of Object.entries(v).slice(0, 60)) if (EVENT_KEY.test(k)) out[k] = sanitizeTemplate(x);
+  return out;
+}
+/** Per-event on/off map ({ 'server:started': true }), used globally and as the per-server override. */
+function sanitizeEventToggles(v) {
+  const events = {};
+  if (v && typeof v === 'object') for (const [k, x] of Object.entries(v).slice(0, 100)) if (EVENT_KEY.test(k)) events[k] = !!x;
+  return events;
+}
+/** Per-server Discord fields of wgsm.json. Returns only the keys present in the patch; discordWebhook must be a valid Discord webhook (or empty). */
+function sanitizeServerDiscord(patch) {
+  const out = {};
+  if (!patch || typeof patch !== 'object') return out;
+  if ('discordEvents' in patch) out.discordEvents = sanitizeEventToggles(patch.discordEvents);
+  if ('discordMessage' in patch) out.discordMessage = str(patch.discordMessage, 500);
+  if ('discordWebhook' in patch) {
+    const raw = str(patch.discordWebhook, 500);
+    if (raw && !isDiscordWebhook(raw)) throw new Error('Not a Discord webhook URL (expected https://discord.com/api/webhooks/<id>/<token>)');
+    out.discordWebhook = raw;
+  }
+  return out;
+}
+
+function sanitizeDiscord(v) {
+  v = v && typeof v === 'object' ? v : {};
+  return {
+    webhookUrl: webhook(v.webhookUrl), botToken: str(v.botToken, 200), applicationId: str(v.applicationId, 30), guildId: str(v.guildId, 30),
+    allowedUserIds: idList(v.allowedUserIds), adminRoleIds: idList(v.adminRoleIds), allowRawCommands: v.allowRawCommands === true,
+    events: sanitizeEventToggles(v.events), templates: sanitizeTemplates(v.templates),
   };
 }
 
@@ -74,4 +130,4 @@ function read(dataDir) {
 /** 'system' -> dark/light depending on Windows */
 const resolveTheme = (theme, systemDark) => (theme === 'system' ? (systemDark ? 'dark' : 'light') : theme === 'light' ? 'light' : 'dark');
 
-module.exports = { DEFAULTS, THEMES, sanitize, read, resolveTheme };
+module.exports = { DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord };

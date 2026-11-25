@@ -22,7 +22,9 @@ Builds are unsigned and use the default Electron icon. To use a custom icon, ena
 - **46 built-in games** as plugins; one-click SteamCMD install with progress; Minecraft/Bedrock/Vintage Story/FiveM download installers
 - **Plugins can**: download/install other apps and extract them anywhere in the server folder, declare **any number of config files** (INI, JSON, ...) edited in the app, declare **any number of logs** viewed live, and carry a title, description, icon, banner, README, screenshots and **documentation links (official + unofficial guides)** for the in-app **Games** browser and the website
 - Start/stop/restart, live console, auto restart, auto start, auto update, restart crontab
-- Backup/restore, Discord webhook alerts, CPU priority/affinity, firewall helper, file editor
+- Backup/restore, CPU priority/affinity, firewall helper, file editor
+- **NGSM event log** (start / stop / crash / update / backup / restore / commands / config edits, daily files, retention) with a **Logs** screen: filter, export, clear - [docs/GUIDE-logging.md](docs/GUIDE-logging.md)
+- **Discord alerts** as embeds or simple messages: global + per-server webhook, per-event toggles and overrides, an embed editor with live preview and a Send-test button - [docs/GUIDE-discord.md](docs/GUIDE-discord.md)
 - Player counts via A2S/UT3/FiveM queries; start on login and tray support
 - **Views:** *List* (sidebar + details), *Table* (WindowsGSM-style horizontal table with **multi-select and bulk Start / Stop / Restart / Kill / Update / Backup**), *Dashboard* (system CPU / memory / disk, server counts, active players, history chart, running-server table). You choose the columns (CPU, memory, players, uptime, map, ports ... and plugin metrics like FPS) in Settings
 - **App shell:** left navigation (Home > List/Table, System Metrics, Games / Plugins, Settings, Discord), collapsible server-list / details / quick-settings panels (state remembered, no flash on start), a configurable header info bar (CPU, RAM, Disk, Servers, Players, Tick) and footer links - see [docs/GUIDE-ui.md](docs/GUIDE-ui.md)
@@ -33,6 +35,9 @@ Builds are unsigned and use the default Electron icon. To use a custom icon, ena
 |---|---|
 | [FEATURES.md](FEATURES.md) | full feature list with status, and the changelog |
 | [docs/GUIDE-ui.md](docs/GUIDE-ui.md) | user guide for the app layout: navigation, panels, header bar, footer |
+| [docs/GUIDE-logging.md](docs/GUIDE-logging.md) | the NGSM event log: where it is, the format, retention, plugin patterns, the Logs screen |
+| [docs/GUIDE-discord.md](docs/GUIDE-discord.md) | Discord webhook alerts, the embed editor, per-server overrides (bot: coming) |
+| [docs/TECH-architecture.md](docs/TECH-architecture.md) | event bus, services, log format, data files (for contributors) |
 | [PLUGINS.md](PLUGINS.md) | the `plugin.json` format, install steps, configs, logs, `plugin.js`, converting WindowsGSM plugins |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | **how to open a pull request to add or fix a game** |
 | [plugins/registry.json](plugins/registry.json) | machine-readable list of all games (for the website) |

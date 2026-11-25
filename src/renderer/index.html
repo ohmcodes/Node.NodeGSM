@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'">
 <title>NodeGSM</title>
 <script src="theme-boot.js"></script>
 <link rel="stylesheet" href="styles.css">
@@ -27,6 +27,7 @@
       <div class="nav-sub">
         <button class="nav-item sub" data-view="servers" title="Sidebar list with details"><span class="ico">&#9776;</span><span class="lbl">List</span></button>
         <button class="nav-item sub" data-view="table" title="Horizontal table, multi-select"><span class="ico">&#9638;</span><span class="lbl">Table</span></button>
+        <button class="nav-item sub" data-view="logs" title="NodeGSM event log"><span class="ico">&#9776;</span><span class="lbl">Logs</span></button>
       </div>
     </div>
     <button class="nav-item" data-view="dashboard" title="System Metrics"><span class="ico">&#9684;</span><span class="lbl">System Metrics</span></button>
@@ -120,8 +121,33 @@
 </section>
   <section id="vDiscord">
     <h2>Discord</h2>
-    <p class="muted">Configured in a later phase.</p>
-    <p class="muted small">Webhook alerts, embeds and the slash-command bot will be set up here. Per-server webhook alerts keep working from each server's Automation tab.</p>
+    <h4>Webhook alerts</h4>
+    <div class="row"><input id="dcWebhook" placeholder="https://discord.com/api/webhooks/..." autocomplete="off" spellcheck="false"><button type="button" id="dcTest" title="Saves, then posts a test message to this webhook">Send test</button><button type="button" id="dcSaveHook" class="primary">Save</button></div>
+    <div id="dcHookMsg" class="small muted"></div>
+    <p class="muted small">This global webhook receives the events switched on below. A server can also have its own webhook and per-event overrides (server &gt; Automation tab). Only discord.com / discordapp.com webhook URLs are accepted.</p>
+    <div class="dc-grid">
+      <div class="dc-left"><h4>Events</h4><div id="dcEvents"></div></div>
+      <div class="dc-right">
+        <h4>Preview</h4><div id="dcPreview"></div>
+        <h4>Message</h4><div id="dcEditor"></div>
+      </div>
+    </div>
+    <div class="row end"><button type="button" id="dcSave" class="primary">Save all</button></div>
+    <h4>Bot (slash commands)</h4>
+    <p class="muted small">Coming in a later release: /start, /stop, /restart, /backup, /list ... with user and role permissions.</p>
+  </section>
+  <section id="vLogs">
+    <div class="toolbar lg-bar">
+      <select id="lgServer" class="inline" title="Server"></select>
+      <select id="lgLevel" class="inline" title="Level"><option value="">All levels</option><option value="info">info</option><option value="warn">warn</option><option value="error">error</option></select>
+      <select id="lgEvent" class="inline" title="Event"></select>
+      <input id="lgText" class="inline" placeholder="Filter text..." style="max-width:220px">
+      <label class="check"><input type="checkbox" id="lgAuto" checked> Auto refresh</label>
+      <span class="spacer"></span><span class="muted small" id="lgCount"></span>
+      <button type="button" id="lgRefresh">Refresh</button><button type="button" id="lgExport">Export</button><button type="button" id="lgClear" class="danger">Clear</button>
+    </div>
+    <div class="tablewrap"><table id="lgTable"></table></div>
+    <div id="lgEmpty" class="muted pad" hidden>No log entries match.</div>
   </section>
   </div>
   <aside id="rightPanel">
@@ -170,5 +196,7 @@
 <script src="app.js"></script>
 <script src="dashboard.js"></script>
 <script src="shell.js"></script>
+<script src="discordView.js"></script>
+<script src="logsView.js"></script>
 </body>
 </html>

@@ -225,7 +225,7 @@ function renderTables() {
 
 // ---------- view switching ----------
 const HOME_VIEWS = ['servers', 'table', 'dashboard'];   // remembered in settings.view
-const ALL_VIEWS = [...HOME_VIEWS, 'plugins', 'settings', 'discord'];
+const ALL_VIEWS = [...HOME_VIEWS, 'plugins', 'settings', 'discord', 'logs'];
 const viewHooks = {};                                    // view -> function run when it opens (filled by app.js / shell.js)
 async function setView(v) {
   if (!ALL_VIEWS.includes(v)) v = 'servers';

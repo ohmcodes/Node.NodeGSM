@@ -113,6 +113,8 @@ function bindSave(b, s) {
   const collect = () => {
     const patch = {};
     b.querySelectorAll('[data-k]').forEach((el) => { patch[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; });
+    const evo = b.querySelectorAll('[data-evo]');   // per-server Discord event overrides (only when they finished loading)
+    if (evo.length) { patch.discordEvents = {}; evo.forEach((el) => { if (el.value) patch.discordEvents[el.dataset.evo] = el.value === 'on'; }); }
     return patch;
   };
   const btn = $('#saveBtn');
@@ -160,8 +162,19 @@ function tabAutomation(b, s) {
       ${check('autoStartAlert', 'Start', s)}${check('autoRestartAlert', 'Auto restart', s)}${check('autoUpdateAlert', 'Auto update', s)}
       ${check('restartCrontabAlert', 'Crontab restart', s)}${check('crashAlert', 'Crash', s)}
     </div>
+    <h4>Discord event overrides</h4>
+    <p class="muted small" style="margin:0 0 8px">Default follows the global toggles in the Discord view. On / Off overrides them for this server (global and per-server webhook).</p>
+    <div class="grid" id="evOverrides"><span class="muted small">Loading ...</span></div>
     <div class="row end"><button id="saveBtn" class="primary">Save</button></div>`;
   bindSave(b, s);
+  run('discordInfo').then((info) => {
+    const box = $('#evOverrides');
+    if (!info || !box) return;
+    box.innerHTML = info.events.map((e) => {
+      const cur = s.discordEvents && typeof s.discordEvents[e.key] === 'boolean' ? (s.discordEvents[e.key] ? 'on' : 'off') : '';
+      return `<label>${esc(e.label)}<select data-evo="${esc(e.key)}"><option value="">Default</option><option value="on" ${cur === 'on' ? 'selected' : ''}>On</option><option value="off" ${cur === 'off' ? 'selected' : ''}>Off</option></select></label>`;
+    }).join('');
+  });
 }
 
 async function tabBackups(b, s) {

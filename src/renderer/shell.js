@@ -27,17 +27,18 @@ window.addEventListener('DOMContentLoaded', () => applyShell({ ui: appSettings.u
 applyShell({ ui: appSettings.ui || {} });
 
 // ---------- navigation ----------
+const HOME_NAV = ['servers', 'table', 'logs'];   // views that live under Home in the navigation
 const homeView = () => (['servers', 'table'].includes(appSettings.view) ? appSettings.view : 'servers');
 function syncNav(v) {
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
-  const home = ['servers', 'table'].includes(v);
+  const home = HOME_NAV.includes(v);
   $('#navHome > .nav-item').classList.toggle('on', home);
   if (home) $('#navHome').classList.add('open');
 }
 document.querySelectorAll('#nav [data-view]').forEach((b) => (b.onclick = () => setView(b.dataset.view)));
 $('#navHome > .nav-item').onclick = () => {
   const g = $('#navHome');
-  const home = ['servers', 'table'].includes(document.body.dataset.view);
+  const home = HOME_NAV.includes(document.body.dataset.view);
   if (home && document.documentElement.dataset.navCollapsed !== '1') g.classList.toggle('open');
   else { g.classList.add('open'); setView(homeView()); }
 };

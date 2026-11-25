@@ -61,13 +61,18 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Server query (A2S, UT3, FiveM): player counts, Starting vs Started | ✅ | |
 | Firewall helper (netsh) | 🧪 | Needs Administrator |
 | File browser + text editor (any file in the server folder) | ✅ | 2 MB limit, path-traversal protected |
-| Discord webhook alerts | ✅ | Start, crash, auto restart, auto update, crontab |
+| Discord webhook alerts (per-server webhook with the old flags) | ✅ | Start, crash, auto restart, auto update, crontab; now sent by `services/discord.js` |
 | Steam login for games that need a real account | ⏳ | Anonymous only for now |
 | Discord bot remote control | ⏳ | |
 | Mod manager | ⏳ | |
 | Clusters: same-game server groups, cluster update, config sync (protected keys), clear folders | ⏳ | Foundation (`cluster` plugin fields, `services/cluster.js` skeleton) is in |
-| NGSM event log (start/stop/crash/update/backup/restore/commands, retention) | ⏳ | `server:*` events and `services/eventLog.js` skeleton are in; setting `logging.retentionDays` |
-| Discord embeds, per-event toggles, test button | ⏳ | Settings `discord.*` keys and `services/discord.js` skeleton are in; the old webhook alerts keep working |
+| NGSM event log: start / stop / crash / restart / update / backup / restore / console commands / config edits, daily rotated JSONL, retention (`logging.retentionDays`, default 30 days) | 🧪 | `services/eventLog.js`; `<data>/logs/ngsm-YYYY-MM-DD.log`; tested headless, not yet observed in a long-running real session. Format: [docs/GUIDE-logging.md](docs/GUIDE-logging.md) |
+| Plugin `logging.patterns`: console regex -> log entry (rate limited, 1 per pattern per server per 10 s); a pattern id that matches an `events[]` id becomes a Discord-able event `game:<id>` | 🧪 | Console lines only; `logging.logFiles` scanning is ⏳ |
+| **Logs** screen (Home > Logs): filter by server / level / event / text, auto refresh, Export (text), Clear | ✅ | |
+| Discord webhook alerts as embeds or simple messages, per event: started, stopped, crashed, restarted, updated, backup, restore + plugin events | 🧪 | `services/discord.js`; global webhook (`discord.webhookUrl`) plus the per-server webhook; send queue with 429 / `retry_after` handling; tested against a local HTTP server only - never sent to a real Discord yet |
+| Embed editor (title, description, colour, thumbnail, image, footer, fields) with live Discord-style preview, placeholders `{server} {event} {game} {ip} {port} {players} {time}`, Send test, Reset to default | ✅ | **Discord** view; templates stored in `settings.discord.templates` |
+| Per-event toggles (global) and per-server overrides (Default / On / Off); the old per-server flags (Start, Auto restart, Auto update, Crontab restart, Crash) keep working | ✅ | Per-server overrides in the server's **Automation** tab |
+| Webhook URL safety: only `https://discord.com` / `discordapp.com` `/api/webhooks/...` accepted; mentions disabled in messages | ✅ | Validated in `settings.js` and again at send time |
 | Discord bot slash commands (`/start`, `/stop`, `/backup` ...) | ⏳ | Settings `discord.botToken/guildId/allowedUserIds/adminRoleIds/allowRawCommands`, `services/discordBot.js` skeleton |
 | Neat-pick backups, restore-as-new, backups screen | ⏳ | Plugin `backup` field and `services/backup.js` skeleton |
 | Files auto-clear rules | ⏳ | Plugin `files.autoClear` and `services/autoClear.js` skeleton |
@@ -95,13 +100,27 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Details panel (status, PID, address, players, map, uptime, CPU, memory) and quick-settings bottom panel (name, port, map, max players, start parameters, Save) | ✅ | Follow the selected server; unsaved quick-settings edits are not overwritten by status updates |
 | Header info bar: CPU, RAM, Disk, Servers (running/total), Players, Tick (`headerStats` setting) | ✅ | Chosen with checkboxes in Settings; Tick shows "-" until servers report a tick rate (planned) |
 | Footer links: Website, Discord, Donate (Patreon, PayPal, Buy Me a Coffee) | 🧪 | All URLs live in `src/renderer/links.js` and are PLACEHOLDERS to replace |
-| Discord view | ⏳ | Placeholder page; webhook / bot configuration comes in a later phase |
+| Discord view: webhook + Send test, event toggles, embed editor + preview (bot settings: coming) | ✅ | |
+| Logs screen under Home | ✅ | See server management table |
 | Windows installer + portable exe (electron-builder) | ✅ | `npm run dist`; unsigned, default icon; bundles `plugins/` |
 | External links open in the default browser; in-app navigation blocked | ✅ | |
 | Legacy data folder kept after rename | ✅ | `%APPDATA%\node-wgsm2026\WGSM` if present, else `%APPDATA%\NodeGSM` |
 
 ## Changelog
 Newest first. Add an entry for every change.
+
+### 2026-11-24 - NGSM event log, Discord alerts and embed editor
+- **Event log** (`src/main/services/eventLog.js`): subscribes to `mgr.events` (started, stopped, crashed = "stopped suddenly", restarted, updated, backup, restore, console command, config edit) and exposes `log(entry)` for other services. Entries `{ ts, level, event, serverId, serverName, message, detail }` are appended to `<data>/logs/ngsm-YYYY-MM-DD.log` (JSONL, one file per day), pruned on start and daily by `settings.logging.retentionDays`. `query({ serverId, level, event, text, since, limit })`, `export()` (text or JSONL) and `clear()`.
+- **Plugin `logging.patterns`** now work: each console line of a server is matched against its game's patterns; hits become entries (`pattern:<id>`, or `game:<id>` when the id is also declared in `events[]`), at most once per pattern per server per 10 s.
+- **Logs screen** (Home > Logs) and IPC `eventLogQuery`, `eventLogExport` (returns text), `eventLogClear`.
+- **Discord service** (`src/main/services/discord.js`) replaces `ServerManager.alert()`: per-event embeds or simple messages to the global webhook and the per-server webhook; per-event toggles (`settings.discord.events`) with a per-server override (`discordEvents` in `wgsm.json`); the old per-server flags still decide the per-server webhook for start / crash / auto restart / crontab restart / auto update. Send queue with a small delay, 429 handling (`retry_after`), retries on 5xx, never throws; the sender is injectable for tests (`allowAnyUrl`, `agent`).
+- **Templates** in `settings.discord.templates` (mode `simple` | `embed`, title, description, colour, thumbnail, image, footer, up to 10 fields) with placeholders `{server} {event} {game} {ip} {port} {players} {time}` (also `{id} {reason} {file} {message}`); defaults: started green, stopped grey, crashed red, restarted/updated blue, backup/restore teal. Mentions are disabled in every message.
+- **Settings hardening:** `settings.discord.templates`, the webhook URL and the per-server `discordWebhook` / `discordEvents` / `discordMessage` are sanitised (strict types, length caps, https-only image URLs, webhook host allow-list). **Behaviour change:** a webhook that is not a Discord webhook URL is now rejected (global: dropped; per server: the save fails with a message). `ServerManager.saveConfig` runs the per-server check.
+- **IPC:** `discordInfo`, `discordTest(kind, template)` (sends to the saved global webhook, returns `{ ok, status }`), `discordPreview(template, sampleVars, event)` (rendered embed JSON).
+- **UI:** Discord view (webhook + Send test, event toggles, embed editor with a live Discord-style preview, light and dark), Logs screen, per-server **Discord event overrides** in the Automation tab. The renderer CSP now allows `https:` images so thumbnails/images show in the preview.
+- **Bus:** new events `server:config` and `plugins:reloaded`, `ngsm:log` (every logged entry); `server:restarted` carries `reason` (`manual` | `crash` | `cron`), `server:updated` carries `auto/from/to` for auto updates.
+- **Tests:** event log write / query / rotation / retention / patterns / rate limit / export / clear; Discord rendering, placeholders, toggle logic, legacy flag mapping, 429 retry, test-send and queue order against a local HTTP server (never a real Discord); settings sanitising; API table.
+- Docs: [docs/GUIDE-logging.md](docs/GUIDE-logging.md), [docs/GUIDE-discord.md](docs/GUIDE-discord.md), [docs/TECH-architecture.md](docs/TECH-architecture.md).
 
 ### 2026-11-24 - New app shell: collapsible nav, panels, header stats, footer
 - **Left navigation** (Home > List / Table, System Metrics, Games / Plugins, Settings, Discord) replaces the header view switch. `body[data-view]` now takes `servers | table | dashboard | plugins | settings | discord`; only the first three are remembered in `settings.view`.

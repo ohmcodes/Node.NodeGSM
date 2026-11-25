@@ -2,7 +2,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const https = require('https');
 const { spawn, spawnSync, execFile } = require('child_process');
 const { EventEmitter } = require('events');
 const AdmZip = require('adm-zip');
@@ -19,7 +18,7 @@ const CONSOLE_LINES = 2000;
 const DEFAULTS = {
   game: '', name: '', ip: '', port: '', queryPort: '', map: '', maxPlayers: '', gslt: '', param: '',
   autoRestart: false, autoStart: false, autoUpdate: false, updateOnStart: false, backupOnStart: false,
-  discordAlert: false, discordWebhook: '', discordMessage: '',
+  discordAlert: false, discordWebhook: '', discordMessage: '', discordEvents: {}, // discordEvents: per-server on/off override of the global event toggles
   restartCrontab: false, crontabFormat: '0 6 * * *',
   autoStartAlert: true, autoRestartAlert: true, autoUpdateAlert: true, restartCrontabAlert: true, crashAlert: true,
   cpuPriority: 'Normal', cpuAffinity: '', installDir: '', // installDir: custom location for imported servers
@@ -48,7 +47,7 @@ class ServerManager extends EventEmitter {
     this.settings = this.loadSettings();
   }
 
-  reloadPlugins() { this.pluginInfo = require('./plugins').loadAll(this.pluginsDir); return this.pluginInfo; }
+  reloadPlugins() { this.pluginInfo = require('./plugins').loadAll(this.pluginsDir); this.events.emit('plugins:reloaded'); return this.pluginInfo; }
   installPlugin(src) { const id = require('./plugins').installFrom(src, this.pluginsDir); this.reloadPlugins(); return id; }
 
   // ---------- settings / paths ----------
@@ -86,7 +85,7 @@ class ServerManager extends EventEmitter {
   }
   saveConfig(id, patch) {
     const cur = this.getConfig(id) || { ...DEFAULTS };
-    const next = { ...cur, ...patch };
+    const next = { ...cur, ...patch, ...require('./settings').sanitizeServerDiscord(patch) };
     delete next.id;
     fs.mkdirSync(path.dirname(this.cfgFile(id)), { recursive: true });
     fs.writeFileSync(this.cfgFile(id), JSON.stringify(next, null, 2));
@@ -270,7 +269,6 @@ class ServerManager extends EventEmitter {
     if (proc.stdin) proc.stdin.on('error', () => { /* EPIPE when the process is already gone (e.g. a command written during stop) */ });
     proc.on('exit', (code) => this.onExit(id, proc, code));
     this.applyPriority(id, proc.pid);
-    this.alert(id, 'autoStartAlert', 'Server started');
     this.emitEvent('server:started', id, { pid: proc.pid });
     return this.view(id);
   }
@@ -286,11 +284,10 @@ class ServerManager extends EventEmitter {
     this.emitEvent(crashed ? 'server:crashed' : 'server:stopped', id, { code });
     if (!c) return;
     if (crashed) {
-      this.alert(id, 'crashAlert', `Server crashed (exit code ${code})`);
       if (c.autoRestart) {
         rt.restarts = (rt.restarts || 0) + 1;
         this.log(id, 'Auto-restarting in 5s ...');
-        setTimeout(() => { if (!this.rt(id).proc && !this.rt(id).stopping) this.start(id).then(() => { this.alert(id, 'autoRestartAlert', 'Server auto-restarted'); this.emitEvent('server:restarted', id, { reason: 'crash' }); }).catch((e) => this.log(id, e.message)); }, 5000);
+        setTimeout(() => { if (!this.rt(id).proc && !this.rt(id).stopping) this.start(id).then(() => { this.emitEvent('server:restarted', id, { reason: 'crash' }); }).catch((e) => this.log(id, e.message)); }, 5000);
       }
     }
   }
@@ -358,11 +355,11 @@ class ServerManager extends EventEmitter {
     return out;
   }
 
-  async restart(id) {
+  async restart(id, reason = 'manual') {
     await this.stop(id);
     await new Promise((r) => setTimeout(r, 1000));
     const v = await this.start(id);
-    this.emitEvent('server:restarted', id, { reason: 'manual' });
+    this.emitEvent('server:restarted', id, { reason });
     return v;
   }
 
@@ -401,7 +398,7 @@ class ServerManager extends EventEmitter {
     return { local: null, remote: null, available: false };
   }
 
-  async update(id, validate = false) {
+  async update(id, validate = false, info = {}) {
     id = String(id);
     const rt = this.rt(id);
     const wasRunning = !!rt.proc;
@@ -412,7 +409,7 @@ class ServerManager extends EventEmitter {
     try {
       await this.runSteps(id, { validate, mode: 'update' });
       this.log(id, 'Update finished.');
-      this.emitEvent('server:updated', id, { validate: !!validate });
+      this.emitEvent('server:updated', id, { validate: !!validate, ...info });
     } finally {
       rt.busy = null;
       this.setStatus(id, 'Stopped');
@@ -461,22 +458,7 @@ class ServerManager extends EventEmitter {
   }
   deleteBackup(id, file) { fs.rmSync(path.join(this.backupsDir, String(id), path.basename(file)), { force: true }); }
 
-  // ---------- Discord ----------
-  alert(id, flag, message) {
-    const c = this.getConfig(id);
-    if (!c || !c.discordAlert || !c.discordWebhook || !c[flag]) return;
-    const body = JSON.stringify({
-      username: 'NodeGSM',
-      embeds: [{ title: message, description: c.discordMessage || undefined, color: flag === 'crashAlert' ? 0xe74c3c : 0x2ecc71,
-        fields: [{ name: 'Server', value: `#${id} ${c.name}`, inline: true }, { name: 'Game', value: (byId(c.game) || {}).name || c.game, inline: true }],
-        timestamp: new Date().toISOString() }],
-    });
-    try {
-      const u = new URL(c.discordWebhook);
-      const req = https.request({ hostname: u.hostname, path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } });
-      req.on('error', () => {}); req.end(body);
-    } catch { /* invalid webhook */ }
-  }
+  // Discord alerts are sent by services/discord.js from the server:* events (see this.events).
 
   // ---------- Windows firewall ----------
   firewall(id, enable = true) {
@@ -549,6 +531,7 @@ class ServerManager extends EventEmitter {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     if (fs.existsSync(file)) fs.copyFileSync(file, file + '.bak'); // keep one backup of the previous version
     fs.writeFileSync(file, text);
+    this.emitEvent('server:config', id, { config: cid, path: def.path });
     return true;
   }
   createConfig(id, cid) {
@@ -610,8 +593,7 @@ class ServerManager extends EventEmitter {
         const nx = it.next().toDate();
         if (Math.abs(nx.getTime() - now.getTime()) < 60000 && nx.getMinutes() === now.getMinutes()) {
           this.log(id, 'Scheduled restart (crontab).');
-          this.alert(id, 'restartCrontabAlert', 'Scheduled restart');
-          this.restart(id).catch((e) => this.log(id, e.message));
+          this.restart(id, 'cron').catch((e) => this.log(id, e.message));
         }
       } catch (e) { this.log(id, `Invalid crontab: ${e.message}`); }
     }
@@ -625,8 +607,7 @@ class ServerManager extends EventEmitter {
         const r = await this.checkUpdate(id);
         if (r.available) {
           this.log(id, `Update available (${r.local} -> ${r.remote}). Updating ...`);
-          this.alert(id, 'autoUpdateAlert', `Updating ${r.local} -> ${r.remote}`);
-          await this.update(id);
+          await this.update(id, false, { auto: true, from: r.local, to: r.remote });
         }
       } catch (e) { this.log(id, `Auto-update check failed: ${e.message}`); }
     }

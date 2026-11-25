@@ -1,11 +1,11 @@
 # NodeGSM - the app layout
 
 ## Navigation (left)
-- **Home** - expands to **List** (server list + details with tabs) and **Table** (WindowsGSM-style table with multi-select and bulk actions).
+- **Home** - expands to **List** (server list + details with tabs), **Table** (WindowsGSM-style table with multi-select and bulk actions) and **Logs** (the NodeGSM event log, see [GUIDE-logging.md](GUIDE-logging.md)).
 - **System Metrics** - the dashboard (system CPU / memory / disk, server counts, history chart).
 - **Games / Plugins** - the game browser: search, README, install plugins from ZIP or folder, **Add server**.
 - **Settings** - theme, accent, animation, header info bar, table columns, startup and performance.
-- **Discord** - placeholder for now; webhook and bot setup arrive in a later release.
+- **Discord** - webhook alerts, per-event toggles and the embed editor, see [GUIDE-discord.md](GUIDE-discord.md). The slash-command bot settings arrive in a later release.
 
 The button at the top left (hamburger) shrinks the navigation to an icon rail.
 

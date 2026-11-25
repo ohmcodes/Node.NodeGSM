@@ -14,9 +14,11 @@ const appSettings = require('./settings');
  *   getWin       () => BrowserWindow | undefined
  *   currentBg    () => string
  *   beforeRelaunch  async () => void   (marks the app as quitting)
+ *   eventLog, discord   service instances (services/eventLog.js, services/discord.js)
  */
 function buildApi(ctx) {
   const { mgr, collector, shell, dialog, app, nativeTheme, getWin, currentBg } = ctx;
+  const svc = (k) => { if (!ctx[k]) throw new Error(`Service not available: ${k}`); return ctx[k]; };
   return {
     games: () => ctx.publicGames(),
     list: () => mgr.list(),
@@ -53,6 +55,12 @@ function buildApi(ctx) {
     openExternal: (u) => { if (!/^https?:\/\//i.test(String(u))) throw new Error('Only http(s) links can be opened'); return shell.openExternal(String(u)); },
     bulk: (action, ids) => mgr.bulk(action, ids),
     kill: (id) => mgr.kill(id),
+    eventLogQuery: (f) => svc('eventLog').query(f),
+    eventLogExport: (f) => svc('eventLog').export(f),
+    eventLogClear: () => svc('eventLog').clear(),
+    discordInfo: () => svc('discord').info(),
+    discordTest: (kind, template) => svc('discord').test(kind, template),
+    discordPreview: (template, sampleVars, event) => svc('discord').preview(template, sampleVars, event),
     settingsDefaults: () => appSettings.DEFAULTS,
     metricsState: () => collector.state(),
     pluginsInfo: () => mgr.pluginInfo,

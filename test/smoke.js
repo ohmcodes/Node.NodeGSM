@@ -240,8 +240,8 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   assert(sd.ui.leftCollapsed === false && sd.headerStats.cpu && sd.headerStats.ram && sd.headerStats.servers && !sd.headerStats.disk && sd.logging.retentionDays === 30 && sd.discord.allowRawCommands === false, 'new defaults');
   eq(S.sanitize({ ui: { leftCollapsed: 1, bogus: true, navCollapsed: 'x' } }), { ui: { leftCollapsed: true, rightCollapsed: false, bottomCollapsed: false, navCollapsed: true } }, 'ui booleans coerced, unknown dropped');
   eq(S.sanitize({ headerStats: { tick: true, cpu: false, evil: 1 } }).headerStats, { cpu: false, ram: true, disk: false, servers: true, players: false, tick: true }, 'headerStats');
-  const dc = S.sanitize({ discord: { webhookUrl: '  https://x/y  ', botToken: 'T'.repeat(500), applicationId: 123, guildId: {}, allowedUserIds: ['123', 'abc', '123', 456, ' 789 '], adminRoleIds: 'nope', allowRawCommands: 'true', events: { 'server:started': 1, 'bad key!': true } } }).discord;
-  assert.strictEqual(dc.webhookUrl, 'https://x/y', 'trimmed'); assert.strictEqual(dc.botToken.length, 200, 'length capped');
+  const dc = S.sanitize({ discord: { webhookUrl: '  https://discord.com/api/webhooks/123/abc-DEF_1  ', botToken: 'T'.repeat(500), applicationId: 123, guildId: {}, allowedUserIds: ['123', 'abc', '123', 456, ' 789 '], adminRoleIds: 'nope', allowRawCommands: 'true', events: { 'server:started': 1, 'bad key!': true } } }).discord;
+  assert.strictEqual(dc.webhookUrl, 'https://discord.com/api/webhooks/123/abc-DEF_1', 'trimmed'); assert.strictEqual(dc.botToken.length, 200, 'length capped');
   assert(dc.applicationId === '' && dc.guildId === '', 'non-strings become empty');
   eq(dc.allowedUserIds, ['123', '456', '789'], 'ids: digit strings only, de-duplicated'); eq(dc.adminRoleIds, []);
   assert(dc.allowRawCommands === false, 'allowRawCommands only accepts real true'); eq(dc.events, { 'server:started': true }, 'event keys validated');
@@ -276,6 +276,161 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const svc = new (require('../src/main/services/' + f)[C])(m, P, m.settings, dir); svc.start(); svc.stop();
   }
 
+  { // Phase 2 block (own scope)
+  // ---- Phase 2: settings - discord templates / webhook / per-server override sanitising ----
+  eq(S.sanitize({ discord: { webhookUrl: 'https://evil.example/api/webhooks/1/a' } }).discord.webhookUrl, '', 'webhook on a foreign host is dropped');
+  eq(S.sanitize({ discord: { webhookUrl: 'http://discord.com/api/webhooks/1/a' } }).discord.webhookUrl, '', 'webhook must be https');
+  eq(S.sanitize({ discord: { webhookUrl: 'https://discord.com/other/1/a' } }).discord.webhookUrl, '', 'webhook path must be /api/webhooks/id/token');
+  eq(S.sanitize({ discord: { webhookUrl: 'https://u:p@discord.com/api/webhooks/1/a' } }).discord.webhookUrl, '', 'no credentials in the webhook URL');
+  assert(S.isDiscordWebhook('https://discordapp.com/api/webhooks/12/tok_en-1') && S.isDiscordWebhook('https://ptb.discord.com/api/webhooks/12/t/'), 'discordapp.com / ptb accepted');
+  const tpl = S.sanitize({ discord: { templates: {
+    'server:started': { mode: 'weird', title: 'T'.repeat(400), description: 'D'.repeat(3000), content: 5, color: 'red', thumbnail: 'http://x.example/a.png', image: 'https://x.example/i.png', footer: 'F'.repeat(300),
+      fields: Array.from({ length: 15 }, (_, i) => ({ name: 'n' + i, value: 'v'.repeat(900), inline: 'yes' })).concat([{ name: '', value: 'x' }, 'bad', null]) },
+    'bad key!': { title: 'x' }, 'server:crashed': 'nope' } } }).discord.templates;
+  eq(Object.keys(tpl).sort(), ['server:crashed', 'server:started'], 'template keys validated, non-objects become defaults');
+  const t0 = tpl['server:started'];
+  assert(t0.mode === 'embed' && t0.title.length === 256 && t0.description.length === 2000 && t0.content === '' && t0.color === '' && t0.thumbnail === '' && t0.image === 'https://x.example/i.png' && t0.footer.length === 200, 'template field types + caps + https-only images');
+  assert(t0.fields.length === 10 && t0.fields[0].value.length === 500 && t0.fields[0].inline === false, 'max 10 fields, value capped, inline only for real true');
+  eq(S.sanitize({ discord: { templates: { 'server:started': { mode: 'simple', color: '#AABBCC' } } } }).discord.templates['server:started'].color, '#aabbcc', 'colour lower-cased');
+  eq(S.sanitizeServerDiscord({ discordEvents: { 'server:started': 1, 'x y': true }, discordMessage: 'm'.repeat(900), discordWebhook: '  https://discord.com/api/webhooks/1/abc ' }),
+    { discordEvents: { 'server:started': true }, discordMessage: 'm'.repeat(500), discordWebhook: 'https://discord.com/api/webhooks/1/abc' }, 'per-server override sanitised');
+  assert.throws(() => S.sanitizeServerDiscord({ discordWebhook: 'https://evil.example/x' }), /Discord webhook/, 'per-server webhook must be a Discord URL');
+  eq(S.sanitizeServerDiscord({ name: 'x' }), {}, 'only discord keys are touched');
+  m.settings = S.read(dir); m.saveSettings({ discord: { templates: { 'server:started': { title: 'Hello' } } } }); m.saveSettings({ discord: { webhookUrl: 'https://discord.com/api/webhooks/9/z' } });
+  const p2 = S.read(dir).discord; assert(p2.templates['server:started'].title === 'Hello' && p2.webhookUrl.endsWith('/9/z'), 'templates + webhook persisted, siblings kept');
+  m.saveSettings({ discord: { templates: {}, webhookUrl: '' } });
+
+  // ---- Phase 2: NGSM event log ----
+  const { EventEmitter } = require('events');
+  const { EventLog } = require('../src/main/services/eventLog');
+  const { Discord, render, legacyFlag, DEFAULT_TEMPLATES } = require('../src/main/services/discord');
+  let clock = Date.parse('2026-11-24T12:00:00');
+  const fm = new EventEmitter(); fm.events = new EventEmitter(); fm.settings = { logging: { retentionDays: 3 } };
+  fm.getConfig = (id) => ({ name: 'Fake ' + id, game: 'gx' }); fm.ids = () => ['1'];
+  const fp = { byId: () => ({ name: 'Game X', events: [{ id: 'join', label: 'Player joined' }], logging: { patterns: [{ id: 'sudden', regex: 'stopped suddenly', level: 'error' }, { id: 'join', regex: 'joined the game', level: 'info' }, { id: 'broken', regex: '(', level: 'info' }] } }) };
+  const ldir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-log-'));
+  const el = new EventLog(fm, fp, fm.settings, ldir, { now: () => clock }); el.start();
+  const fe = (type, detail) => fm.events.emit(type, { id: '1', name: 'Fake 1', game: 'gx', ts: clock, detail });
+  fe('server:started', { pid: 42 }); fe('server:crashed', { code: 1 }); fe('server:command', { command: 'status', silent: true }); fe('server:command', { command: 'say hi' }); fe('server:config', { config: 'c', path: 'a/b.ini' });
+  const day1 = path.join(ldir, 'logs', 'ngsm-2026-11-24.log'); assert(fs.existsSync(day1), 'daily file ngsm-YYYY-MM-DD.log');
+  const raw = fs.readFileSync(day1, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  eq(Object.keys(raw[0]).sort(), ['detail', 'event', 'level', 'message', 'serverId', 'serverName', 'ts'], 'entry shape');
+  eq(raw.map((r) => r.event), ['server:started', 'server:crashed', 'server:command', 'server:config'], 'silent commands are not logged');
+  assert(raw[1].level === 'error' && /stopped suddenly/.test(raw[1].message) && raw[0].serverName === 'Fake 1', 'crash = error entry');
+  el.log({ level: 'bogus', event: 'backup:x', serverId: '1', message: 'm'.repeat(5000), detail: { a: 'x'.repeat(9000) } });
+  const bx = el.query({ event: 'backup:x' })[0]; assert(bx.level === 'info' && bx.message.length === 1000 && bx.detail.truncated, 'log() validates level, caps message and detail');
+  eq(el.query({ level: 'error' }).length, 1, 'level filter'); eq(el.query({ serverId: '1', event: 'command' }).length, 1, 'event substring + server filter'); eq(el.query({ serverId: '2' }).length, 0, 'server filter');
+  eq(el.query({ text: 'say hi' }).length, 1, 'text filter'); eq(el.query({ limit: 2 }).length, 2, 'limit'); assert(el.query({})[0].ts >= el.query({})[1].ts, 'newest first');
+  // pattern matching + rate limit
+  const line = (t) => fm.emit('console', { id: '1', line: t });
+  line('[Server] stopped suddenly!'); line('[Server] stopped suddenly again'); line('Bob joined the game'); line('nothing here');
+  eq(el.query({ event: 'pattern:sudden' }).length, 1, 'plugin pattern -> log entry, rate limited to 1 per 10 s');
+  const pj = el.query({ event: 'game:join' }); eq(pj.length, 1, 'pattern id that is a plugin event becomes game:<id>'); assert(pj[0].serverId === '1' && pj[0].detail.pattern === 'join');
+  clock += 11000; line('stopped suddenly'); eq(el.query({ event: 'pattern:sudden' }).length, 2, 'logged again after the cool-down');
+  // rotation + retention
+  clock = Date.parse('2026-11-20T10:00:00'); el.log({ event: 'old', message: 'old entry' }); clock = Date.parse('2026-11-23T10:00:00'); el.log({ event: 'recent', message: 'recent entry' });
+  clock = Date.parse('2026-11-24T12:00:00');
+  eq(el.files().length, 3, 'one file per day'); eq(el.prune(), 1, 'prune removes files older than retentionDays');
+  assert(!fs.existsSync(path.join(ldir, 'logs', 'ngsm-2026-11-20.log')) && fs.existsSync(path.join(ldir, 'logs', 'ngsm-2026-11-23.log')), 'only the old file was removed');
+  const sinceMs = Date.parse('2026-11-24T00:00:00'); assert(el.query({ since: sinceMs }).every((e) => Date.parse(e.ts) >= sinceMs) && el.query({ since: sinceMs }).length > 0, 'since filter');
+  fm.settings.logging.retentionDays = 1; eq(el.prune(), 0, 'retention 1 keeps yesterday'); fm.settings.logging.retentionDays = 3;
+  const ex = el.export({}); assert(/ERROR server:crashed \[#1 Fake 1\]/.test(ex) && ex.endsWith('\n') && ex.indexOf('server:started') < ex.indexOf('server:crashed'), 'export is readable text, oldest first');
+  assert(el.export({ format: 'jsonl' }).trim().split('\n').every((l) => JSON.parse(l).ts), 'export jsonl');
+  const nclear = el.clear(); assert(nclear >= 1 && el.query({}).length === 1 && el.query({})[0].event === 'log:cleared', 'clear removes files and records that it did');
+  el.stop(); fe('server:started', {}); eq(el.query({ event: 'server:started' }).length, 0, 'stop() unsubscribes');
+  // real ServerManager events end up in the log
+  const rl = new EventLog(m, P, m.settings, dir); rl.start();
+  const ls = m.create('csgo', 'LogSrv'); m.emitEvent('server:backup', ls.id, { file: 'b.zip' }); m.emitEvent('server:restarted', ls.id, { reason: 'cron' });
+  assert(rl.query({ serverId: ls.id }).length === 2 && rl.query({ event: 'restarted' })[0].serverName === 'LogSrv', 'ServerManager events are logged with the server name');
+  const cgame = P.GAMES.find((g) => g.configs.length); const cs2 = m.create(cgame.id, 'CfgSrv'); m.writeConfig(cs2.id, cgame.configs[0].id, cgame.configs[0].format === 'json' ? '{}' : 'x');
+  assert(rl.query({ event: 'server:config', serverId: cs2.id }).length === 1, 'config edits are logged');
+  rl.stop();
+
+  // ---- Phase 2: Discord rendering ----
+  const vars = { server: 'Alpha', event: 'Server started', game: 'CS2', ip: '1.2.3.4', port: '27015', players: '2/10', id: '7', reason: '', file: '', message: '' };
+  const r1 = render({ ...DEFAULT_TEMPLATES['server:started'], title: '{server} is up', description: 'Join {ip}:{port} - {players} - {unknown}' }, vars, 0);
+  const e1 = r1.embeds[0];
+  assert(e1.title === 'Alpha is up' && e1.description === 'Join 1.2.3.4:27015 - 2/10 - {unknown}' && e1.color === 0x2ecc71 && e1.footer.text === 'NodeGSM - server #7' && e1.timestamp === '1970-01-01T00:00:00.000Z', 'embed placeholders, colour, footer');
+  eq(e1.fields.map((f) => f.value), ['CS2', '1.2.3.4:27015', '2/10'], 'field placeholders'); eq(r1.allowed_mentions, { parse: [] }, 'mentions disabled');
+  const r2 = render({ mode: 'simple', content: '{event}: {server} @everyone' }, vars); assert(r2.content === 'Server started: Alpha @everyone' && !r2.embeds, 'simple mode'); eq(r2.allowed_mentions.parse, []);
+  const r3 = render({ mode: 'embed', title: '', description: '', fields: [], content: 'only text' }, vars); assert(r3.content === 'only text' && !r3.embeds, 'an empty embed falls back to text');
+  assert(render({ mode: 'embed', title: '{server}', fields: [{ name: 'a', value: '{server}' }, { name: 'b', value: '{message}' }] }, vars).embeds[0].fields.length === 1, 'fields with an empty rendered value are dropped, others kept');
+  assert(render({ mode: 'embed', title: '{server}', fields: [{ name: 'b', value: '{message}' }] }, vars).embeds[0].fields === undefined, 'fields whose value renders empty are dropped');
+  assert(render({ mode: 'embed', title: '{server}' }, { ...vars, server: 'x'.repeat(2000) }).embeds[0].title.length === 256, 'title capped at 256');
+  assert(!('color' in render({ mode: 'embed', title: 't', color: 'blue' }, vars).embeds[0]), 'bad colour is omitted');
+  assert(!('thumbnail' in render({ mode: 'embed', title: 't', thumbnail: 'http://insecure/x.png' }, vars).embeds[0]), 'http thumbnail dropped');
+  assert(legacyFlag('server:started') === 'autoStartAlert' && legacyFlag('server:crashed') === 'crashAlert' && legacyFlag('server:restarted', { reason: 'cron' }) === 'restartCrontabAlert' && legacyFlag('server:restarted', { reason: 'crash' }) === 'autoRestartAlert' && legacyFlag('server:updated', { auto: true }) === 'autoUpdateAlert' && legacyFlag('server:backup') === null && legacyFlag('server:restarted', { reason: 'manual' }) === false, 'old flags map to events');
+
+  // ---- Phase 2: Discord sending against a local http server (never a real webhook) ----
+  const hits = []; let mode429 = 1; let failWith = 0;
+  const dsrv = http.createServer((q, r) => {
+    let b = ''; q.on('data', (c) => (b += c)); q.on('end', () => {
+      hits.push({ url: q.url, body: JSON.parse(b || '{}') });
+      if (failWith) { r.writeHead(failWith); return r.end('{}'); }
+      if (mode429 > 0) { mode429--; r.writeHead(429, { 'Content-Type': 'application/json' }); return r.end('{"message":"rate limited","retry_after":0.05,"global":false}'); }
+      r.writeHead(204); r.end();
+    });
+  });
+  await new Promise((r) => dsrv.listen(0, '127.0.0.1', r));
+  const hook = (n) => `http://127.0.0.1:${dsrv.address().port}/api/webhooks/${n}/tok`;
+  const ds = new Discord(m, P, m.settings, dir, { allowAnyUrl: true, delayMs: 5 }); ds.start();
+  m.settings.discord = { ...S.DEFAULTS.discord, webhookUrl: hook(1) };
+  const tr = await ds.test('server:started', { mode: 'embed', title: 'Unsaved {server}', description: 'x', color: '#112233' });
+  eq(tr, { ok: true, status: 204 }, 'test send: 429 is retried after retry_after, then succeeds'); eq(hits.length, 2, '429 -> one retry');
+  assert(hits[1].body.embeds[0].title === 'Unsaved My Server' && hits[1].body.embeds[0].color === 0x112233 && hits[1].url === '/api/webhooks/1/tok', 'test uses the unsaved template with sample values');
+  hits.length = 0; const plain = await ds.test('plain'); assert(plain.ok && /NodeGSM test/.test(hits[0].body.content), 'plain test message');
+  const pv = ds.preview({ mode: 'embed', title: 'P {server}', color: '#ff0000' }, { server: 'Zed' }); assert(pv.embeds[0].title === 'P Zed' && pv.embeds[0].color === 0xff0000, 'preview renders with sample vars');
+  failWith = 500; const bad = await new Discord(m, P, m.settings, dir, { allowAnyUrl: true, delayMs: 1, maxRetries: 0 }).test('plain'); assert(!bad.ok && bad.status === 500, 'HTTP errors are reported, not thrown'); failWith = 0;
+  const savedHook = m.settings.discord.webhookUrl; m.settings.discord.webhookUrl = 'http://127.0.0.1:1/api/webhooks/1/x';
+  const dr = await new Discord(m, P, m.settings, dir, { allowAnyUrl: true, maxRetries: 0 }).test('plain'); assert(dr.ok === false && dr.status === 0 && dr.error, 'unreachable host -> { ok:false } without throwing');
+  m.settings.discord.webhookUrl = savedHook;
+  m.settings.discord.webhookUrl = 'http://127.0.0.1:1/api/webhooks/1/x'; const sr = await new Discord(m, P, m.settings, dir).test('plain'); assert(!sr.ok && /Not a Discord webhook/.test(sr.error), 'production sender refuses non-Discord URLs (even http://127.0.0.1)');
+  m.settings.discord.webhookUrl = ''; eq((await ds.test('plain')).status, 0, 'no webhook -> { ok:false, status:0 }'); m.settings.discord.webhookUrl = savedHook;
+  hits.length = 0; const qs = await Promise.all([1, 2, 3].map((i) => ds.enqueue(hook(1), { content: 'm' + i }))); assert(qs.every((x) => x.ok) && hits.map((x) => x.body.content).join() === 'm1,m2,m3', 'queue delivers in order');
+
+  // toggle logic + bus integration
+  const sv = m.create('csgo', 'AlertSrv'); const sid = sv.id;
+  const rawSave = (id, patch) => fs.writeFileSync(m.cfgFile(id), JSON.stringify({ ...JSON.parse(fs.readFileSync(m.cfgFile(id), 'utf8')), ...patch })); // bypasses the Discord-URL check so a local http hook can be used
+  assert.throws(() => m.saveConfig(sid, { discordWebhook: 'https://evil.example/hook' }), /Discord webhook/, 'saveConfig rejects a non-Discord webhook'); eq(m.getConfig(sid).discordWebhook, '', 'rejected webhook not stored');
+  const tg = (k, d = {}) => ds.targets(k, sid, d);
+  m.settings.discord = { ...S.DEFAULTS.discord, webhookUrl: hook(1) };
+  eq(tg('server:started'), [hook(1)], 'default-on event goes to the global webhook'); eq(tg('server:stopped'), [], 'default-off event is silent');
+  m.settings.discord.events = { 'server:started': false, 'server:stopped': true }; eq(tg('server:started'), [], 'global toggle off'); eq(tg('server:stopped'), [hook(1)], 'global toggle on');
+  m.saveConfig(sid, { discordEvents: { 'server:started': true, 'server:stopped': false } }); eq(tg('server:started'), [hook(1)], 'per-server override on beats global off'); eq(tg('server:stopped'), [], 'per-server override off beats global on');
+  rawSave(sid, { discordEvents: {}, discordAlert: true, discordWebhook: hook(2), crashAlert: false, autoStartAlert: true });
+  eq(tg('server:started'), [hook(2)], 'old autoStartAlert still drives the per-server webhook while the global toggle is off'); m.settings.discord.events = {};
+  eq(tg('server:started').sort(), [hook(1), hook(2)].sort(), 'global + per-server webhook both receive');
+  eq(tg('server:crashed'), [hook(1)], 'old crashAlert=false silences the per-server webhook only');
+  eq(tg('server:restarted', { reason: 'manual' }), [hook(1)], 'manual restarts never went to the per-server webhook');
+  eq(tg('server:restarted', { reason: 'cron' }).sort(), [hook(1), hook(2)].sort(), 'cron restarts follow restartCrontabAlert (default true)');
+  rawSave(sid, { discordWebhook: hook(1) }); eq(tg('server:started'), [hook(1)], 'same URL is not sent twice');
+  m.saveConfig(sid, { discordAlert: false });
+  hits.length = 0; m.emitEvent('server:crashed', sid, { code: 3 }); await sleep(300);
+  assert(hits.length === 1 && hits[0].body.embeds[0].title === 'Server crashed' && hits[0].body.embeds[0].color === 0xe74c3c && /AlertSrv/.test(hits[0].body.embeds[0].description) && /Exit code 3/.test(hits[0].body.embeds[0].description), 'server:crashed on the bus -> red embed with exit code');
+  hits.length = 0; m.emitEvent('server:stopped', sid, { code: 0 }); m.emitEvent('server:command', sid, { command: 'x' }); await sleep(100); eq(hits.length, 0, 'disabled / non-alert events send nothing');
+  hits.length = 0; m.settings.discord.templates = { 'server:started': { mode: 'simple', content: 'UP {server} on {port}' } }; m.emitEvent('server:started', sid, { pid: 1 }); await sleep(300);
+  assert(hits.length === 1 && hits[0].body.content === 'UP AlertSrv on ' + m.getConfig(sid).port && !hits[0].body.embeds, 'saved simple-mode template is used'); m.settings.discord.templates = {};
+  // plugin events through the event log
+  const fakePlugins = { byId: (g) => (g === 'csgo' ? { name: 'CS', events: [{ id: 'join', label: 'Player joined', default: true }], logging: { patterns: [{ id: 'join', regex: 'has joined', level: 'info' }] } } : P.byId(g)), GAMES: P.GAMES };
+  const ds2 = new Discord(m, fakePlugins, m.settings, dir, { allowAnyUrl: true, delayMs: 1 }); ds2.start(); ds.stop();
+  const el2 = new EventLog(m, fakePlugins, m.settings, dir); el2.start();
+  assert(ds2.catalog().some((e) => e.key === 'game:join' && e.on === true), 'plugin events[] appear in the catalog');
+  hits.length = 0; m.log(sid, 'Bob has joined'); await sleep(300);
+  assert(hits.length === 1 && hits[0].body.embeds[0].title === 'Player joined' && /has joined/.test(hits[0].body.embeds[0].description), 'console pattern -> game:<id> event log entry -> Discord embed');
+  el2.stop(); ds2.stop();
+  assert(ds.info().events.length >= 7 && Object.keys(ds.info().defaults).length >= 7, 'info() lists events with default templates');
+  dsrv.close();
+
+  // ---- Phase 2: IPC ----
+  const api2 = buildApi({ mgr: m, collector: { state: () => ({}) }, publicGames: () => [], shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {}, eventLog: rl, discord: ds });
+  for (const k of ['eventLogQuery', 'eventLogExport', 'eventLogClear', 'discordTest', 'discordPreview', 'discordInfo']) assert.strictEqual(typeof api2[k], 'function', 'api.' + k);
+  assert(Array.isArray(api2.eventLogQuery({})) && typeof api2.eventLogExport({}) === 'string', 'eventLogQuery / eventLogExport');
+  assert(api2.discordPreview({ mode: 'embed', title: 'x' }, {}).embeds[0].title === 'x', 'discordPreview');
+  assert.throws(() => api.eventLogQuery({}), /Service not available/, 'api without services throws a clear error');
+  api2.eventLogClear(); assert(rl.query({}).length === 1, 'eventLogClear');
+  fs.rmSync(ldir, { recursive: true, force: true });
+  }
+
   // ---- Phase 1: app shell (settings round trip, footer links, static HTML checks) ----
   m.saveSettings({ ui: { rightCollapsed: true, bottomCollapsed: true } }); m.saveSettings({ headerStats: { disk: true, tick: true } });
   const sh = S.read(dir);
@@ -286,8 +441,8 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   const RD = path.join(__dirname, '..', 'src', 'renderer'); const html = fs.readFileSync(path.join(RD, 'index.html'), 'utf8');
   assert(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(html) && !/\son\w+\s*=/i.test(html), 'index.html has no inline scripts / handlers (CSP)');
   for (const f of [...html.matchAll(/<script src="([^"]+)"/g)].map((x) => x[1])) assert(fs.existsSync(path.join(RD, f)), 'script exists: ' + f);
-  for (const v of ['servers', 'table', 'dashboard', 'plugins', 'settings', 'discord']) assert(html.includes('data-view="' + v + '"'), 'nav entry for view ' + v);
-  for (const id of ['leftPanel', 'rightPanel', 'bottomPanel', 'metrics', 'setStats', 'tgLeft', 'tgRight', 'tgBottom', 'tgNav', 'vPlugins', 'vSettings', 'vDiscord']) assert(html.includes('id="' + id + '"'), 'element #' + id);
+  for (const v of ['servers', 'table', 'dashboard', 'plugins', 'settings', 'discord', 'logs']) assert(html.includes('data-view="' + v + '"'), 'nav entry for view ' + v);
+  for (const id of ['leftPanel', 'rightPanel', 'bottomPanel', 'metrics', 'setStats', 'tgLeft', 'tgRight', 'tgBottom', 'tgNav', 'vPlugins', 'vSettings', 'vDiscord', 'vLogs', 'dcWebhook', 'dcTest', 'dcEvents', 'dcEditor', 'dcPreview', 'lgTable']) assert(html.includes('id="' + id + '"'), 'element #' + id);
   for (const k of ['website', 'discord', 'patreon', 'paypal', 'buymeacoffee']) assert(html.includes('data-link="' + k + '"'), 'footer link ' + k);
   const boot = fs.readFileSync(path.join(RD, 'theme-boot.js'), 'utf8');
   assert(/nodegsm\.ui/.test(boot) && /leftCollapsed/.test(boot), 'theme-boot applies the panel layout before first paint');

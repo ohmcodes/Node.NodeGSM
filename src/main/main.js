@@ -86,15 +86,17 @@ app.whenReady().then(() => {
   collector = new MetricsCollector(mgr);
   collector.on('metrics', (m) => send('metrics', m));
 
+  // Services subscribe to mgr.events (see services/*.js)
+  const instances = [EventLog, Discord, DiscordBot, BackupService, Cluster, AutoClear].map((S) => new S(mgr, require('./plugins'), mgr.settings, dataDir));
+  services = instances;
+  const [eventLog, discord] = instances;
+
   const api = buildApi({
-    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg,
+    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord,
     getWin: () => win,
     beforeRelaunch: () => { quitting = 'done'; },
   });
   for (const [name, fn] of Object.entries(api)) handle(name, fn);
-
-  // Services (skeletons for now; they subscribe to mgr.events in later phases)
-  services = [EventLog, Discord, DiscordBot, BackupService, Cluster, AutoClear].map((S) => new S(mgr, require('./plugins'), mgr.settings, dataDir));
   services.forEach((s) => s.start());
 
   createWindow();
