@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>NodeGSM - My account</title>
+<link rel="icon" type="image/png" href="/assets/icon-32.png">
+<script src="theme-boot.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-page" style="display:flex;justify-content:center;min-height:100vh;padding:24px 12px">
+<div style="width:min(520px,96vw);display:block">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><img src="/assets/logo.svg" alt="" width="34" height="34"><h2 style="margin:0">Node<b>GSM</b> account</h2></div>
+  <div id="acBanner" class="small err" hidden>Your owner requires two-factor authentication. Set it up below to continue.</div>
+  <section style="padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel);margin-bottom:14px">
+    <h4 style="margin-top:0">Signed in as <span id="acUser"></span> <span class="badge" id="acRole"></span></h4>
+    <div class="row"><a href="/" id="acBack"><button type="button">Back to NodeGSM</button></a><button type="button" id="acOthers">Sign out other sessions</button><button type="button" id="acOut" class="danger">Sign out</button></div>
+  </section>
+  <section style="padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel);margin-bottom:14px">
+    <h4 style="margin-top:0">Change password</h4>
+    <input id="pwOld" type="password" placeholder="current password" autocomplete="current-password" style="width:100%;margin-bottom:8px">
+    <input id="pwNew" type="password" placeholder="new password (10+ characters)" autocomplete="new-password" style="width:100%;margin-bottom:8px">
+    <button type="button" id="pwBtn" class="primary">Change password</button> <span class="small muted">Your other sessions are signed out.</span>
+  </section>
+  <section style="padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel)">
+    <h4 style="margin-top:0">Two-factor authentication (authenticator app)</h4>
+    <div id="tfOff" hidden>
+      <p class="small muted">Adds a 6-digit code from an app such as Google Authenticator, Authy, Aegis or 1Password to every sign-in.</p>
+      <button type="button" id="tfBegin" class="primary">Set up</button>
+      <div id="tfSetup" hidden style="margin-top:12px">
+        <p class="small">In your authenticator app add an account by key (time based) and enter this key:</p>
+        <code id="tfSecret" style="word-break:break-all;font-size:15px"></code>
+        <p class="small muted">Or open this link on the phone that has the app: <a id="tfUri" href="#" rel="noopener"></a></p>
+        <input id="tfCode" inputmode="numeric" placeholder="6-digit code" autocomplete="one-time-code" style="width:140px"> <button type="button" id="tfConfirm" class="primary">Turn on</button>
+      </div>
+    </div>
+    <div id="tfOn" hidden>
+      <p class="small"><span class="badge Started">on</span> <span id="tfLeft"></span></p>
+      <input id="tfPw" type="password" placeholder="password" autocomplete="current-password" style="width:200px"> <button type="button" id="tfDisable" class="danger">Turn off</button>
+    </div>
+    <div id="tfCodes" hidden style="margin-top:12px"><p class="small err"><b>Recovery codes</b>: each works once if you lose your phone. Save them now; they are not shown again.</p><pre id="tfList" style="user-select:all"></pre></div>
+  </section>
+  <p id="acMsg" role="alert" class="small" style="min-height:1.2em;margin-top:12px"></p>
+</div>
+<script src="account.js"></script>
+</body>
+</html>

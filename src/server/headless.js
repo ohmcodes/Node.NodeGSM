@@ -12,6 +12,7 @@ const { WebSocketServer } = require('ws');
 const platform = require('../main/platform');
 const { createCore, headlessHost } = require('../main/core');
 const auth = require('./auth');
+const { WebAccess } = require('./webAccess');
 
 const RENDERER = path.resolve(__dirname, '..', 'renderer');
 const ASSETS = path.resolve(__dirname, '..', '..', 'assets');
@@ -34,7 +35,7 @@ function csp(host) {
   const h = safeHost(host);
   return `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://${h} wss://${h}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`;
 }
-const baseHeaders = (host) => ({ 'Content-Security-Policy': csp(host), 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Resource-Policy': 'same-origin' });
+const baseHeaders = (host, hsts) => ({ ...(hsts ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}), 'Content-Security-Policy': csp(host), 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Resource-Policy': 'same-origin' });
 
 /** Map a URL path to a file under the renderer or assets folder; null when it escapes, is hidden or has an unknown type. */
 function resolveStatic(urlPath, { renderer = RENDERER, assets = ASSETS } = {}) {
@@ -76,8 +77,9 @@ function readBody(req, limit) {
 
 /**
  * Build and start the server.
- * opts: { dataDir, host, port, auth (default true), token, https, sessionHours, maxBody, maxFailures, trustProxy, core, startCore, env }
- * Resolves to { server, core, host, port, token, tokenSource, close() }.
+ * opts: { dataDir, host, port, auth (default true), token, https, sessionHours, idleHours, maxBody, maxFailures, trustProxy, require2fa, core, startCore, webAccess, env }
+ * core: pass the desktop app's core to serve the same servers (the app keeps owning it: close() then leaves it running).
+ * Resolves to { server, core, host, port, token, tokenSource, webAccess, close() }.
  */
 async function startServer(opts = {}) {
   const env = opts.env || process.env;
@@ -86,34 +88,42 @@ async function startServer(opts = {}) {
   if (!authOn && !auth.isLoopback(host)) throw new Error(`Refusing to listen on ${host} without authentication. Authentication may only be disabled on a loopback address.`);
   const dataDir = opts.dataDir || platform.defaultDataDir();
   fs.mkdirSync(dataDir, { recursive: true });
-  const tok = authOn ? (opts.token ? { token: opts.token, source: 'env' } : auth.loadToken(dataDir, env)) : { token: null, source: 'none' };
-  const sessions = new auth.Sessions({ ttlMs: (Number(opts.sessionHours) > 0 ? Number(opts.sessionHours) : 12) * 3600 * 1000 });
-  const limiter = new auth.RateLimiter({ maxFailures: opts.maxFailures || 5 });
+  const core = opts.core || createCore({ dataDir, mode: 'web' });
+  const ownsCore = !opts.core;
+  const wa = opts.webAccess || new WebAccess({
+    dataDir, env, token: authOn ? opts.token : undefined, sessionHours: opts.sessionHours, idleHours: opts.idleHours, maxFailures: opts.maxFailures, require2fa: opts.require2fa,
+    audit: (level, event, message, detail) => core.eventLog && core.eventLog.log({ level, event, message, detail }),
+  });
+  if (opts.require2fa !== undefined) wa.setRequire2fa(opts.require2fa);
+  const sessions = wa.sessions; const limiter = wa.limiter;
   const maxBody = Number(opts.maxBody) > 0 ? Number(opts.maxBody) : 4 * 1024 * 1024;
   const httpsMode = !!opts.https;
   const trustProxy = !!opts.trustProxy;
 
-  const core = opts.core || createCore({ dataDir, mode: 'web' });
   const api = core.buildApi(headlessHost());
-  const has = (name) => Object.prototype.hasOwnProperty.call(api, name);
+  const webNames = new Set(wa.webChannels);
+  const has = (name) => Object.prototype.hasOwnProperty.call(api, name) || webNames.has(name);
 
   const ipOf = (req) => {
     if (trustProxy) { const x = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim(); if (x) return x; }
     return req.socket.remoteAddress || '?';
   };
-  /** { ok, via: 'bearer' | 'cookie' | 'none', locked?: seconds } */
+  /** The shared token as a Bearer header: only while no account exists, or for a direct loopback client (no proxy headers) = local automation. */
+  const bearerAllowed = (req) => wa.tokenLoginOpen() || (auth.isLoopback(String(req.socket.remoteAddress || '').replace(/^::ffff:/, '')) && !req.headers['x-forwarded-for'] && !req.headers['x-real-ip'] && !req.headers.forwarded);
+  /** { ok, via: 'bearer' | 'cookie' | 'none', actor, cookie, locked?: seconds } */
   const authenticate = (req) => {
-    if (!authOn) return { ok: true, via: 'none' };
+    if (!authOn) return { ok: true, via: 'none', actor: { local: false, user: '', role: 'owner' } };
     const ip = ipOf(req);
     const h = String(req.headers.authorization || '');
     const bearer = /^Bearer\s+(.+)$/i.exec(h);
     if (bearer) {
       const wait = limiter.retryAfter(ip); if (wait) return { ok: false, locked: wait };
-      if (auth.safeEqual(bearer[1].trim(), tok.token)) { limiter.success(ip); return { ok: true, via: 'bearer' }; }
+      if (bearerAllowed(req) && wa.tokenOk(bearer[1])) { limiter.success(ip); return { ok: true, via: 'bearer', actor: { local: false, user: '', role: 'owner' } }; }
       limiter.fail(ip); return { ok: false };
     }
     const c = auth.parseCookies(req.headers.cookie)[auth.COOKIE];
-    return c && sessions.valid(c) ? { ok: true, via: 'cookie', cookie: c } : { ok: false };
+    const sess = c ? sessions.get(c) : null;
+    return sess ? { ok: true, via: 'cookie', cookie: c, actor: { local: false, user: sess.user, role: sess.role, cookie: c, limited: !!sess.limited } } : { ok: false };
   };
   /** Cross-site request forgery guard for cookie / no-auth requests: the Origin header must be present and equal to Host. */
   const sameOrigin = (req) => {
@@ -135,25 +145,26 @@ async function startServer(opts = {}) {
 
     if (pathname === '/healthz' && (req.method === 'GET' || req.method === 'HEAD')) return json(res, 200, { ok: true });
 
-    // ---- login / logout ----
-    if (pathname === '/login' && req.method === 'POST') {
+    // ---- sign in / setup / sign out ----
+    if (pathname === '/auth/status' && req.method === 'GET') return json(res, 200, { ok: true, setup: authOn && !wa.hasAccounts, auth: authOn });
+    if ((pathname === '/login' || pathname === '/setup') && req.method === 'POST') {
       if (!authOn) return json(res, 200, { ok: true });
       if (!sameOrigin(req)) return json(res, 403, { ok: false, error: 'Cross-origin request rejected' });
       if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) return json(res, 415, { ok: false, error: 'Content-Type must be application/json' });
-      const ip = ipOf(req); const wait = limiter.retryAfter(ip);
-      if (wait) return json(res, 429, { ok: false, error: `Too many failed attempts. Try again in ${wait} s.` }, { 'Retry-After': String(wait) });
       let body; try { body = JSON.parse((await readBody(req, 4096)).toString('utf8')); } catch (e) { return json(res, e.status || 400, { ok: false, error: e.status === 413 ? e.message : 'Invalid JSON' }); }
-      if (!body || typeof body.token !== 'string' || !auth.safeEqual(body.token.trim(), tok.token)) {
-        limiter.fail(ip);
-        const w2 = limiter.retryAfter(ip);
-        return json(res, w2 ? 429 : 401, { ok: false, error: w2 ? `Too many failed attempts. Try again in ${w2} s.` : 'Wrong token' }, w2 ? { 'Retry-After': String(w2) } : {});
-      }
-      limiter.success(ip);
-      return json(res, 200, { ok: true }, { 'Set-Cookie': cookieHeader(req, sessions.create(), Math.floor(sessions.ttlMs / 1000)) });
+      if (!body || typeof body !== 'object') return json(res, 400, { ok: false, error: 'Invalid JSON' });
+      const meta = { ip: ipOf(req), ua: req.headers['user-agent'] || '' };
+      let r;
+      if (pathname === '/setup') r = await wa.setup(body, meta);
+      else if (typeof body.token === 'string' && body.username === undefined) r = wa.tokenLogin(body.token, meta);
+      else r = await wa.login(body, meta);
+      if (r.need2fa) return json(res, 200, { ok: false, need2fa: true, challenge: r.challenge });
+      if (!r.ok) return json(res, r.status || 401, { ok: false, error: r.error }, r.retryAfter ? { 'Retry-After': String(r.retryAfter) } : {});
+      return json(res, 200, { ok: true, limited: !!r.limited }, { 'Set-Cookie': cookieHeader(req, r.cookie, Math.floor(sessions.ttlMs / 1000)) });
     }
     if (pathname === '/logout' && req.method === 'POST') {
       if (!sameOrigin(req)) return json(res, 403, { ok: false, error: 'Cross-origin request rejected' });
-      const c = auth.parseCookies(req.headers.cookie)[auth.COOKIE]; if (c) sessions.destroy(c);
+      const c = auth.parseCookies(req.headers.cookie)[auth.COOKIE]; if (c) wa.logout(c);
       return json(res, 200, { ok: true }, { 'Set-Cookie': cookieHeader(req, '', 0) });
     }
 
@@ -168,15 +179,19 @@ async function startServer(opts = {}) {
       if (!/^[A-Za-z][A-Za-z0-9:]{0,63}$/.test(name) || !has(name)) return json(res, 404, { ok: false, error: 'Unknown channel' });
       let body;
       try { const raw = await readBody(req, maxBody); body = raw.length ? JSON.parse(raw.toString('utf8')) : {}; } catch (e) { return json(res, e.status || 400, { ok: false, error: e.status === 413 ? e.message : 'Invalid JSON' }); }
-      const args = body && body.args !== undefined ? body.args : [];
+      let args = body && body.args !== undefined ? body.args : [];
       if (!Array.isArray(args)) return json(res, 400, { ok: false, error: '"args" must be an array' });
-      try { return json(res, 200, { ok: true, data: await api[name](...args) }); } catch (e) { return json(res, 200, { ok: false, error: e && e.message ? e.message : String(e) }); }
+      try { wa.authorize(name, a.actor); } catch (e) { return json(res, e.status || 403, { ok: false, error: e.message }); }
+      // the bind address / port / HTTPS of the web access itself can only be changed from the desktop window or the settings file
+      if (name === 'saveSettings' && args[0] && typeof args[0] === 'object' && 'web' in args[0]) { const { web, ...rest } = args[0]; args = [rest, ...args.slice(1)]; }
+      try { return json(res, 200, { ok: true, data: await (webNames.has(name) ? wa.api(a.actor)[name](...args) : api[name](...args)) }); } catch (e) { return json(res, e.status === 429 ? 429 : 200, { ok: false, error: e && e.message ? e.message : String(e) }); }
     }
 
     // ---- backup download ----
     if (pathname === '/download/backup' && req.method === 'GET') {
       const a = authenticate(req);
       if (!a.ok) return denied(res, a);
+      if (a.actor.limited || a.actor.role === 'viewer') return json(res, 403, { ok: false, error: 'Not allowed for this account' });
       let file; try { file = core.mgr.bk().filePath(url.searchParams.get('folder'), url.searchParams.get('file')); } catch (e) { return json(res, 400, { ok: false, error: e.message }); }
       let st; try { st = fs.statSync(file); if (!st.isFile()) throw new Error('x'); } catch { return json(res, 404, { ok: false, error: 'Backup not found' }); }
       const name = path.basename(file).replace(/[^A-Za-z0-9._-]/g, '_');
@@ -191,12 +206,14 @@ async function startServer(opts = {}) {
     if (!PUBLIC_FILES.has(f.url)) {
       const a = authenticate(req);
       if (!a.ok) {
-        if (!a.locked && f.url === '/index.html') { res.writeHead(302, { Location: '/login.html', 'Cache-Control': 'no-store' }); return res.end(); }
+        if (!a.locked && (f.url === '/index.html' || f.url === '/account.html')) { res.writeHead(302, { Location: '/login.html', 'Cache-Control': 'no-store' }); return res.end(); }
         return denied(res, a);
       }
+      // an account that still has to set up two-factor authentication only gets the account page
+      if (a.actor.limited && f.url === '/index.html') { res.writeHead(302, { Location: '/account.html', 'Cache-Control': 'no-store' }); return res.end(); }
     }
     const data = fs.readFileSync(f.file);
-    res.writeHead(200, { ...baseHeaders(req.headers.host), 'Content-Type': MIME[path.extname(f.file).toLowerCase()], 'Content-Length': data.length, 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { ...baseHeaders(req.headers.host, httpsMode), 'Content-Type': MIME[path.extname(f.file).toLowerCase()], 'Content-Length': data.length, 'Cache-Control': 'no-cache' });
     return res.end(req.method === 'HEAD' ? undefined : data);
   }
 
@@ -213,6 +230,7 @@ async function startServer(opts = {}) {
     const a = authenticate(req);
     if (!a.ok) return reject(a.locked ? 429 : 401, a.locked ? 'Too Many Requests' : 'Unauthorized');
     if (a.via !== 'bearer' && !sameOrigin(req)) return reject(403, 'Forbidden');
+    if (a.actor && a.actor.limited) return reject(403, 'Forbidden');
     if (wss.clients.size >= MAX_WS) return reject(503, 'Service Unavailable');
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.alive = true; ws.cookie = a.cookie || null;
@@ -226,9 +244,9 @@ async function startServer(opts = {}) {
     for (const ws of wss.clients) if (ws.readyState === 1 && ws.bufferedAmount < 8 * 1024 * 1024) ws.send(msg);
   });
   const beat = setInterval(() => {
-    sessions.sweep(); limiter.sweep();
+    wa.sweep();
     for (const ws of wss.clients) {
-      if (ws.cookie && !sessions.valid(ws.cookie)) { ws.close(4401, 'Session expired'); continue; }
+      if (ws.cookie && !sessions.valid(ws.cookie, false)) { ws.close(4401, 'Session expired'); continue; }
       if (!ws.alive) { ws.terminate(); continue; }
       ws.alive = false; try { ws.ping(); } catch { /* closing */ }
     }
@@ -236,15 +254,15 @@ async function startServer(opts = {}) {
   beat.unref();
 
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(Number(opts.port) >= 0 ? Number(opts.port) : DEFAULT_PORT, host, resolve); });
-  if (opts.startCore !== false) core.start();
+  if (opts.startCore !== false && ownsCore) core.start();
   let closing = null;
   const close = () => closing || (closing = (async () => {
     clearInterval(beat); unsub();
     for (const ws of wss.clients) { try { ws.close(1001, 'Server shutting down'); } catch { /* ignore */ } }
     await new Promise((r) => { server.close(() => r()); if (server.closeAllConnections) server.closeAllConnections(); });
-    await core.stop();
+    if (ownsCore) await core.stop();
   })());
-  return { server, core, host, port: server.address().port, token: tok.token, tokenSource: tok.source, sessions, limiter, close };
+  return { server, core, host, port: server.address().port, token: wa.token, tokenSource: wa.tokenSource, webAccess: wa, sessions, limiter, close };
 }
 
 // ---------- command line ----------
@@ -254,12 +272,12 @@ function parseArgs(argv, env = process.env) {
     host: env.NODEGSM_HOST || '127.0.0.1', port: env.NODEGSM_PORT ? Number(env.NODEGSM_PORT) : DEFAULT_PORT, dataDir: env.NODEGSM_DATA || env.WGSM_DATA || undefined,
     https: yes(env.NODEGSM_HTTPS), auth: !yes(env.NODEGSM_NO_AUTH),
     sessionHours: env.NODEGSM_SESSION_HOURS ? Number(env.NODEGSM_SESSION_HOURS) : undefined, maxBody: env.NODEGSM_MAX_BODY ? Number(env.NODEGSM_MAX_BODY) : undefined,
-    trustProxy: yes(env.NODEGSM_TRUST_PROXY), help: false,
+    trustProxy: yes(env.NODEGSM_TRUST_PROXY), require2fa: yes(env.NODEGSM_REQUIRE_2FA), help: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const next = () => { if (i + 1 >= argv.length) throw new Error(`${a} needs a value`); return argv[++i]; };
     if (a === '--host') o.host = next(); else if (a === '--port') o.port = Number(next()); else if (a === '--data') o.dataDir = next();
-    else if (a === '--https') o.https = true; else if (a === '--no-auth') o.auth = false; else if (a === '--trust-proxy') o.trustProxy = true;
+    else if (a === '--https') o.https = true; else if (a === '--no-auth') o.auth = false; else if (a === '--trust-proxy') o.trustProxy = true; else if (a === '--require-2fa') o.require2fa = true;
     else if (a === '--session-hours') o.sessionHours = Number(next()); else if (a === '--max-body') o.maxBody = Number(next());
     else if (a === '-h' || a === '--help') o.help = true; else throw new Error(`Unknown option: ${a}`);
   }
@@ -268,8 +286,9 @@ function parseArgs(argv, env = process.env) {
 }
 
 const HELP = `NodeGSM headless server
-  nodegsm [--host 127.0.0.1] [--port ${DEFAULT_PORT}] [--data <dir>] [--https] [--trust-proxy] [--session-hours 12] [--no-auth]
+  nodegsm [--host 127.0.0.1] [--port ${DEFAULT_PORT}] [--data <dir>] [--https] [--trust-proxy] [--require-2fa] [--session-hours 12] [--no-auth]
   --https          the site is served over HTTPS by a reverse proxy: session cookies get the Secure flag
+  --require-2fa    every account must set up two-factor authentication (TOTP) before it can use the app
   --trust-proxy    use X-Forwarded-For for the client address (rate limiting); only behind your own reverse proxy
   --no-auth        no login; only allowed on a loopback address
   Token: NODEGSM_TOKEN, or <data>/web-token (generated on first start). See docs/GUIDE-web-linux.md.`;
@@ -285,9 +304,16 @@ async function main(argv = process.argv.slice(2)) {
   process.on('uncaughtException', crash('uncaughtException')); process.on('unhandledRejection', crash('unhandledRejection'));
   console.log(`NodeGSM web server listening on http://${s.host.includes(':') ? `[${s.host}]` : s.host}:${s.port}  (data: ${dataDir})`);
   if (!o.auth) console.log('WARNING: authentication is disabled (loopback only).');
-  else if (s.tokenSource === 'generated') console.log(`First start: your access token is\n\n  ${s.token}\n\nIt is saved in ${path.join(dataDir, 'web-token')} and will not be printed again. Open the page and paste it into the login form.`);
-  else console.log(`Access token: from ${s.tokenSource === 'env' ? 'NODEGSM_TOKEN' : path.join(dataDir, 'web-token')}`);
-  if (!auth.isLoopback(s.host)) console.log('NOTE: listening on a non-loopback address. Put a TLS reverse proxy in front (see docs/GUIDE-web-linux.md); the login token must not travel over plain HTTP on an untrusted network.');
+  else if (!s.webAccess.hasAccounts) {
+    console.log(`No account exists yet. Open the page and create the owner account; it asks for the access token once:${s.tokenSource === 'generated' ? `
+
+  ${s.token}
+
+(saved in ${path.join(dataDir, 'web-token')}, it will not be printed again)` : `
+  token: ${s.tokenSource === 'env' ? 'NODEGSM_TOKEN' : path.join(dataDir, 'web-token')}`}`);
+    if (!auth.isLoopback(s.host)) console.log('WARNING: until the owner account exists, anyone who can reach this port and guesses the token could take over. Create the account now.');
+  } else console.log('Sign in with your account (username + password). The shared access token no longer signs in to the web page.');
+  if (!auth.isLoopback(s.host)) console.log('NOTE: listening on a non-loopback address. Put a TLS reverse proxy in front (see docs/GUIDE-web-linux.md) and start with --https; passwords must not travel over plain HTTP on an untrusted network. Two-factor authentication (--require-2fa) is strongly recommended.');
   let stopping = false;
   const stop = async (sig) => {
     if (stopping) { console.log('Forced exit.'); process.exit(1); }

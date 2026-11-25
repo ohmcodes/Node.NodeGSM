@@ -40,7 +40,7 @@ function platformInfo(mode, plat = platform.current()) {
     platform: plat,
     features: {
       pickFolder: desktop, openFolder: desktop, revealBackup: desktop, backupDownload: !desktop,
-      relaunch: desktop, dataLocation: desktop, tray: desktop, startOnLogin: desktop, hardwareAcceleration: desktop,
+      relaunch: desktop, webAccess: desktop, dataLocation: desktop, tray: desktop, startOnLogin: desktop, hardwareAcceleration: desktop,
       installPluginFile: desktop, pluginsFolder: desktop, firewall: plat === 'windows',
     },
   };

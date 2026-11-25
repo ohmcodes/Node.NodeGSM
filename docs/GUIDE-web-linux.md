@@ -12,7 +12,9 @@ npm ci --omit=dev       # no Electron needed
 npm run serve           # http://127.0.0.1:8730
 ```
 
-On the **first start** a random access token is printed once and stored in `<data>/web-token` (mode `0600`). Open the page and paste it into the login form. To choose your own token set `NODEGSM_TOKEN` (at least 12 characters).
+On the **first start** a random access token is printed once and stored in `<data>/web-token` (mode `0600`). Open the page: it asks you to **create the owner account** (the token is needed this one time, it proves you control the machine). From then on you sign in with your username and password. To choose your own token set `NODEGSM_TOKEN` (at least 12 characters).
+
+> From the **desktop app** you do not need any of this: **Settings > Web access** serves the same page from the running exe. See [Web access in the desktop app](#web-access-in-the-desktop-app).
 
 Options (command line or environment):
 
@@ -26,6 +28,7 @@ Options (command line or environment):
 | `--trust-proxy` | `NODEGSM_TRUST_PROXY=1` | off | Use `X-Forwarded-For` for the login rate limit (only behind your own proxy) |
 | `--session-hours` | `NODEGSM_SESSION_HOURS` | `12` | Login session lifetime |
 | `--max-body` | `NODEGSM_MAX_BODY` | 4 MiB | Request body limit (bytes) |
+| `--require-2fa` | `NODEGSM_REQUIRE_2FA=1` | off | Every account must set up two-factor authentication (accounts without it only reach the account page) |
 | `--no-auth` | `NODEGSM_NO_AUTH=1` | off | No login. **Only allowed on a loopback address** |
 
 `npm run serve:dev` restarts on file changes (port 8731). The package also has a `nodegsm` bin entry (`npx nodegsm`).
@@ -55,7 +58,7 @@ npm ci --omit=dev --ignore-scripts
 ```bash
 sudo cp deploy/nodegsm.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now nodegsm
-sudo journalctl -u nodegsm | grep -A3 "access token"      # first token (or: sudo cat /var/lib/nodegsm/web-token)
+sudo journalctl -u nodegsm | grep -A3 "access token"      # token for the setup form (or: sudo cat /var/lib/nodegsm/web-token)
 ```
 
 The unit runs as the `nodegsm` user, binds `127.0.0.1`, and is hardened (`NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, no capabilities, `ReadWritePaths=/var/lib/nodegsm`). Game servers run as children of the service and inherit those limits; if a game needs more (for example a path outside `/var/lib/nodegsm`), relax the unit consciously.
@@ -74,28 +77,58 @@ The image is `node:20-slim`, runs as the non-root user `nodegsm` (uid 10001), ke
 
 `deploy/nginx.conf.example` is a complete server block: HTTP to HTTPS redirect, TLS, WebSocket upgrade for `/ws`, the headers NodeGSM needs. Start NodeGSM with `NODEGSM_HTTPS=1 NODEGSM_TRUST_PROXY=1`. Certificates: `sudo certbot --nginx -d nodegsm.example.com`. Keep `proxy_set_header Host $host;` - the CSRF check compares the browser's `Origin` with `Host`.
 
-NodeGSM has **no built-in TLS** on purpose (see [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)). Never expose the plain-HTTP port to an untrusted network: the token and the session cookie would travel unencrypted.
+NodeGSM has **no built-in TLS** on purpose (see [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)). Never expose the plain-HTTP port to an untrusted network: passwords and the session cookie would travel unencrypted.
 
-## First login
+## Accounts, roles and two-factor
 
-1. Open `http://127.0.0.1:8730` (or your HTTPS address). You are redirected to the login page.
-2. Paste the token. A session cookie (`HttpOnly`, `SameSite=Strict`, `Secure` behind HTTPS) is set; the token itself is never stored in the browser.
-3. After 5 wrong tokens from one address the address is locked for 15 minutes (HTTP 429).
-4. To rotate the token: stop the service, delete `<data>/web-token` (or change `NODEGSM_TOKEN`) and start again. All sessions are in memory and end on every restart.
+1. Open `http://127.0.0.1:8730` (or your HTTPS address). With no account yet you see the **setup form**: access token (once), username, password (10+ characters). The first account is the **owner**.
+2. Afterwards the page asks for username + password. A session cookie (`HttpOnly`, `SameSite=Strict`, `Secure` behind HTTPS) is set; the password is never stored in the browser. Sessions end after 12 hours or 4 hours without use (`--session-hours`), and on every restart.
+3. After 5 wrong attempts from one address that address is locked for 15 minutes, and after 5 wrong attempts for one account that account is locked for 15 minutes (HTTP 429), also for the right password. A wrong user name and a wrong password give the same answer.
+4. **Settings > Web access > Accounts** (owner): add accounts, change roles, reset passwords (signs the user out), remove 2FA of someone who lost their phone, delete accounts, list and sign out sessions. The last owner cannot be deleted.
+5. **My account** (`/account.html`, everyone): change password, set up two-factor (secret key + `otpauth://` link, confirm with a code, 8 one-time recovery codes shown once), turn it off (needs the password), sign out other sessions.
 
-Scripts can use the same token as a bearer token:
+| Role | Can do |
+|---|---|
+| owner | everything: accounts, data folder, plugin installs, event-log clearing, Discord tests |
+| admin | everything about the game servers, files, configs, console, backups, settings (not the bind address / port / HTTPS: those are changed in the desktop app or `settings.json`) |
+| viewer | read only: server list, status, console output, logs, backup list. No files, configs, console commands, settings or downloads |
+
+Two-factor is a normal authenticator app (Google Authenticator, Authy, Aegis, 1Password ...). A code can be used once. With **Require two-factor** (`--require-2fa` or the Settings checkbox) every account must set it up: until then its session only reaches `/account.html`.
+
+**Locked out?** The data folder is the key: stop NodeGSM, delete `<data>/web-users.json` and start again to get the setup form back (the token from `<data>/web-token` / `NODEGSM_TOKEN` is needed). From the desktop app the owner can always reset passwords and remove 2FA in Settings > Web access.
+
+**Scripts:** the shared token still works as `Authorization: Bearer <token>` but only from a direct connection on the same machine (loopback, no `X-Forwarded-For` / `Forwarded` / `X-Real-IP` header) and gives owner rights. It does not sign in on the web page once an account exists. To rotate it: stop the service, delete `<data>/web-token` (or change `NODEGSM_TOKEN`) and start again.
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"args":[]}' http://127.0.0.1:8730/api/list
 ```
 
-The channel list is [TECH-api.md](TECH-api.md).
+The channel list is [TECH-api.md](TECH-api.md). Every sign-in, failure, lockout and account change is written to the NGSM event log (address and account name, never a password, code or token).
+
+## Web access in the desktop app
+
+**Settings > Web access** (Windows desktop app):
+- **Allow access from a web browser** starts the web server inside the app. It uses the same servers as the window (one manager, no second process) and starts again whenever NodeGSM starts.
+- **Listen on:** *This computer only* (127.0.0.1) or *Other devices too* (all interfaces). Network access is refused until an owner account exists. **Port** defaults to 8730. Tick **reverse proxy provides HTTPS** / **trust X-Forwarded-For** only when you really run one in front.
+- **Require two-factor authentication for every account.**
+- The status line shows the address (Open / Copy address) or the reason it could not start (for example "Port 8730 is already in use").
+- Turn on **Start NodeGSM on Windows login** and the app starts hidden in the tray when Web access is on, so after a reboot and a Windows sign-in the web page is back and Auto Start servers launch. A Windows service that runs before anyone signs in is not built; for a dedicated always-on machine use the headless mode (`npm run serve`) as a service.
+
+## Putting NodeGSM on the internet
+
+Best: **do not**. Use a VPN (WireGuard, Tailscale) or an SSH tunnel and keep the port closed. If you must publish it:
+1. TLS in front (`deploy/nginx.conf.example`, certbot), start with `--https --trust-proxy` (or tick both boxes in the desktop app). Never publish the plain HTTP port.
+2. Create the owner account **before** opening the port, use long unique passwords and turn on **Require two-factor**.
+3. Give people the lowest role they need; viewers cannot touch files or consoles.
+4. Add what the proxy can add: an IP allow list, mTLS, or basic auth in front of NodeGSM, and the rate limit of your proxy on `/login`.
+5. Keep NodeGSM and the OS updated, run as an unprivileged user, open only the game ports, watch the NGSM log for `web:login-failed` / `web:login-blocked`.
+6. Remember what an account grants: control of the game servers' files and consoles. An owner / admin can run what the game server can run.
 
 ## Security hardening checklist
 - [ ] Keep the default bind `127.0.0.1` and put a TLS reverse proxy in front; do not publish port 8730 directly.
-- [ ] Use a long random token (the generated one is 32 characters). Treat `<data>/web-token` like a password; it is mode `0600`.
+- [ ] Create the owner account first, use long unique passwords and **require two-factor**. Treat `<data>/web-token` and `<data>/web-users.json` like passwords (both mode `0600`).
 - [ ] Run as a dedicated unprivileged user (systemd unit / Docker image do this). Never as root.
-- [ ] Remember what the token grants: **full control of the machine's game servers**, including editing files and config of the servers and sending console / RCON commands. Anyone with the token can run what the game server can run.
+- [ ] Remember what an owner / admin account grants: **full control of the machine's game servers**, including editing files and config of the servers and sending console / RCON commands. Anyone with such an account can run what the game server can run.
 - [ ] Restrict the proxy further if you can (IP allow list, VPN, mTLS, basic auth) - the example nginx file shows where.
 - [ ] Open only the game ports in your firewall (`ufw allow 27015/udp`); NodeGSM does not touch `ufw` / `iptables` (no sudo).
 - [ ] Back up `<data>` (`servers/`, `backups/`, `settings.json`). Settings contain the Discord bot token and webhook URLs in plain text.

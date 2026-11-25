@@ -29,7 +29,7 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - Behaviour change to confirm: a webhook that is not `https://discord.com|discordapp.com/api/webhooks/...` is now rejected. Existing per-server webhooks of another form (for example proxies) would need to be re-entered / are refused on the next save. Should a "custom URL" escape hatch exist?
 - Defaults for event toggles: started, crashed, restarted, updated are ON; stopped, backup, restore are OFF. Manual restarts are not sent to the per-server webhook (same as before) but are sent to the global one. OK?
 - Per-server override covers both webhooks; the old per-server flags only apply to the per-server webhook. Is a per-server override for the *global* webhook only needed?
-- Plugin `logging.logFiles` (scanning log files, not just the console) is not implemented yet; only console lines are matched.
+- Plugin `logging.logFiles` (scanning log files, not just the console) is implemented since 2026-11-25 (new lines, every 2 s); not yet tried against a real game log.
 - Log retention counts days (default 30, UI control not added - setting `logging.retentionDays` in `settings.json`). Add a field in Settings?
 - Logs screen shows the newest 500 entries; export takes up to 5000. Enough?
 - The renderer CSP now allows `https:` images (for embed thumbnails in the preview). Acceptable?
@@ -114,14 +114,14 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - The in-app header mark is inline SVG coloured by the accent; the website logo is a fixed-blue PNG (mark only, transparent) and the favicon is the dark tile.
 
 ## Phase 9 - docs, tests and release
-- Features not done and listed as ⏳ in FEATURES.md: scheduled (cron) backups, `logging.logFiles` scanning, Steam login, mod manager, online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
+- Features not done and listed as ⏳ in FEATURES.md:  Steam login, mod manager, online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
 - Which of the unverified (🧪) features do you want promoted to ✅ after the manual run in [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md)?
 - *(Resolved: `GUIDE-web-linux.md` exists.)*
 
 ## Phase 8 - web mode and Linux
 - **Real Linux testing:** nothing ran on a real Linux machine. Unit-tested only: the `/proc` parser, process-group kill, `taskset` command, XDG data folder, SteamCMD Linux paths / arguments, the Linux firewall message. Please run the Linux section of [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md) (SteamCMD download, a real install and start, stop / kill leaving no orphans, Docker image, systemd unit, nginx).
 - **Per-game Linux validation:** `mc`, `csgo`, `rust` and `palworld` are *declared, untested* (written from public knowledge: `srcds_run`, `RustDedicated` with `LD_LIBRARY_PATH`, `PalServer.sh`). Which other games should be declared next, and who verifies them? Some need extra steps (Palworld's `steamclient.so`, CS:GO's `lib32stdc++6`) that are only documented, not automated. Should NodeGSM check for missing system libraries (`lib32gcc-s1`, Java) and warn before install?
-- **Multi-user accounts:** web mode has one shared token (no users, roles, per-user audit trail, 2FA). Would you want accounts with roles (viewer / operator / admin), per-server permissions, and who-did-what in the NGSM log? Today the token holder can edit files, send console / RCON commands and delete servers.
+- **Multi-user accounts (partly answered 2026-11-25):** accounts, roles (owner / admin / viewer), TOTP two-factor and an audit trail now exist. Still open: per-server permissions for accounts, an operator role between viewer and admin, e-mail / WebAuthn. Original question: web mode had one shared token (no users, roles, per-user audit trail, 2FA). Would you want accounts with roles (viewer / operator / admin), per-server permissions, and who-did-what in the NGSM log? Today the token holder can edit files, send console / RCON commands and delete servers.
 - **Public exposure:** is exposing NodeGSM to the internet (behind TLS + token) acceptable, or should the docs require a VPN / IP allow list? Should sensitive actions (file editor, console, delete, plugin install) require re-entering the token or be switchable off per deployment (a read-only mode)?
 - **HTTPS built in or not:** TLS is left to a reverse proxy (nginx example, `--https` only sets `Secure` cookies). Should NodeGSM terminate TLS itself (`--cert` / `--key`, Let's Encrypt)?
 - **Sessions are in memory:** every restart logs everyone out. Persist them (signed, in `<data>`)? A single failed-login counter per client address; behind a proxy without `NODEGSM_TRUST_PROXY` all users share the proxy's address.

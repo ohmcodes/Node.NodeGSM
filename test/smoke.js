@@ -1532,7 +1532,7 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const lins = P.toGame({ ...pbase, install: { steps: [{ type: 'steamcmd', appId: '1' }], linux: { steps: [{ type: 'steamcmd', appId: '2' }] } } }, path.join(P.BUNDLED_DIR, 'csgo'), 'bundled', 'linux'); assert.strictEqual(lins.appId, '2', 'install.linux replaces the install steps on Linux');
     const linOnly = P.toGame({ ...pbase, id: 'linonly', platforms: ['linux'] }, path.join(P.BUNDLED_DIR, 'csgo'), 'bundled', 'windows'); P.GAMES.push(linOnly);
     assert.throws(() => m.create('linonly', 'x'), /not available on this platform/, 'unsupported game refused on the wrong platform'); assert.throws(() => m.importServer('linonly', 'x', dir), /not available on this platform/); P.GAMES.splice(P.GAMES.indexOf(linOnly), 1);
-    eq(P.GAMES.filter((x) => x.linuxDeclared).map((x) => x.id).sort(), ['csgo', 'mc', 'palworld', 'rust'], 'loaded plugins declare Linux support'); assert(P.GAMES.every((x) => Array.isArray(x.platforms)));
+    { const lin = P.GAMES.filter((x) => x.linuxDeclared).map((x) => x.id); for (const id of ['csgo', 'mc', 'palworld', 'rust']) assert(lin.includes(id), id + ' declares Linux support'); }   // the catalogue grows (imported plugins), so: at least these assert(P.GAMES.every((x) => Array.isArray(x.platforms)));
     assert(P.detail('csgo').platforms.includes('linux') && typeof P.detail('csgo').supported === 'boolean');
     // electron must never load in the headless path
     const cp = require('child_process');
@@ -1615,11 +1615,132 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const S3 = await startServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-web3-')), port: 0, auth: false, startCore: false });
     assert.strictEqual((await rq(S3.port, 'POST', '/api/list', { headers: { ...J, Origin: 'http://evil.example' }, body: '{}' })).status, 403, 'no-auth mode still rejects cross-origin posts'); assert.strictEqual((await rq(S3.port, 'POST', '/api/list', { headers: { ...J, Origin: `http://127.0.0.1:${S3.port}` }, body: '{}' })).status, 200); await S3.close();
     const ha = require('../src/server/headless').parseArgs(['--port', '9000', '--host', '127.0.0.1', '--https'], {}); eq([ha.port, ha.https, ha.auth], [9000, true, true]); assert.throws(() => require('../src/server/headless').parseArgs(['--bogus'], {}));
+    // ---- accounts, roles, two-factor, lockout, limited sessions ----
+    {
+      const TOTP = require('../src/server/totp'); const { UserStore } = require('../src/server/users');
+      eq(TOTP.code('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 1), '287082', 'TOTP: RFC 6238 test vector'); eq(TOTP.base32Decode(TOTP.base32Encode(Buffer.from('hello world'))).toString(), 'hello world', 'base32 round trip');
+      const sec0 = TOTP.newSecret(); const T0 = 1700000000000; const st0 = TOTP.stepOf(T0);
+      assert(TOTP.verify(sec0, TOTP.code(sec0, st0), { now: T0 }) === st0 && TOTP.verify(sec0, TOTP.code(sec0, st0 - 1), { now: T0 }) && !TOTP.verify(sec0, TOTP.code(sec0, st0 + 3), { now: T0 }) && !TOTP.verify(sec0, TOTP.code(sec0, st0), { now: T0, lastStep: st0 }) && !TOTP.verify(sec0, 'abcdef', { now: T0 }), 'TOTP: window +-1, no replay, junk refused');
+      const ad = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-acc-')); const SA = await startServer({ dataDir: ad, port: 0, token: TOKEN, maxFailures: 50, startCore: false }); const pa = SA.port; const oa = `http://127.0.0.1:${pa}`;
+      const post = (p, obj, h = {}) => rq(pa, 'POST', p, { headers: { ...J, Origin: oa, ...h }, body: JSON.stringify(obj) });
+      const ck = (r) => r.headers['set-cookie'][0].split(';')[0];
+      const call = (cookie, name, ...args) => post('/api/' + name, { args }, { Cookie: cookie });
+      eq((await rq(pa, 'GET', '/auth/status')).json().setup, true, 'fresh server: setup needed');
+      r = await post('/setup', { token: 'wrong-token-1234', username: 'owner1', password: 'correct horse battery' }); assert.strictEqual(r.status, 401, 'setup needs the access token');
+      r = await post('/setup', { token: TOKEN, username: 'owner1', password: 'short' }); assert(r.status === 400 && /10 characters/.test(r.json().error), 'weak password refused');
+      r = await post('/setup', { token: TOKEN, username: 'owner1', password: 'correct horse battery' }); assert(r.status === 200 && r.json().ok, 'owner created'); const ownerCk = ck(r);
+      assert.strictEqual((await post('/setup', { token: TOKEN, username: 'evil', password: 'another long pass' })).status, 403, 'setup only works once');
+      eq((await rq(pa, 'GET', '/auth/status')).json().setup, false);
+      assert.strictEqual((await post('/login', { token: TOKEN })).status, 403, 'the shared token no longer signs in once an account exists');
+      assert.strictEqual((await rq(pa, 'POST', '/api/list', { headers: { ...J, Authorization: 'Bearer ' + TOKEN, 'X-Forwarded-For': '8.8.8.8' }, body: '{}' })).status, 401, 'bearer token refused when the request came through a proxy');
+      assert.strictEqual((await rq(pa, 'POST', '/api/list', { headers: { ...J, Authorization: 'Bearer ' + TOKEN }, body: '{}' })).status, 200, 'bearer token still works for direct local automation');
+      const fileTxt = fs.readFileSync(path.join(ad, 'web-users.json'), 'utf8'); assert(!/correct horse/.test(fileTxt) && /scrypt\$/.test(fileTxt), 'password stored as an scrypt hash only');
+      assert.strictEqual(new UserStore(ad).list().length, 1, 'accounts persist');
+      // same answer for an unknown user and a wrong password
+      const w1 = await post('/login', { username: 'owner1', password: 'wrong password 1' }); const w2 = await post('/login', { username: 'nobody', password: 'wrong password 1' }); eq([w1.status, w1.json().error], [w2.status, w2.json().error], 'no user enumeration');
+      r = await post('/login', { username: 'OWNER1', password: 'correct horse battery' }); assert(r.status === 200 && !r.json().limited, 'sign in (user name is case-insensitive)'); const o2 = ck(r);
+      // roles
+      r = await call(ownerCk, 'webUserCreate', 'admin1', 'admin password 123', 'admin'); assert(r.json().ok, 'owner creates an admin: ' + r.text); r = await call(ownerCk, 'webUserCreate', 'viewer1', 'viewer password 123', 'viewer'); assert(r.json().ok);
+      r = await call(ownerCk, 'webUserCreate', 'admin1', 'admin password 123', 'admin'); assert(!r.json().ok && /already exists/.test(r.json().error), 'duplicate user refused');
+      const adminCk = ck(await post('/login', { username: 'admin1', password: 'admin password 123' })); const viewerCk = ck(await post('/login', { username: 'viewer1', password: 'viewer password 123' }));
+      assert((await call(viewerCk, 'list')).json().ok, 'viewer can read'); for (const n of ['saveSettings', 'writeFile', 'start', 'command', 'readFile']) assert.strictEqual((await call(viewerCk, n, {})).status, 403, 'viewer cannot call ' + n);
+      assert.strictEqual((await rq(pa, 'GET', '/download/backup?folder=1&file=x.zip', { headers: { Cookie: viewerCk } })).status, 403, 'viewer cannot download backups');
+      r = await call(adminCk, 'webUsers'); assert(!r.json().ok && /owner/i.test(r.json().error), 'admin cannot manage accounts'); assert.strictEqual((await call(adminCk, 'relaunch')).status, 403, 'admin cannot call owner-only channels');
+      r = await call(adminCk, 'saveSettings', { web: { enabled: true, host: '0.0.0.0', port: 9 }, theme: 'light' }); assert(r.json().ok && r.json().data.web.enabled === false && r.json().data.theme === 'light', 'web settings cannot be changed from the browser');
+      eq((await call(ownerCk, 'webStatus')).json().data.role, 'owner'); eq((await call(viewerCk, 'webStatus')).json().data.role, 'viewer');
+      r = await call(ownerCk, 'webUserDelete', 'owner1'); assert(!r.json().ok && /last owner/i.test(r.json().error), 'the last owner cannot be deleted');
+      // two-factor
+      r = await call(adminCk, 'webTotpBegin'); const tf = r.json().data; assert(/^[A-Z2-7]{32}$/.test(tf.secret) && /^otpauth:\/\/totp\//.test(tf.uri), 'enrolment gives a secret + otpauth uri');
+      r = await call(adminCk, 'webTotpConfirm', '000000'); assert(!r.json().ok, 'wrong enrolment code refused');
+      r = await call(adminCk, 'webTotpConfirm', TOTP.code(tf.secret, TOTP.stepOf())); const rec = r.json().data; assert(Array.isArray(rec) && rec.length === 8, 'recovery codes returned once');
+      assert.strictEqual((await call(adminCk, 'list')).status, 200, 'the enrolling session stays signed in');
+      r = await post('/login', { username: 'admin1', password: 'admin password 123' }); assert(r.json().need2fa && r.json().challenge && !r.headers['set-cookie'], 'password step asks for the code, no cookie yet'); const chal = r.json().challenge;
+      r = await post('/login', { challenge: chal, code: '123456' }); assert.strictEqual(r.status, 401, 'wrong code');
+      r = await post('/login', { challenge: chal, code: TOTP.code(tf.secret, TOTP.stepOf()) }); assert.strictEqual(r.status, 401, 'the code used to enrol cannot be replayed');
+      r = await post('/login', { challenge: chal, code: TOTP.code(tf.secret, TOTP.stepOf() + 1) }); assert(r.status === 200 && r.headers['set-cookie'], 'correct code signs in');
+      r = await post('/login', { username: 'admin1', password: 'admin password 123' }); r = await post('/login', { challenge: r.json().challenge, code: rec[0] }); assert.strictEqual(r.status, 200, 'recovery code signs in');
+      r = await post('/login', { username: 'admin1', password: 'admin password 123' }); r = await post('/login', { challenge: r.json().challenge, code: rec[0] }); assert.strictEqual(r.status, 401, 'a recovery code works once');
+      assert.strictEqual((await post('/login', { challenge: 'forged', code: '123456' })).status, 401, 'unknown challenge');
+      // lockout of one account (the IP limiter is set high here)
+      for (let i = 0; i < 5; i++) await post('/login', { username: 'viewer1', password: 'nope nope nope ' + i });
+      r = await post('/login', { username: 'viewer1', password: 'viewer password 123' }); assert(r.status === 429 && +r.headers['retry-after'] > 0, 'account locked after repeated failures, even for the right password');
+      eq((await post('/login', { username: 'nobody-here', password: 'x' })).status, 401, 'other accounts are not affected');
+      // sessions: list, revoke, password reset signs the user out
+      r = await call(ownerCk, 'webSessions'); const ss = r.json().data; assert(ss.length >= 3 && ss.every((x) => x.handle && !('id' in x) && !('cookie' in x)) && ss.some((x) => x.current), 'sessions listed with safe handles');
+      r = await call(ownerCk, 'webUserPassword', 'viewer1', 'new viewer password 9'); assert(r.json().ok); assert.strictEqual((await call(viewerCk, 'list')).status, 401, 'password reset signs the account out everywhere');
+      const hv = ss.find((x) => x.user === 'admin1'); r = await call(ownerCk, 'webSessionRevoke', hv.handle); assert(r.json().ok);
+      // changing your own password needs the old one and signs the others out
+      r = await call(o2, 'webPasswordChange', 'bad old password', 'brand new password 1'); assert(!r.json().ok, 'old password required'); r = await call(o2, 'webPasswordChange', 'correct horse battery', 'brand new password 1'); assert(r.json().ok); assert.strictEqual((await call(ownerCk, 'list')).status, 401, 'other sessions signed out after a password change'); assert.strictEqual((await call(o2, 'list')).status, 200, 'the current session stays');
+      // require 2FA: an account without it only gets the account page
+      SA.webAccess.setRequire2fa(true);
+      r = await post('/login', { username: 'viewer1', password: 'new viewer password 9' }); assert(r.status === 200 && r.json().limited === true, 'login flags the session as limited'); const limCk = ck(r);
+      assert.strictEqual((await call(limCk, 'list')).status, 403, 'limited session cannot use the app'); assert((await call(limCk, 'webAccount')).json().data.limited, 'but can read its account');
+      r = await rq(pa, 'GET', '/', { headers: { Cookie: limCk } }); assert(r.status === 302 && r.headers.location === '/account.html', 'index redirects to the account page'); assert.strictEqual((await rq(pa, 'GET', '/account.html', { headers: { Cookie: limCk } })).status, 200);
+      assert.strictEqual((await rq(pa, 'GET', '/account.html')).status, 302, 'account page needs a session');
+      r = await call(limCk, 'webTotpBegin'); r = await call(limCk, 'webTotpConfirm', TOTP.code(r.json().data.secret, TOTP.stepOf())); assert(r.json().ok); assert.strictEqual((await call(limCk, 'list')).status, 200, 'enrolling lifts the restriction');
+      r = await call(limCk, 'webTotpDisable', 'new viewer password 9'); assert(!r.json().ok && /required/.test(r.json().error), '2FA cannot be turned off while required');
+      SA.webAccess.setRequire2fa(false);
+      // audit trail: events recorded, never a secret
+      const logs = fs.readdirSync(path.join(ad, 'logs')).filter((f) => /^ngsm-/.test(f)).map((f) => fs.readFileSync(path.join(ad, 'logs', f), 'utf8')).join('\n');
+      assert(/web:login-failed/.test(logs) && /web:login"/.test(logs) && /web:user-created/.test(logs) && /web:password-reset/.test(logs), 'sign-ins, failures and account changes are in the NGSM log'); assert(!/correct horse|admin password|viewer password|new viewer|brand new/.test(logs) && !logs.includes(TOKEN), 'no password or token in the log');
+      // settings sanitising and platform feature flag
+      const SET = require('../src/main/settings'); eq(SET.sanitize({ web: { enabled: true, host: 'bad host!', port: 70000, https: 1, require2fa: true } }).web, { enabled: true, host: '127.0.0.1', port: 8730, https: false, trustProxy: false, require2fa: true, sessionHours: 12 }, 'web settings sanitised (safe defaults)'); eq(SET.DEFAULTS.web.enabled, false, 'web access is off by default');
+      assert(require('../src/main/core').platformInfo('desktop').features.webAccess === true && require('../src/main/core').platformInfo('web').features.webAccess === false, 'only the desktop app shows the server controls');
+      for (const f of ['src/renderer/account.html', 'src/renderer/account.js', 'src/renderer/webAccessView.js', 'src/server/users.js', 'src/server/totp.js', 'src/server/webAccess.js']) assert(fs.existsSync(path.join(R, f)), f + ' exists');
+      await SA.close(); fs.rmSync(ad, { recursive: true, force: true });
+      // embedded in the desktop app: the app's own core + WebAccess are shared, closing the web server does not stop the game servers
+      const ed = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-emb-')); const { createCore: mkCore } = require('../src/main/core'); const { WebAccess: WA } = require('../src/server/webAccess');
+      const ecore = mkCore({ dataDir: ed, mode: 'desktop' }); let coreStopped = false; ecore.stop = async () => { coreStopped = true; };
+      const ewa = new WA({ dataDir: ed, token: TOKEN }); const SE = await startServer({ core: ecore, webAccess: ewa, dataDir: ed, port: 0, startCore: false });
+      assert(SE.webAccess === ewa && SE.core === ecore, 'embedded server uses the app core and WebAccess'); assert.strictEqual((await rq(SE.port, 'POST', '/login', { headers: { ...J, Origin: `http://127.0.0.1:${SE.port}` }, body: JSON.stringify({ token: TOKEN }) })).status, 200);
+      eq(ewa.api({ local: true }).webTokenInfo().token, TOKEN, 'the desktop window can show the token'); assert.throws(() => ewa.api({ local: false, user: 'x', role: 'owner' }).webTokenInfo(), /desktop app/, 'a browser cannot read the token');
+      await ewa.users.create({ username: 'desk1', password: 'desktop created 12', role: 'owner' }); assert.strictEqual(ewa.users.list().length, 1, 'the desktop (local owner) can create accounts');
+      await SE.close(); assert(!coreStopped, 'closing the embedded web server leaves the app core running'); fs.rmSync(ed, { recursive: true, force: true });
+    }
     // files and docs exist
     for (const f of ['Dockerfile', '.dockerignore', 'docker-compose.example.yml', 'deploy/nodegsm.service', 'deploy/nginx.conf.example', 'docs/GUIDE-web-linux.md', 'src/renderer/transport-web.js', 'src/renderer/login.html', 'src/renderer/login.js']) assert(fs.existsSync(path.join(R, f)), f + ' exists');
     const df = fs.readFileSync(path.join(R, 'Dockerfile'), 'utf8'); assert(/node:20-slim/.test(df) && /USER /.test(df) && /VOLUME/.test(df) && /8730/.test(df) && /healthz/.test(df), 'Dockerfile basics');
     const pj9 = JSON.parse(fs.readFileSync(path.join(R, 'package.json'), 'utf8')); assert(pj9.scripts.serve && pj9.scripts['serve:dev'] && pj9.bin.nodegsm && /^\d+\.\d+\.\d+$/.test(pj9.dependencies.ws), 'package.json: serve scripts, bin and a pinned ws');
     fs.rmSync(hdir, { recursive: true, force: true });
+  }
+
+  // ---- scheduled backups ----
+  {
+    const SET = require('../src/main/settings'); const { ServerManager: SM } = require('../src/main/serverManager');
+    assert.throws(() => SET.sanitizeBackupSchedule({ enabled: true, cron: 'nope' }), /5 fields/, 'cron needs 5 fields'); assert.throws(() => SET.sanitizeBackupSchedule({ cron: '99 * * * *' }), /Invalid cron/, 'invalid cron refused');
+    eq(SET.sanitizeBackupSchedule({ enabled: true, cron: ' 0 4 * * * ', options: { mode: 'neatpick', presets: ['a', 'a', 5], paths: ['x'] } }), { enabled: true, cron: '0 4 * * *', options: { mode: 'neatpick', presets: ['a'], paths: ['x'], exclude: [] } }, 'schedule sanitised');
+    eq(SET.sanitizeBackupSchedule(null), { enabled: false, cron: '0 4 * * *', options: { mode: 'full', presets: [], paths: [], exclude: [] } }, 'schedule defaults to off');
+    const sd = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-sched-')); const sm = new SM(sd); const sv = sm.create('csgo', 'Sched');
+    sm.saveConfig(sv.id, { backupSchedule: { enabled: true, cron: '30 4 * * *', options: { mode: 'full' } } }); eq(sm.getConfig(sv.id).backupSchedule.cron, '30 4 * * *', 'schedule is saved per server');
+    assert.throws(() => sm.saveConfig(sv.id, { backupSchedule: { enabled: true, cron: 'bad' } }), /cron/, 'a bad schedule is not saved');
+    const calls = []; sm.backup = async (i, o) => { calls.push([i, o.mode]); };
+    sm.scheduledBackupTick(new Date(2026, 0, 5, 4, 29, 30)); eq(calls.length, 0, 'not due');
+    sm.scheduledBackupTick(new Date(2026, 0, 5, 4, 30, 10)); eq(calls, [[sv.id, 'full']], 'runs at the scheduled minute');
+    sm.scheduledBackupTick(new Date(2026, 0, 5, 4, 30, 40)); eq(calls.length, 1, 'only once per minute');
+    sm.rt(sv.id).busy = 'Updating'; sm.scheduledBackupTick(new Date(2026, 0, 6, 4, 30, 5)); eq(calls.length, 1, 'skipped while the server is busy'); sm.rt(sv.id).busy = null;
+    sm.cronTick(new Date(2026, 0, 7, 4, 30, 5)); eq(calls.length, 2, 'cronTick drives scheduled backups');
+    assert(sm.bk().info(sv.id).nextRun > Date.now() - 1000, 'info reports the next run');
+    sm.saveConfig(sv.id, { backupSchedule: { enabled: false, cron: '30 4 * * *' } }); sm.scheduledBackupTick(new Date(2026, 0, 8, 4, 30, 5)); eq(calls.length, 2, 'disabled schedule does nothing'); eq(sm.bk().info(sv.id).nextRun, 0);
+    fs.rmSync(sd, { recursive: true, force: true });
+  }
+
+  // ---- plugin logging.logFiles scanning ----
+  {
+    const { EventLog: EL } = require('../src/main/services/eventLog'); const { EventEmitter: EE } = require('events');
+    const ld = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-lf-')); const files = path.join(ld, 'files'); fs.mkdirSync(path.join(files, 'logs'), { recursive: true });
+    const bus = new EE(); let running = true;
+    const fm = Object.assign(new EE(), { events: bus, ids: () => ['7'], isRunning: () => running, getConfig: () => ({ game: 'g', name: 'LogSrv' }), filesDir: () => files, settings: {} });
+    const fp = { byId: () => ({ logging: { logFiles: ['logs/*.log'], patterns: [{ id: 'sud', regex: 'stopped suddenly', level: 'error' }] }, events: [] }) };
+    const el = new EL(fm, fp, fm.settings, ld); const seen = []; bus.on('ngsm:log', (r) => seen.push(r));
+    fs.writeFileSync(path.join(files, 'logs', 'a.log'), 'old line: stopped suddenly\n');
+    el.scanFiles(); eq(seen.length, 0, 'first look starts at the end of the file (history is not replayed)');
+    fs.appendFileSync(path.join(files, 'logs', 'a.log'), 'fine\nthe server stopped suddenly now\npart');
+    el.scanFiles(); eq(seen.map((r) => [r.event, r.serverId, r.level]), [['pattern:sud', '7', 'error']], 'a new matching line in the log file is logged');
+    fs.appendFileSync(path.join(files, 'logs', 'a.log'), 'ial line\n'); el.scanFiles(); eq(seen.length, 1, 'a half written line is completed before matching');
+    el.patternSeen.clear(); fs.writeFileSync(path.join(files, 'logs', 'a.log'), 'x stopped suddenly\n'); el.scanFiles(); eq(seen.length, 2, 'a truncated / rotated file is read from its start');
+    running = false; el.scanFiles(); eq(el.logScan.size, 0, 'stopped servers are forgotten');
+    running = true; el.patternSeen.clear(); fs.appendFileSync(path.join(files, 'logs', 'a.log'), 'again stopped suddenly\n'); el.scanFiles(); eq(seen.length, 2, 'after a restart the scan starts at the end again');
+    fs.rmSync(ld, { recursive: true, force: true });
   }
 
   // ---- catalogue client (plugins come from the Catalogue repository; here a local folder stands in for it) ----

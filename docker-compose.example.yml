@@ -1,5 +1,6 @@
 # Copy to docker-compose.yml and adjust. Start: docker compose up -d --build
-# The first start prints the access token in the log:  docker compose logs nodegsm
+# The first start prints the access token in the log (docker compose logs nodegsm). Open the page and create the owner account:
+# the setup form asks for that token once. For a public site also set NODEGSM_REQUIRE_2FA=1 behind an HTTPS proxy.
 services:
   nodegsm:
     build: .

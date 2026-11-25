@@ -218,7 +218,8 @@ class BackupService {
   info(id) {
     const c = this.mgr.getConfig(id); if (!c) throw new Error('Server not found');
     const g = this.plugins.byId(c.game);
-    return { presets: ((g && g.backup && g.backup.presets) || []).map((p) => ({ id: p.id, name: p.name, paths: p.paths })), exclude: (g && g.backup && g.backup.exclude) || [], keep: Number(c.backupKeep) || 0 };
+    return { presets: ((g && g.backup && g.backup.presets) || []).map((p) => ({ id: p.id, name: p.name, paths: p.paths })), exclude: (g && g.backup && g.backup.exclude) || [], keep: Number(c.backupKeep) || 0,
+      schedule: c.backupSchedule || { enabled: false, cron: '0 4 * * *', options: { mode: 'full' } }, nextRun: c.backupSchedule && c.backupSchedule.enabled ? require('../serverManager').ServerManager.cronNext(c.backupSchedule.cron) : 0 };
   }
 
   // ---------- backup ----------

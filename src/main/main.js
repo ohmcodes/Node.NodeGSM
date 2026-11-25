@@ -4,7 +4,9 @@ const path = require('path');
 const platform = require('./platform');
 const appSettings = require('./settings');
 const { shouldRestart } = require('./crash');
-const { createCore } = require('./core');
+const { createCore, headlessHost } = require('./core');
+const { startServer } = require('../server/headless');
+const { WebAccess } = require('../server/webAccess');
 
 // Keep using the pre-rename data folder if it exists so existing servers/downloads are not orphaned (platform.defaultDataDir).
 const dataDir = platform.defaultDataDir({ appData: app.getPath('appData') });
@@ -13,6 +15,8 @@ if (!earlySettings.hardwareAcceleration) app.disableHardwareAcceleration();
 nativeTheme.themeSource = earlySettings.theme; // dialogs / menus follow the chosen theme
 
 let core; let mgr; let win; let tray; let quitting = false;
+let webAccess; let web = null; let webState = { running: false, url: '', host: '', port: 0, error: '' };
+const startHidden = process.argv.includes('--hidden');   // launched by the Windows login item: stay in the tray
 const BG = { dark: '#14161c', light: '#f3f5f9' };
 const currentBg = () => BG[appSettings.resolveTheme(mgr ? mgr.settings.theme : earlySettings.theme, nativeTheme.shouldUseDarkColors)];
 
@@ -39,7 +43,7 @@ process.on('unhandledRejection', (e) => onCrash('unhandledRejection', e));
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: currentBg(), title: 'NodeGSM', icon: path.join(__dirname, '..', '..', 'assets', 'icon.png'),
+    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: currentBg(), title: 'NodeGSM', show: !startHidden, icon: path.join(__dirname, '..', '..', 'assets', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.setMenuBarVisibility(false);
@@ -51,6 +55,22 @@ function createWindow() {
     if (mgr.settings.autoRestartApp && !win.isDestroyed()) win.reload();
   });
   win.on('close', (e) => { if (!quitting && mgr.settings.minimizeToTray) { e.preventDefault(); win.hide(); } });
+}
+
+const isLoopbackHost = (h) => /^(127\.\d+\.\d+\.\d+|::1|localhost)$/i.test(h);
+/** (Re)start or stop the browser access to match settings.web. Never throws: the reason is kept in webState and shown in Settings. */
+async function applyWeb() {
+  const w = mgr.settings.web;
+  if (web) { try { await web.close(); } catch { /* closing */ } web = null; }
+  webState = { running: false, url: '', host: w.host, port: w.port, error: '' };
+  webAccess.setRequire2fa(w.require2fa); webAccess.sessions.ttlMs = w.sessionHours * 3600 * 1000;
+  if (!w.enabled) return;
+  if (!isLoopbackHost(w.host) && !webAccess.hasAccounts) { webState.error = 'Create an owner account first (Web access > Accounts), then listen on a network address.'; return; }
+  try {
+    web = await startServer({ core, webAccess, dataDir, host: w.host, port: w.port, https: w.https, trustProxy: w.trustProxy, require2fa: w.require2fa, sessionHours: w.sessionHours, startCore: false });
+    const shown = w.host === '0.0.0.0' || w.host === '::' ? 'localhost' : w.host;
+    webState = { running: true, host: w.host, port: web.port, url: `${w.https ? 'https' : 'http'}://${shown.includes(':') ? `[${shown}]` : shown}:${web.port}`, error: '' };
+  } catch (e) { webState.error = e.code === 'EADDRINUSE' ? `Port ${w.port} is already in use.` : e.message; }
 }
 
 function send(ch, payload) { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); }
@@ -66,15 +86,24 @@ app.whenReady().then(() => {
   core = createCore({ dataDir, mode: 'desktop' });
   mgr = core.mgr;
   core.hub.on(send);
+  webAccess = new WebAccess({ dataDir, sessionHours: mgr.settings.web.sessionHours, require2fa: mgr.settings.web.require2fa, audit: (level, event, message, detail) => core.eventLog.log({ level, event, message, detail }) });
   const api = core.buildApi({
     shell, dialog, app, nativeTheme, currentBg,
     getWin: () => win,
     beforeRelaunch: () => { quitting = 'done'; },
   });
-  for (const [name, fn] of Object.entries(api)) handle(name, fn);
+  for (const [name, fn] of Object.entries(api)) {
+    if (name === 'saveSettings') handle(name, async (p) => { const before = JSON.stringify(mgr.settings.web); const r = fn(p); if (JSON.stringify(mgr.settings.web) !== before) await applyWeb(); return r; });
+    else handle(name, fn);
+  }
+  // account management for the browser access: the desktop window is the local owner (no sign-in needed)
+  const localWeb = webAccess.api({ local: true });
+  for (const [name, fn] of Object.entries(localWeb)) handle(name, fn);
+  handle('webServerStatus', () => ({ ...webState, accounts: webAccess.hasAccounts, defaults: { host: '127.0.0.1', port: 8730 } }));
 
   createWindow();
   core.start();
+  applyWeb();
 
   // tray: 16 px image + 32 px representation for high-DPI screens (falls back to resizing the 256 px icon)
   const assetsDir = path.join(__dirname, '..', '..', 'assets');
@@ -94,6 +123,7 @@ app.on('before-quit', async (e) => {
   if (quitting === 'done') return;
   e.preventDefault();
   quitting = true;
+  try { if (web) await web.close(); } catch {}
   try { await core.stop(); } catch {}
   quitting = 'done';
   app.quit();

@@ -17,11 +17,12 @@ npm test        # tests + plugin validation
 NodeGSM also runs without Electron as a headless server you control from a browser, on Windows or Linux:
 ```
 npm ci --omit=dev      # no Electron needed
-npm run serve          # http://127.0.0.1:8730 - the first start prints the access token once
+npm run serve          # http://127.0.0.1:8730 - the first start prints the access token once; open the page and create the owner account
 ```
-- Login with the access token (`NODEGSM_TOKEN`, or generated into `<data>/web-token`), session cookie, rate-limited. Binds `127.0.0.1` by default; it refuses a public bind without authentication. There is **no built-in TLS**: put a reverse proxy in front (`deploy/nginx.conf.example`).
+- **Accounts:** the first visit shows a setup page (the access token printed on first start, or `NODEGSM_TOKEN`, is needed once) to create the owner account. After that people sign in with username + password, optionally with an authenticator app (TOTP). Roles: owner, admin, viewer. Lockout, rate limit and an audit trail in the NGSM log. Binds `127.0.0.1` by default; it refuses a public bind without authentication. There is **no built-in TLS**: put a reverse proxy in front (`deploy/nginx.conf.example`) and read [Putting NodeGSM on the internet](docs/GUIDE-web-linux.md#putting-nodegsm-on-the-internet) before exposing it.
+- **From the desktop app:** **Settings > Web access** serves the same page from the running exe (no second program). It starts with the app; with *Start NodeGSM on Windows login* the app starts in the tray, so the page is back after a reboot and sign-in. Network access is refused until an owner account exists.
 - Docker: `docker compose -f docker-compose.example.yml up -d --build` (see `Dockerfile`); systemd: `deploy/nodegsm.service`.
-- **Security notes:** the token gives full control of your game servers (files, console, RCON) - use a long token, TLS, a dedicated unprivileged user and publish only the game ports. Desktop-only features (folder picker, open in Explorer, tray, start on login, restart) are hidden in web mode.
+- **Security notes:** an owner or admin account gives full control of your game servers (files, console, RCON) - use strong passwords, two-factor, TLS, a dedicated unprivileged user and publish only the game ports. Desktop-only features (folder picker, open in Explorer, tray, start on login, restart) are hidden in web mode.
 - **Linux is declared but untested:** the platform layer is unit-tested only and the games `mc`, `csgo`, `rust`, `palworld` are *declared, untested* for Linux. Everything else stays Windows only. Full guide: [docs/GUIDE-web-linux.md](docs/GUIDE-web-linux.md).
 
 ## Build an exe
@@ -87,8 +88,8 @@ If your data is still in the folder used by builds from before the rename (`%APP
 
 ## Not done yet
 Planned or open (see [FEATURES.md](FEATURES.md) and [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md)):
-- **Web / Linux version:** built (🧪): the headless server, login, Docker / systemd / nginx files and the Linux platform layer exist, but nothing was run on a real Linux machine and only four games are declared for Linux. See [docs/GUIDE-web-linux.md](docs/GUIDE-web-linux.md).
-- **Scheduled (cron) backups**, scanning of `logging.logFiles`, a mod manager, Steam account login, an online plugin repository, published releases.
+- **Web / Linux version:** built (🧪): the headless server, login, Docker / systemd / nginx files and the Linux platform layer exist, but nothing was run on a real Linux machine and only four games are declared for Linux. Web access in the desktop app and the accounts / 2FA were tested headless only (not on a public host). See [docs/GUIDE-web-linux.md](docs/GUIDE-web-linux.md).
+- A mod manager, Steam account login, an online plugin repository, published releases.
 - **Untested against the real thing** (marked 🧪 in FEATURES.md): clusters, config sync, the Discord bot and webhooks, RCON and tick patterns, large backups, auto-clear on live servers. Use [docs/TESTING-CHECKLIST.md](docs/TESTING-CHECKLIST.md).
 
 ## Notes

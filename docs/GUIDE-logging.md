@@ -25,4 +25,6 @@ Filters: server, level, event, text. **Auto refresh** polls every 3 seconds. **E
 - Retention: files older than `logging.retentionDays` (default **30**) are deleted when NodeGSM starts and then once a day. Change it in `settings.json` (`"logging": { "retentionDays": 14 }`).
 
 ## Plugin patterns
+Patterns are matched against console lines **and** against the new lines of the files in `logging.logFiles` (checked every 2 seconds while the server runs; history from before the server started is not replayed).
+
 A game plugin can declare `logging.patterns` - regular expressions matched against the server's **console output**. A match creates a log entry (level from the pattern) so, for example, "stopped suddenly" or "player joined" lines appear in the Logs screen. The same pattern is logged at most once per 10 seconds per server so a noisy line cannot flood the log. If a pattern has the same id as one of the plugin's `events`, it is also available as a Discord alert. See [PLUGINS.md](../PLUGINS.md).

@@ -96,4 +96,4 @@ class LogTail extends EventEmitter {
   shutdown() { for (const s of this.subs.values()) clearInterval(s.timer); this.subs.clear(); }
 }
 
-module.exports = { LogTail, resolveLog, globToRegex };
+module.exports = { LogTail, resolveLog, globToRegex, decode };

@@ -36,31 +36,54 @@ function loadToken(dataDir, env = process.env) {
   return { token, source: 'generated' };
 }
 
-/** Sessions: random id kept in memory, cookie = id.HMAC(secret, id) so a forged cookie is rejected without a lookup. */
+/**
+ * Sessions: random id kept in memory, cookie = id.HMAC(secret, id) so a forged cookie is rejected without a lookup.
+ * Each session carries the account (user / role), when it was created / last used, the client address and browser, so the
+ * owner can list and revoke them. ttlMs = absolute lifetime, idleMs = sign out after this long without a request (0 = off).
+ */
 class Sessions {
-  constructor({ ttlMs = 12 * 3600 * 1000, now = Date.now } = {}) {
-    this.ttlMs = ttlMs; this.now = now;
+  constructor({ ttlMs = 12 * 3600 * 1000, idleMs = 0, now = Date.now } = {}) {
+    this.ttlMs = ttlMs; this.idleMs = idleMs; this.now = now;
     this.secret = crypto.randomBytes(32);
-    this.map = new Map();   // id -> expiresAt
+    this.map = new Map();   // id -> { exp, user, role, created, last, ip, ua }
   }
   sign(id) { return crypto.createHmac('sha256', this.secret).update(id).digest('base64url'); }
-  create() {
-    const id = crypto.randomBytes(24).toString('base64url');
-    this.map.set(id, this.now() + this.ttlMs);
+  create(meta = {}) {
+    const id = crypto.randomBytes(24).toString('base64url'); const t = this.now();
+    this.map.set(id, { exp: t + this.ttlMs, user: meta.user || '', role: meta.role || 'owner', created: t, last: t, ip: String(meta.ip || '').slice(0, 64), ua: String(meta.ua || '').slice(0, 160), limited: !!meta.limited });
     return `${id}.${this.sign(id)}`;
   }
-  valid(cookieValue) {
+  /** The live session entry for a cookie (and marks it as used), or null. */
+  get(cookieValue, touch = true) {
     const v = String(cookieValue || ''); const i = v.indexOf('.');
-    if (i < 1) return false;
+    if (i < 1) return null;
     const id = v.slice(0, i);
-    if (!safeEqual(v.slice(i + 1), this.sign(id))) return false;
-    const exp = this.map.get(id);
-    if (!exp) return false;
-    if (exp <= this.now()) { this.map.delete(id); return false; }
-    return true;
+    if (!safeEqual(v.slice(i + 1), this.sign(id))) return null;
+    const e = this.map.get(id); if (!e) return null;
+    const t = this.now();
+    if (e.exp <= t || (this.idleMs && t - e.last > this.idleMs)) { this.map.delete(id); return null; }
+    if (touch) e.last = t;
+    e.id = id;
+    return e;
   }
+  valid(cookieValue, touch = true) { return !!this.get(cookieValue, touch); }
   destroy(cookieValue) { const v = String(cookieValue || ''); this.map.delete(v.slice(0, Math.max(0, v.indexOf('.')))); }
-  sweep() { const t = this.now(); for (const [k, e] of this.map) if (e <= t) this.map.delete(k); }
+  /** Sessions of one account (all when user is omitted), safe to show: the public handle is a hash, never the cookie. */
+  list(user) {
+    return [...this.map.entries()].filter(([, e]) => !user || e.user === user)
+      .map(([id, e]) => ({ handle: crypto.createHash('sha256').update(id).digest('hex').slice(0, 16), user: e.user, role: e.role, created: e.created, last: e.last, ip: e.ip, ua: e.ua }));
+  }
+  /** Revoke every session of `user` (or one by public handle). Returns how many were removed. */
+  revoke({ user, handle, exceptCookie } = {}) {
+    const keep = exceptCookie ? String(exceptCookie).slice(0, Math.max(0, String(exceptCookie).indexOf('.'))) : '';
+    let n = 0;
+    for (const [id, e] of [...this.map]) {
+      if (id === keep) continue;
+      if ((user && e.user === user) || (handle && crypto.createHash('sha256').update(id).digest('hex').slice(0, 16) === handle)) { this.map.delete(id); n++; }
+    }
+    return n;
+  }
+  sweep() { const t = this.now(); for (const [k, e] of this.map) if (e.exp <= t || (this.idleMs && t - e.last > this.idleMs)) this.map.delete(k); }
 }
 
 /** Failed-attempt limiter per key (client IP): after maxFailures within windowMs the key is locked for lockMs. */

@@ -10,11 +10,23 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body class="login-page" style="display:flex;align-items:center;justify-content:center;min-height:100vh">
-<form id="loginForm" autocomplete="off" style="width:min(380px,92vw);padding:28px;border:1px solid var(--line);border-radius:12px;background:var(--panel)">
+<form id="loginForm" autocomplete="on" style="width:min(380px,92vw);padding:28px;border:1px solid var(--line);border-radius:12px;background:var(--panel)">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><img src="/assets/logo.svg" alt="" width="34" height="34"><h2 style="margin:0">Node<b>GSM</b></h2></div>
-  <p class="muted" style="margin:0 0 16px">Enter the access token printed on first start (or set in <code>NODEGSM_TOKEN</code>).</p>
-  <label for="loginToken" class="small">Access token</label>
-  <input id="loginToken" type="password" autocomplete="current-password" required style="width:100%;margin:6px 0 14px">
+  <p id="loginHint" class="muted" style="margin:0 0 16px">Sign in with your account.</p>
+  <div id="fToken" hidden>
+    <label for="loginToken" class="small">Access token (printed on first start, or in the file <code>web-token</code> in the data folder)</label>
+    <input id="loginToken" type="password" autocomplete="off" style="width:100%;margin:6px 0 14px">
+  </div>
+  <div id="fUser">
+    <label for="loginUser" class="small">Username</label>
+    <input id="loginUser" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" style="width:100%;margin:6px 0 14px">
+    <label for="loginPass" class="small" id="lblPass">Password</label>
+    <input id="loginPass" type="password" autocomplete="current-password" style="width:100%;margin:6px 0 14px">
+  </div>
+  <div id="fCode" hidden>
+    <label for="loginCode" class="small">Code from your authenticator app (or a recovery code)</label>
+    <input id="loginCode" type="text" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" style="width:100%;margin:6px 0 14px">
+  </div>
   <button id="loginBtn" type="submit" class="primary" style="width:100%">Sign in</button>
   <p id="loginMsg" role="alert" style="color:var(--bad);min-height:1.2em;margin:12px 0 0"></p>
 </form>

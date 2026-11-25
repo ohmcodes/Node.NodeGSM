@@ -4,6 +4,7 @@
 // Other services (backup, cluster, discord bot, auto-clear) record their own entries through log(entry).
 const fs = require('fs');
 const path = require('path');
+const { resolveLog, decode } = require('../logTail');
 
 const LEVELS = ['info', 'warn', 'error'];
 const FILE_RE = /^ngsm-(\d{4}-\d{2}-\d{2})\.log$/;
@@ -11,6 +12,8 @@ const MAX_MESSAGE = 1000;
 const MAX_DETAIL = 4000;
 const PATTERN_COOLDOWN_MS = 10000;   // the same pattern on the same server is logged at most once per 10 s
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SCAN_MS = 2000;                 // logging.logFiles are checked every 2 s
+const SCAN_MAX_BYTES = 256 * 1024;    // at most this much new data per file per check
 
 /** server:* bus event -> { level, message(payload) } */
 const EVENT_MAP = {
@@ -44,6 +47,8 @@ class EventLog {
     this.handlers = []; this.timer = null; this.consoleHandler = null;
     this.patternSeen = new Map();   // "<server>|<pattern>" -> last logged ms
     this.regexCache = new Map();    // game id -> [{ id, re, level }]
+    this.logScan = new Map();       // "<server>|<logFiles entry>" -> { file, pos, partial } (plugin logging.logFiles scanning)
+    this.scanTimer = null;
   }
 
   get settings() { return (this.mgr && this.mgr.settings) || {}; }
@@ -64,6 +69,8 @@ class EventLog {
     this.prune();
     this.timer = setInterval(() => this.prune(), DAY_MS);
     if (this.timer.unref) this.timer.unref();
+    this.scanTimer = setInterval(() => { try { this.scanFiles(); } catch { /* never break the app */ } }, SCAN_MS);
+    if (this.scanTimer.unref) this.scanTimer.unref();
   }
 
   /** Unsubscribe and stop timers. */
@@ -76,6 +83,8 @@ class EventLog {
     this.consoleHandler = null;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.scanTimer) clearInterval(this.scanTimer);
+    this.scanTimer = null; this.logScan.clear();
   }
 
   fileFor(date) { return path.join(this.dir, `ngsm-${dayOf(date)}.log`); }
@@ -138,6 +147,43 @@ class EventLog {
       // a pattern whose id matches a declared plugin event becomes "game:<id>" (can be sent to Discord); others stay "pattern:<id>"
       this.log({ level: p.level, event: events.has(p.id) ? `game:${p.id}` : `pattern:${p.id}`, serverId: String(id), serverName: c.name, message: String(line).slice(0, 500), detail: { pattern: p.id } });
     }
+  }
+
+  /**
+   * Plugin `logging.logFiles`: read the new lines of the game's own log files (relative to the server files, newest match of a
+   * "*" name) and match them with the same `logging.patterns` as console lines. Only running servers are scanned; the first look
+   * at a file starts at its end (old history is not replayed), a rotated or truncated file is read from its start.
+   */
+  scanFiles() {
+    const live = new Set();
+    for (const id of this.mgr.ids()) {
+      if (!this.mgr.isRunning(id)) continue;
+      const c = this.mgr.getConfig(id); if (!c || !c.game) continue;
+      const g = this.plugins && this.plugins.byId ? this.plugins.byId(c.game) : null;
+      const files = (g && g.logging && g.logging.logFiles) || [];
+      if (!files.length || !this.patternsFor(c.game).list.length) continue;
+      const root = this.mgr.filesDir(id);
+      for (const rel of files) {
+        const key = `${id}|${rel}`; live.add(key);
+        const f = resolveLog(root, rel);
+        let st = this.logScan.get(key);
+        if (!f) { if (st) { st.file = null; st.pos = 0; st.partial = ''; } continue; }
+        let size; try { size = fs.statSync(f).size; } catch { continue; }
+        if (!st) { this.logScan.set(key, { file: f, pos: size, partial: '' }); continue; }
+        if (st.file !== f) { st.file = f; st.pos = 0; st.partial = ''; }
+        if (size < st.pos) { st.pos = 0; st.partial = ''; }
+        if (size === st.pos) continue;
+        const prev = st.pos; const start = Math.max(prev, size - SCAN_MAX_BYTES);
+        let fd; try { fd = fs.openSync(f, 'r'); } catch { continue; }
+        let text;
+        try { const buf = Buffer.alloc(size - start); fs.readSync(fd, buf, 0, buf.length, start); text = decode(buf); } catch { continue; } finally { fs.closeSync(fd); }
+        st.pos = size;
+        const parts = ((start === prev ? st.partial : '') + text).split(/\r?\n/);
+        st.partial = parts.pop() || '';
+        for (const line of parts) if (line) this.scanLine(id, line);
+      }
+    }
+    for (const k of [...this.logScan.keys()]) if (!live.has(k)) this.logScan.delete(k);   // stopped server: look again from the end next time
   }
 
   // ---------- retention ----------

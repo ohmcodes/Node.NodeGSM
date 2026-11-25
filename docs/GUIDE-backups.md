@@ -24,6 +24,16 @@ Backups are written as a stream, so they do not need to fit in memory. Files tha
 
 The Table view's **Backup** button and *Backup on start* make a Full backup.
 
+## Scheduled backups
+
+Backups tab > **Scheduled backup**: tick **Back up automatically**, choose how often (every day at 04:00, every 6 / 12 hours, hourly, every Sunday, or **Custom (cron)** with five fields: minute hour day-of-month month day-of-week) and press **Save schedule**.
+- The schedule uses the options set on the same tab when you press Save schedule: **Full**, or **Neat pick** with its presets / folders / exclude patterns and the "Include server settings" tick. Change the options, press Save schedule again.
+- Times are in this computer's local time. The tab shows the next run.
+- It runs whether the server is running or stopped. If the server is busy (updating, installing, another backup) that run is skipped and noted in the server console.
+- A run that was due while NodeGSM was not running is **not** made up.
+- **Keep the newest N backups** applies to scheduled backups too; set it, otherwise the disk fills up.
+- Each backup shows up in the Logs screen as `server:backup`. Failures are written to the server console ("Scheduled backup failed: ...").
+
 ## Restore
 * **Restore** (into the same server): the server is stopped, then the files from the zip are written over the current ones. Files that are not in the backup stay. Full restores everything; Neat pick only touches the backed-up files and **needs the game to be installed** ("install the game first, then restore"). If the backup holds server settings you are asked whether to restore them too (default: keep the current ones).
 * **Restore as new server**: creates a new server (new id) from the backup's game and name (you can rename it).

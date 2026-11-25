@@ -1,7 +1,9 @@
 # systemd unit for the NodeGSM headless server (web mode).
 # Install:  sudo useradd --system --create-home --home-dir /var/lib/nodegsm nodegsm
 #           sudo cp deploy/nodegsm.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now nodegsm
-# First token:  sudo journalctl -u nodegsm | grep -A2 "access token"   (or read /var/lib/nodegsm/web-token)
+# First start: open the page and create the owner account; the setup form asks once for the access token:
+#   sudo journalctl -u nodegsm | grep -A2 "access token"   (or read /var/lib/nodegsm/web-token)
+# For a public site add NODEGSM_HTTPS=1 NODEGSM_TRUST_PROXY=1 NODEGSM_REQUIRE_2FA=1 (see docs/GUIDE-web-linux.md)
 [Unit]
 Description=NodeGSM game server manager (web mode)
 After=network-online.target

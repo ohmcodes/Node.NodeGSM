@@ -149,7 +149,9 @@ The headless server ([`src/server/headless.js`](../src/server/headless.js), `npm
 | Endpoint | Auth | Description |
 |---|---|---|
 | `GET /healthz` | none | `{ "ok": true }` and nothing else (Docker / monitoring health check) |
-| `POST /login` | none (rate limited) | Body `{ "token": "..." }`. 200 sets the session cookie; 401 wrong token; 429 locked (`Retry-After` seconds); 403 cross-origin; 415 not JSON |
+| `GET /auth/status` | none | `{ ok, setup, auth }`: `setup` is true while no account exists (the login page then shows the setup form) |
+| `POST /setup` | none (rate limited) | Body `{ token, username, password }`: creates the first owner (only while no account exists) and signs in. 400 weak password / bad name, 401 wrong token, 403 already set up, 429 locked |
+| `POST /login` | none (rate limited, per address and per account) | Body `{ username, password }` -> 200 `{ ok: true, limited }` + cookie, or 200 `{ ok: false, need2fa: true, challenge }`; then `{ challenge, code }` (authenticator or recovery code). `{ token }` alone only works while no account exists. 401 wrong credentials (same text for unknown user), 429 locked (`Retry-After`), 403 cross-origin, 415 not JSON |
 | `POST /logout` | cookie | Destroys the session and clears the cookie |
 | `POST /api/<channel>` | cookie or bearer | Body `{ "args": [ ... ] }` (JSON, `Content-Type: application/json`). Reply `200 { "ok": true, "data": ... }` or `200 { "ok": false, "error": "..." }` (same shape as IPC). Protocol errors use HTTP codes: 400 bad JSON / `args` not an array, 401, 403 cross-origin, 404 unknown channel, 405 not POST, 413 body too large (default 4 MiB, `NODEGSM_MAX_BODY`), 415, 429 |
 | `GET /download/backup?folder=<id>&file=<name>.zip` | cookie or bearer | Streams a backup zip as an attachment. `folder` / `file` are validated by the backup service (`^\d+(\.deleted-\d+)?$` and `^[A-Za-z0-9._-]+\.zip$`), so nothing outside `<data>/backups` can be read |
@@ -160,3 +162,29 @@ The headless server ([`src/server/headless.js`](../src/server/headless.js), `npm
 - **CSRF:** for cookie (and no-auth) requests the `Origin` header must be present and equal to `Host`; otherwise 403. JSON content type only; there is no CORS (no `Access-Control-*` headers).
 - **Not available in web mode** (they throw an error, the UI hides them): `pickFolder`, `openFolder`, `backupOpenFolder`, `backupDownload` (use the HTTP download above), `pluginsInstallZip`, `pluginsInstallFolder`, `pluginsFolder`, `openExternal` (the browser opens links itself), `relaunch`, `dataLocation*` (a service is configured with `--data` / `NODEGSM_DATA`).
 - **Example:** `curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"args":["1"]}' http://127.0.0.1:8730/api/start`
+
+
+## Web access channels (`web*`)
+Served by `WebAccess.api(actor)` (`src/server/webAccess.js`), on `POST /api/<name>` for browser sessions and as IPC channels for the desktop window (local owner). They are not part of the `buildApi` table. Roles: **owner** = owner session or the desktop window.
+
+| Channel | Args | Who | Returns / notes |
+|---|---|---|---|
+| `webStatus` | - | any | `{ accounts, setupNeeded, user, role, local, require2fa, limited }` |
+| `webServerStatus` | - | desktop only | `{ running, url, host, port, error, accounts }` of the embedded web server |
+| `webAccount` | - | web account | own `{ username, role, totp, recoveryLeft, require2fa, limited }` |
+| `webUsers` | - | owner | list of accounts (no hashes) |
+| `webUserCreate` | `username, password, role` | owner | the new account; password 10+ characters |
+| `webUserRole` | `username, role` | owner | list; signs the user's sessions out; the last owner cannot be demoted |
+| `webUserPassword` | `username, password` | owner | `true`; signs the user's sessions out |
+| `webUserTotpOff` | `username` | owner | list; for a lost phone |
+| `webUserDelete` | `username` | owner | list; the last owner cannot be deleted |
+| `webSessions` | - | any | owner: all sessions, others: own. Entries have a hashed `handle`, `user`, `role`, `ip`, `ua`, `created`, `last`, `current` (never the cookie) |
+| `webSessionRevoke` | `handle` | owner (any) / own | number removed |
+| `webSignOutOthers` | - | web account | number of other own sessions signed out |
+| `webPasswordChange` | `old, new` | web account | needs the old password; other sessions signed out |
+| `webTotpBegin` / `webTotpConfirm` | - / `code` | web account | `{ secret, uri }` / 8 recovery codes (shown once) |
+| `webTotpDisable` | `password` | web account | refused while two-factor is required |
+| `webTokenInfo` | - | desktop only | `{ token, source, usable }` |
+| `webTokenRegenerate` | - | owner | writes a new `<data>/web-token` (refused when the token comes from `NODEGSM_TOKEN`) |
+
+Channels not listed for viewers answer `403 { ok: false, error: "Your account is read-only (viewer)." }`; owner-only ones (`relaunch`, `eventLogClear`, `discordTest`, `discordBotTest`, `discordBotRestart`, plugin install / reload, catalogue install / refresh, data location) answer 403 to admins.

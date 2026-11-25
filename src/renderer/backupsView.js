@@ -4,6 +4,7 @@
 
 const bkWhen = (t) => new Date(t).toLocaleString();
 const bkSize = (b) => (b >= 2 ** 30 ? `${(b / 2 ** 30).toFixed(2)} GB` : b >= 2 ** 20 ? `${(b / 2 ** 20).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+const BK_PRESETS = [['Every day at 04:00', '0 4 * * *'], ['Every 6 hours', '0 */6 * * *'], ['Every 12 hours', '0 */12 * * *'], ['Every hour', '0 * * * *'], ['Every Sunday at 04:00', '0 4 * * 0']];
 const bkMode = (r) => (r.mode === 'neatpick' ? 'Neat pick' : 'Full');
 
 /** One-line summary of what a backup holds (manifest based; old backups have none). */
@@ -162,6 +163,7 @@ function bkTree(box, sid, sel, onChange) {
 
 async function tabBackups(b, s) {
   const info = (await run('backupInfo', s.id)) || { presets: [], exclude: [], keep: 0 };
+  const sch = info.schedule || { enabled: false, cron: '0 4 * * *', options: { mode: 'full' } };
   const sel = new Set(); let mode = 'full';
   b.innerHTML = `
     <div class="row"><div class="seg" id="bkModeSeg"><button type="button" data-m="full" class="on">Full</button><button type="button" data-m="neatpick">Neat pick</button></div>
@@ -180,6 +182,13 @@ async function tabBackups(b, s) {
       <button type="button" id="bkPreview">Estimate size</button><span id="bkPreviewOut" class="muted small"></span><span class="spacer"></span>
       <label class="check" title="Older backups of this server are deleted after each new one. 0 = keep everything.">Keep the newest <input id="bkKeep" type="number" min="0" max="1000" value="${info.keep}" style="width:72px"> backups</label>
       <button type="button" id="bkNow" class="primary">Backup now</button></div>
+    <h4>Scheduled backup</h4>
+    <div class="row wrap">
+      <label class="check"><input type="checkbox" id="bkSchedOn" ${sch.enabled ? 'checked' : ''}> Back up automatically</label>
+      <select id="bkSchedPreset" title="Times are in this computer's local time">${BK_PRESETS.map(([n, c]) => `<option value="${esc(c)}" ${c === sch.cron ? 'selected' : ''}>${esc(n)}</option>`).join('')}<option value="" ${BK_PRESETS.some(([, c]) => c === sch.cron) ? '' : 'selected'}>Custom (cron) ...</option></select>
+      <input id="bkCron" value="${esc(sch.cron)}" spellcheck="false" style="width:130px" title="Five fields: minute hour day-of-month month day-of-week">
+      <button type="button" id="bkSchedSave">Save schedule</button></div>
+    <p class="muted small" id="bkSchedNote" style="margin:4px 0 0"></p>
     <h4>Backups of this server</h4><div id="bkList"></div>`;
   const options = () => ({
     mode,
@@ -223,6 +232,19 @@ async function tabBackups(b, s) {
     const btn = $('#bkNow'); btn.disabled = true; toast('Backing up ...');
     try { if ((await run('backup', s.id, options())) !== undefined) toast('Backup complete'); } finally { btn.disabled = false; }
     paintList();
+  };
+  const schedNote = (nextRun, opts) => {
+    $('#bkSchedNote').textContent = $('#bkSchedOn').checked
+      ? `Runs ${nextRun ? `next at ${bkWhen(nextRun)}, ` : ''}with the options chosen above when you pressed "Save schedule" (${opts && opts.mode === 'neatpick' ? 'Neat pick' : 'Full'}). Server running or stopped; a run missed while NodeGSM was closed is not made up. Old backups are removed by "Keep the newest".`
+      : 'Off. Press "Save schedule" after choosing Full / Neat pick and the options above; the schedule uses them.';
+  };
+  schedNote(info.nextRun, sch.options);
+  $('#bkSchedPreset').onchange = (e) => { if (e.target.value) $('#bkCron').value = e.target.value; };
+  $('#bkSchedSave').onclick = async () => {
+    const r = await run('save', s.id, { backupSchedule: { enabled: $('#bkSchedOn').checked, cron: $('#bkCron').value.trim(), options: options() } });
+    if (r === undefined) return;
+    const i2 = (await run('backupInfo', s.id)) || {};
+    toast($('#bkSchedOn').checked ? 'Schedule saved' : 'Scheduled backups are off'); schedNote(i2.nextRun, (i2.schedule || {}).options);
   };
   paintList();
 }

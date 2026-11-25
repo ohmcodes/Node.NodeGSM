@@ -41,6 +41,7 @@ Rules for a safe test run:
 - [ ] Server > **Backups** tab > **Full** > create. *A zip and a `.json` manifest appear in `%APPDATA%\NodeGSM\backups\<id>`; the list shows size and mode.*
 - [ ] Set retention (keep 2) and create 3 backups. *Only the newest 2 remain; the Logs screen shows `backup:pruned`.*
 - [ ] **Neat pick**: tick a preset (e.g. World saves), expand the tree, tick one more folder, add an exclude pattern `*.tmp`, check the size estimate, create. *The zip contains only those paths.*
+- [ ] **Scheduled backup:** Backups tab > Scheduled backup > custom cron `*/2 * * * *` (every 2 minutes), Save schedule. *The next run time shows; after 2 minutes a new backup appears (also while the server is stopped); turn it off again afterwards.*
 - [ ] **Restore** a Full backup after deleting a file in the server. *Server stops first; the file is back; optional settings restore asks separately.*
 - [ ] **Restore as new server** from a Full backup. *A new server appears with the backup's game and settings; if the port was taken it moved to the next free one; the original is untouched.*
 - [ ] Restore as new from a **Neat pick** backup. *Game files are installed (needs internet) and then the picked files applied.* (slow: SteamCMD / download)

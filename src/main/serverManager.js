@@ -22,6 +22,7 @@ const DEFAULTS = {
   restartCrontab: false, crontabFormat: '0 6 * * *',
   autoStartAlert: true, autoRestartAlert: true, autoUpdateAlert: true, restartCrontabAlert: true, crashAlert: true,
   backupKeep: 0, // keep the newest N backups (0 = unlimited)
+  backupSchedule: { enabled: false, cron: '0 4 * * *', options: { mode: 'full' } }, // scheduled backups (cron, local time); options = the "Backup now" options
   autoClear: [], autoClearSeeded: [], // Files auto-clear rules (services/autoClear.js); autoClearSeeded = plugin rule keys already copied once
   cpuPriority: 'Normal', cpuAffinity: '', installDir: '', // installDir: custom location for imported servers
 };
@@ -555,7 +556,32 @@ class ServerManager extends EventEmitter {
     }
   }
 
+  /** True when the 5-field cron expression fires in the minute of `now` (local time). */
+  static cronDue(expr, now) {
+    const it = cronParser.parseExpression(expr, { currentDate: new Date(now.getTime() - 60000) });
+    const nx = it.next().toDate();
+    return Math.abs(nx.getTime() - now.getTime()) < 60000 && nx.getMinutes() === now.getMinutes();
+  }
+  /** Next run of a cron expression as epoch ms, or 0. */
+  static cronNext(expr, from = new Date()) { try { return cronParser.parseExpression(expr, { currentDate: from }).next().toDate().getTime(); } catch { return 0; } }
+
+  /** Scheduled backups (per server `backupSchedule`). Runs whether the server is running or stopped; a server that is busy (another backup, update ...) is skipped this minute. A run missed while NodeGSM was off is not made up. */
+  scheduledBackupTick(now = new Date()) {
+    for (const id of this.ids()) {
+      const c = this.getConfig(id); const s = c && c.backupSchedule;
+      if (!s || s.enabled !== true || !s.cron) continue;
+      const rt = this.rt(id); const minute = Math.floor(now.getTime() / 60000);
+      if (rt.lastScheduledBackup === minute) continue;
+      try { if (!ServerManager.cronDue(s.cron, now)) continue; } catch (e) { this.log(id, `Invalid backup schedule: ${e.message}`); continue; }
+      rt.lastScheduledBackup = minute;
+      if (rt.busy) { this.log(id, `Scheduled backup skipped: the server is busy (${rt.busy}).`); continue; }
+      this.log(id, 'Scheduled backup ...');
+      this.backup(id, s.options || {}).catch((e) => this.log(id, `Scheduled backup failed: ${e.message}`));
+    }
+  }
+
   cronTick(now = new Date()) {
+    this.scheduledBackupTick(now);
     for (const id of this.ids()) {
       const c = this.getConfig(id);
       if (!c.restartCrontab || !c.crontabFormat || !this.isRunning(id)) continue;

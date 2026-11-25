@@ -152,7 +152,7 @@ function buildApi(ctx) {
     saveSettings: (p) => {
       const s = mgr.saveSettings(cleanSettingsPatch(p));
       if (ctx.discordBot) ctx.discordBot.apply().catch(() => {});   // reconnects only when the bot fields changed
-      if (app && app.setLoginItemSettings) app.setLoginItemSettings({ openAtLogin: !!s.startOnLogin });
+      if (app && app.setLoginItemSettings) app.setLoginItemSettings({ openAtLogin: !!s.startOnLogin, args: s.web && s.web.enabled ? ['--hidden'] : [] });   // with Web access on, a login start stays in the tray
       if (nativeTheme) nativeTheme.themeSource = s.theme;
       const win = getWin && getWin();
       if (win && !win.isDestroyed()) win.setBackgroundColor(currentBg());

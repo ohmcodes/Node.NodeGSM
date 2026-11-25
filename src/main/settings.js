@@ -23,8 +23,17 @@ const DEFAULTS = {
   headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
   discord: { webhookUrl: '', botEnabled: false, botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], permissions: [], allowRawCommands: false, events: {}, templates: {} },
   logging: { retentionDays: 30 }, // NGSM event log retention
+  web: { enabled: false, host: '127.0.0.1', port: 8730, https: false, trustProxy: false, require2fa: false, sessionHours: 12 }, // Web access: the browser UI served by the desktop app (accounts: <data>/web-users.json)
   catalogueUrl: '',           // plugin catalogue: https:// address or a local folder; '' = the official catalogue
 };
+const HOST = /^(?:[A-Za-z0-9.-]{1,253}|\[?[0-9A-Fa-f:]{2,45}\]?)$/;
+/** Web access settings: bind address, port, HTTPS / proxy flags. Invalid values fall back to the safe default (loopback, 8730). */
+function sanitizeWeb(v) {
+  const d = DEFAULTS.web; v = v && typeof v === 'object' ? v : {};
+  const host = typeof v.host === 'string' && HOST.test(v.host.trim()) ? v.host.trim().replace(/^\[|\]$/g, '') : d.host;
+  const port = Math.round(Number(v.port)); const hrs = Math.round(Number(v.sessionHours));
+  return { enabled: v.enabled === true, host, port: port >= 1 && port <= 65535 ? port : d.port, https: v.https === true, trustProxy: v.trustProxy === true, require2fa: v.require2fa === true, sessionHours: hrs >= 1 && hrs <= 720 ? hrs : d.sessionHours };
+}
 const VIEWS = ['servers', 'table', 'dashboard'];
 const CHARTS = ['players', 'cpu', 'memory', 'tick', 'latency'];
 
@@ -100,7 +109,23 @@ function sanitizeServerDiscord(patch) {
 function sanitizeServerBackup(patch) {
   const out = {};
   if (patch && typeof patch === 'object' && 'backupKeep' in patch) { const n = Math.floor(Number(patch.backupKeep)); out.backupKeep = n >= 0 && n <= 1000 ? n : 0; }
+  if (patch && typeof patch === 'object' && 'backupSchedule' in patch) out.backupSchedule = sanitizeBackupSchedule(patch.backupSchedule);
   return out;
+}
+const strList = (v, n, len) => (Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string').map((x) => x.trim().slice(0, len)).filter(Boolean))].slice(0, n) : []);
+/**
+ * Scheduled backup of one server: { enabled, cron (5 fields, validated), options: { mode, presets, paths, exclude, includeServerSettings } }.
+ * The options have the same shape as the "Backup now" options (services/backup.js validates them when a backup runs). Throws on an invalid cron expression.
+ */
+function sanitizeBackupSchedule(v) {
+  v = v && typeof v === 'object' ? v : {};
+  const cron = str(v.cron, 100) || '0 4 * * *';
+  if (cron.split(/\s+/).length !== 5) throw new Error('The schedule must be a cron expression with 5 fields, for example "0 4 * * *" (every day at 04:00).');
+  try { require('cron-parser').parseExpression(cron); } catch (e) { throw new Error(`Invalid cron expression: ${e.message}`); }
+  const o = v.options && typeof v.options === 'object' ? v.options : {};
+  const options = { mode: o.mode === 'neatpick' ? 'neatpick' : 'full', presets: strList(o.presets, 50, 60), paths: strList(o.paths, 2000, 500), exclude: strList(o.exclude, 200, 200) };
+  if (typeof o.includeServerSettings === 'boolean') options.includeServerSettings = o.includeServerSettings;
+  return { enabled: v.enabled === true, cron, options };
 }
 
 const MAX_RULES = 50;
@@ -174,6 +199,7 @@ function sanitize(patch) {
     else if (k === 'headerStats') { if (v && typeof v === 'object') out.headerStats = { ...DEFAULTS.headerStats, ...bools(v, STAT_KEYS) }; }
     else if (k === 'discord') { if (v && typeof v === 'object') out.discord = sanitizeDiscord(v); }
     else if (k === 'logging') { if (v && typeof v === 'object') { const d = Math.round(Number(v.retentionDays)); out.logging = { retentionDays: d >= 1 && d <= 3650 ? d : DEFAULTS.logging.retentionDays }; } }
+    else if (k === 'web') { if (v && typeof v === 'object') out.web = sanitizeWeb(v); }
     else if (k === 'catalogueUrl') { const s = str(v, 300); if (s === '' || require('./catalogue').normalizeBase(s)) out.catalogueUrl = s; }
     else if (typeof DEFAULTS[k] === 'boolean') out[k] = !!v;
     else if (typeof DEFAULTS[k] === 'string') out[k] = String(v);
@@ -189,4 +215,4 @@ function read(dataDir) {
 /** 'system' -> dark/light depending on Windows */
 const resolveTheme = (theme, systemDark) => (theme === 'system' ? (systemDark ? 'dark' : 'light') : theme === 'light' ? 'light' : 'dark');
 
-module.exports = { DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord, sanitizeServerBackup, sanitizeAutoClear, sanitizeAutoClearRule, sanitizeServerAutoClear, relFolder };
+module.exports = { sanitizeBackupSchedule, sanitizeWeb, DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord, sanitizeServerBackup, sanitizeAutoClear, sanitizeAutoClearRule, sanitizeServerAutoClear, relFolder };

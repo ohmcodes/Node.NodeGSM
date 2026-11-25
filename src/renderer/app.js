@@ -495,6 +495,7 @@ async function openSettingsView() {
   $('#hwNote').hidden = true;
   paintSettings(s);
   if (state.features.dataLocation) paintDataLocation();
+  if (typeof waPaint === 'function') waPaint(s);
   renderColChecks($('#setCols'));
 }
 
