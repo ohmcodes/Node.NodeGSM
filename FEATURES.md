@@ -141,6 +141,10 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 ## Changelog
 Newest first. Add an entry for every change. One entry = one `### <date> - <unique title>` heading followed by bullets (the website parses this format).
 
+### 2026-11-25 - Steam dedicated server plugins in the Catalogue
+- **Added:** 18 plugins in the Catalogue repository for Steam dedicated-server tools that were not there yet (Pavlov VR, Day of Infamy, Black Mesa, ATLAS, Natural Selection 2, Rising Storm 2, Tower Unite and others). Found through Steam store search plus SteamCMD app info; app ids already in the catalogue were skipped, so there are no duplicates. Tagged `steam-import` and `needs-work`.
+- **Not verified:** ports, launch arguments and defaults are starting points and have not been run against real servers; icons are placeholders.
+
 ### 2026-11-25 - Community WindowsGSM plugins imported into the Catalogue
 - **Added:** 127 plugins in the Catalogue repository, converted from public `<owner>/WindowsGSM.<Game>` GitHub repos with the website converter (one repo per game: latest push, then most stars). Metadata, app id, executable, start command line and default ports only; no C# was copied. Each README credits the source repo; most carry the `windowsgsm-import` tag, and ones that still need install or hook work also carry `needs-work`.
 - **Not verified:** none of the imported plugins has been run against a real server, and they all use a placeholder icon.
