@@ -91,8 +91,14 @@ class RconClient {
     });
   }
 
-  /** Send one command; resolves with the collected response text (multi-packet responses are joined). */
-  async send(command) {
+  /** Send one command; resolves with the collected response text (multi-packet responses are joined). Calls are queued: one command at a time per connection (tick polling and the user's console share it). */
+  send(command) {
+    const run = () => this._send(command);
+    const p = (this._queue || Promise.resolve()).then(run, run);
+    this._queue = p.catch(() => {});
+    return p;
+  }
+  async _send(command) {
     command = String(command);
     if (Buffer.byteLength(command, 'utf8') > MAX_BODY) throw new Error(`RCON command too long (limit ${MAX_BODY} bytes)`);
     await this.connect();

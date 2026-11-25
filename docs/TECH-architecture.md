@@ -84,6 +84,13 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 - `rcon.js`: packets `int32le size | id | type | body | 0 0`; auth (type 3, success = auth response with the same id, `-1` = wrong password), commands (type 2) followed by an empty type-0 packet whose echo marks the end of a (multi-packet) response; if no marker returns, an idle timeout ends it. Limits: 4096-byte command, 4160-byte packet, 1 MB response text, connect / command timeouts. Events of a replaced socket are ignored.
 - Output reaches the renderer as the push event `consoleOut { id, consoleId, lines[], reset?, file? }` (log consoles re-emit the `logLines` of `LogTail` with their console id).
 
+### Metrics, tick and latency (`metrics.js`, `renderer/tick.js`, `query.js`)
+- `MetricsCollector` samples every 5 s (`tick()` - not the game tick). Plugin `metrics[]` values come from `feed()` (console / log lines) or `pollRcon()` (`source: "rcon:<command>"`, timer per server+metric, one poll in flight at a time, errors kept in `pollErrors` without secrets). `record()` matches the metric regex (`patternFlags`, default `i`); tick metrics are colour-stripped and parsed with `parseTickNumber`, other metrics keep the old `parseFloat` behaviour.
+- `Consoles.poll(id, command, { consoleId, source })` is the silent RCON path (no `consoleOut`, no `server:command` event); inline sources use the pool key `<id>:~poll`. `RconClient.send()` queues commands per connection.
+- A row has `metrics` (`m:<id>` -> `{ value, unit, kind?, cls?, higherIsBetter? }`, plus `latency`), `tick` (first fresh tick metric) and history points `{ k, l }`. `defs` lists metric columns (`kind` only for tick metrics; defs are keyed by metric id across games).
+- `tick.js` is UMD (renderer `<script>` -> `window.NGSMTick`, main `require`): `stripColours`, `parseTickNumber`, `classify` (thresholds / `tickTarget`), `aggregateTick` (header stat, mode `worst` | `avg`).
+- Latency: `query.js` returns `ping` (ms of the last answered request, UDP / HTTP); `pollAll()` stores `rt.latency = { ms, t }`; `latencyFor()` exposes it only for games without a tick metric and while younger than 60 s.
+
 ### Structured config editing (`configEdit.js`)
 Pure functions: `parse(format, text) -> { ok, reason?, entries[{ id, path, key, section, value, type? }] }`, `edit(format, text, ops) -> { text, entries, ok }` (ops `set`/`remove` by entry `id`, `add` by `path` (+ `section` for ini); apply one at a time because line ids shift), `get(format, text, name)`. Line formats keep every other line byte-for-byte; json is re-serialised.
 

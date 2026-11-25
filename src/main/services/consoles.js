@@ -104,10 +104,10 @@ class Consoles {
     return { port, password: value(tok.password) };
   }
 
-  client(id, consoleId) {
-    const key = `${id}:${consoleId}`;
-    const d = this.def(id, consoleId);
-    const { port, password } = this.resolveRcon(id, d.source);
+  client(id, consoleId) { return this.clientFor(id, `${id}:${consoleId}`, this.def(id, consoleId).source); }
+  /** Pooled client for an rcon source ("rcon:<port>:<password>" with placeholders), one per pool key. */
+  clientFor(id, key, source) {
+    const { port, password } = this.resolveRcon(id, source);
     let e = this.clients.get(key);
     // settings may have changed (new password / port): reconnect when they differ
     if (e && (e.port !== port || e.pw !== password)) { this.drop(key); e = null; }
@@ -142,6 +142,26 @@ class Consoles {
     const lines = out.split(/\r?\n/).filter((l, i, a) => l.length || i < a.length - 1);
     this.mgr.emit('consoleOut', { id: String(id), consoleId, lines: [`> ${text}`, ...lines] });
     return { output: out };
+  }
+
+  /**
+   * Silent RCON command for metrics polling (tick): no console output, no event-log entry (so polling never floods the log
+   * and the command is never echoed). Uses the rcon console `consoleId`, else the first declared rcon console, else the inline
+   * `source` ("rcon:<port>:<password>"). Resolves the response text; errors never contain the password.
+   */
+  async poll(id, command, { consoleId, source } = {}) {
+    command = String(command == null ? '' : command);
+    if (!command.trim()) throw new Error('Empty command');
+    if (!this.mgr.isRunning(id)) throw new Error('The server is not running');
+    let key; let client;
+    if (source) { key = `${id}:~poll`; client = this.clientFor(id, key, source); }
+    else {
+      const { g } = this.game(id);
+      const d = (g.consoles || []).find((x) => x.type === 'rcon' && (!consoleId || x.id === consoleId));
+      if (!d) throw new Error('This game declares no RCON console');
+      key = `${id}:${d.id}`; client = this.client(id, d.id);
+    }
+    try { return await client.send(command); } catch (e) { this.drop(key); throw new Error(e.message); }
   }
 
   // ---------- log consoles ----------

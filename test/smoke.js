@@ -166,10 +166,10 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   // ---- kill, bulk actions, dashboard metrics (two fake servers) ----
   const mdir = path.join(dir, 'metricsrv'); fs.mkdirSync(mdir);
   fs.copyFileSync(process.execPath, path.join(mdir, P.byId('sw').exe));
-  fs.writeFileSync(path.join(mdir, 'fake.js'), "let n=0;console.log('fps=60');process.stdin.on('data',d=>{const t=String(d);if(/quit/.test(t))process.exit(0);if(/stats/.test(t))console.log('fps='+(60+(++n)));});setInterval(()=>{},1000);");
+  fs.writeFileSync(path.join(mdir, 'fake.js'), "let n=0;console.log('fps=60');process.stdin.on('data',d=>{const t=String(d);if(/quit/.test(t))process.exit(0);if(/stats/.test(t))console.log('fps='+(60+(++n)));if(/tps/.test(t))console.log(String.fromCharCode(27)+'[32mTPS: '+String.fromCharCode(167)+'a*19,5');});setInterval(()=>{},1000);");
   const sw = P.byId('sw');
   sw.logs = [{ id: 'l', name: 'L', path: 'x.log' }];
-  sw.metrics = [{ id: 'fps', name: 'Server FPS', unit: 'fps', source: 'console', pattern: 'fps[:= ]+([0-9.]+)', command: 'stats', intervalSec: 2 }, { id: 'ents', name: 'Entities', source: 'log:l', pattern: 'entities (\\d+)' }];
+  sw.metrics = [{ id: 'fps', name: 'Server FPS', unit: 'fps', source: 'console', pattern: 'fps[:= ]+([0-9.]+)', command: 'stats', intervalSec: 2 }, { id: 'tps', name: 'Server TPS', unit: 'TPS', kind: 'tick', source: 'console', command: 'tps', pattern: 'TPS: *([^ ]+)', intervalSec: 2, tickTarget: 20, warnBelow: 18, badBelow: 15 }, { id: 'ents', name: 'Entities', source: 'log:l', pattern: 'entities (\\d+)' }];
   const a1 = m.importServer('sw', 'Alpha', mdir).id; const a2 = m.importServer('sw', 'Beta', mdir).id;
   for (const x of [a1, a2]) m.saveConfig(x, { param: 'fake.js' });
   const col = new MetricsCollector(m, { intervalMs: 1e9 }); col.start(); await sleep(200);
@@ -186,6 +186,10 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   assert(snap.system.cores > 0 && snap.system.memTotal > snap.system.memUsed && snap.system.disk && snap.system.disk.total > 0, 'system metrics');
   const fps0 = r1.metrics['m:fps'].value; await sleep(2600); snap = await col.tick();
   assert(snap.servers.find((r) => r.id === a1).metrics['m:fps'].value > fps0, 'metric polled by sending the declared console command');
+  { const tk = snap.servers.find((r) => r.id === a1);
+    assert(tk.metrics['m:tps'] && tk.metrics['m:tps'].value === 19.5 && tk.metrics['m:tps'].kind === 'tick' && tk.metrics['m:tps'].cls === 'good', 'tick metric: console command polled, ANSI + section colour codes and decimal comma parsed, classified: ' + JSON.stringify(tk.metrics));
+    assert(tk.tick && tk.tick.value === 19.5 && tk.tick.unit === 'TPS' && tk.tick.name === 'Server TPS' && tk.tick.target === 20, 'row.tick summarises the tick metric'); assert(!tk.metrics.latency, 'a game with a tick metric gets no latency estimate');
+    assert(snap.defs.some((d) => d.id === 'm:tps' && d.kind === 'tick' && d.higherIsBetter === true) && snap.defs.some((d) => d.id === 'm:ents' && !d.kind) && !tk.metrics['m:fps'].kind && !tk.metrics['m:fps'].cls, 'kind / cls only for tick metrics (existing metrics unchanged)'); assert(col.history[col.history.length - 1].s[a1].k === 19.5, 'history point has the tick value'); }
   fs.writeFileSync(path.join(mdir, 'x.log'), 'tick\nentities 42\n'); await sleep(2200); snap = await col.tick();
   assert(snap.servers.find((r) => r.id === a1).metrics['m:ents'].value === 42, 'plugin metric from a declared log file');
   assert(col.history.length >= 4 && col.history[col.history.length - 1].s[a1], 'history points recorded');
@@ -982,6 +986,7 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
             else if (type === 2) {
               if (body === 'echo hi') sock.write(packet(id, 0, 'hi there'));
               else if (body === 'big') { sock.write(packet(id, 0, 'A'.repeat(4000))); sock.write(packet(id, 0, 'B'.repeat(10))); }
+              else if (body === 'tps') sock.write(packet(id, 0, 'TPS from last 1m, 5m, 15m: ' + String.fromCharCode(167) + 'a*19.5' + String.fromCharCode(167) + 'r, 20.0, 20.0'));
               else if (body === 'drop') { sock.destroy(); }
               else sock.write(packet(id, 0, `unknown: ${body}`));
             } else if (type === 0) { if (mode === 'minecraft') sock.write(packet(id, 0, 'Unknown request 0')); else if (mode !== 'nomarker') { sock.write(packet(id, 0, '')); sock.write(packet(id, 0, '\x00\x01\x00\x00')); } }
@@ -994,6 +999,7 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const rc = R5({}); await rc.connect(); assert(rc.connected, 'auth ok');
     eq(await rc.send('echo hi'), 'hi there', 'command response'); eq(await rc.send('other'), 'unknown: other', 'second command on the same connection');
     const big = await rc.send('big'); eq([big.length, big.startsWith('AAAA'), big.endsWith('BBBBBBBBBB')], [4010, true, true], 'multi-packet response joined');
+    eq(await Promise.all([rc.send('echo hi'), rc.send('other'), rc.send('echo hi')]), ['hi there', 'unknown: other', 'hi there'], 'concurrent sends are queued (tick polling and the console share one connection)');
     const bad = R5({ password: 'wrong-pw-123' }); await assert.rejects(bad.connect(), (e) => /authentication failed/.test(e.message) && !/wrong-pw-123/.test(e.message), 'wrong password rejected, password not in the error'); assert(!bad.connected);
     assert(!/S3cretRcon/.test(util.inspect(rc)) && !/S3cretRcon/.test(JSON.stringify(rc)) && !/S3cretRcon/.test(String(rc)), 'the password never shows in inspect / JSON / toString');
     await assert.rejects(rc.send('x'.repeat(4097)), /too long/, 'payload over 4096 bytes refused locally'); await assert.rejects(rc.send('é'.repeat(2049)), /too long/, 'limit counts bytes, not characters'); eq(await rc.send('echo hi'), 'hi there', 'still usable after a refused command');
@@ -1035,6 +1041,71 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     fs.mkdirSync(path.dirname(fd(c1, 'logs/latest.log')), { recursive: true }); fs.writeFileSync(fd(c1, 'logs/latest.log'), 'l1\nl2\n');
     const st = api5.consoleStart(c1, 'lgc'); eq(st.lines, ['l1', 'l2'], 'log console returns the initial lines'); outs.length = 0; fs.appendFileSync(fd(c1, 'logs/latest.log'), 'l3\n'); await sleep(1500);
     eq(outs.filter((o) => o.consoleId === 'lgc').flatMap((o) => o.lines), ['l3'], 'log console streams new lines with consoleId'); api5.consoleStop(c1, 'lgc'); outs.length = 0; fs.appendFileSync(fd(c1, 'logs/latest.log'), 'l4\n'); await sleep(1300); eq(outs.length, 0, 'stopped log console is silent'); assert.throws(() => api5.consoleStart(c1, 'rc'), /Not a log console/);
+    // ---- Phase 7: server tick metric (rcon source, latency fallback, header aggregate) ----
+    {
+      const TK = require('../src/renderer/tick'); const dgram5 = require('dgram'); const Q = require('../src/main/query');
+      // fake A2S server (answers the info request after 40 ms so the round trip is measurable)
+      const a2sFake = await new Promise((resolve) => {
+        const s = dgram5.createSocket('udp4');
+        s.on('message', (msg, rinfo) => {
+          const info = Buffer.concat([Buffer.from([0xff, 0xff, 0xff, 0xff, 0x49, 17]), Buffer.from('Fake\0map1\0folder\0game\0'), Buffer.from([0, 0, 3, 8, 0, 100, 0x6c, 0x77, 0, 0])]);
+          setTimeout(() => { try { s.send(info, rinfo.port, rinfo.address); } catch { /* closed */ } }, 40);
+        });
+        s.bind(0, '127.0.0.1', () => resolve({ port: s.address().port, close: () => s.close() }));
+      });
+      const qa = await Q.query('a2s', '127.0.0.1', a2sFake.port, 1500);
+      assert(qa && qa.players === 3 && qa.maxPlayers === 8 && qa.ping >= 30 && qa.ping < 1000, 'a2s query reports its round trip (ms): ' + JSON.stringify(qa));
+      // latency fallback: the game has no tick metric -> metric "latency" (ms), labelled Latency, never "tick"
+      pgame.query = 'a2s'; pgame.metrics = [];
+      m.saveConfig(c1, { queryPort: String(a2sFake.port), ip: '' });
+      await m.pollAll(); assert(m.rt(c1).latency && m.rt(c1).latency.ms >= 30, 'pollAll stores the query round trip');
+      const col7 = new MetricsCollector(m, { intervalMs: 1e9, readProcs: async () => [] });
+      let sn7 = await col7.tick(); let row7 = sn7.servers.find((r) => r.id === c1);
+      assert(row7.metrics.latency && row7.metrics.latency.unit === 'ms' && row7.metrics.latency.kind === 'latency' && row7.metrics.latency.value === m.rt(c1).latency.ms, 'latency exposed as metric id "latency" (ms)');
+      assert(row7.tick === null && sn7.defs.some((d) => d.id === 'latency' && d.name === 'Latency' && d.unit === 'ms'), 'latency is not a tick (row.tick stays empty) and has its own column definition');
+      eq(TK.aggregateTick(sn7.servers).text, 'n/a', 'header tick stat is n/a when no running server has a tick metric'); assert(col7.history[col7.history.length - 1].s[c1].l === row7.metrics.latency.value, 'history carries latency');
+      m.rt(c1).latency.t -= 120000; sn7 = await col7.tick(); assert(!sn7.servers.find((r) => r.id === c1).metrics.latency, 'a stale latency sample is dropped');
+      // tick metric through RCON (silent: not in the console output or the event log), first matching line wins
+      const tickDef = { id: 'tps', name: 'Server TPS', unit: 'TPS', kind: 'tick', source: 'rcon:tps', pattern: 'TPS from last[^:]*: *[^0-9]*([0-9.]+)', tickTarget: 20, warnBelow: 18, badBelow: 15, rconConsole: 'rc' };
+      pgame.metrics = [tickDef]; outs.length = 0; const seen0 = fr2.seen.length;
+      assert(await col7.pollRcon(c1, tickDef), 'rcon poll found a value'); assert(fr2.seen.slice(seen0).some((p) => p.type === 2 && p.body === 'tps'), 'the command went through RCON');
+      sn7 = await col7.tick(); row7 = sn7.servers.find((r) => r.id === c1);
+      assert(row7.metrics['m:tps'].value === 19.5 && row7.metrics['m:tps'].cls === 'good' && row7.tick.value === 19.5 && row7.tick.id === 'm:tps' && !row7.metrics.latency, 'rcon tick metric (section colour codes stripped), classified, no latency now');
+      eq(TK.aggregateTick(sn7.servers).text, '19.5 TPS', 'header tick stat shows the tick value');
+      assert(outs.length === 0 && !elog5.query({ limit: 1000 }).some((e) => /tps/.test(e.message)), 'tick polling does not write to the console output or the NGSM log');
+      const inline = { ...tickDef, id: 'tps2', rconConsole: undefined, rconSource: 'rcon:' + fr2.port + ':S3cretRcon' }; pgame.metrics = [tickDef, inline];
+      assert(await col7.pollRcon(c1, inline) && col7.custom.get(c1 + ':tps2').value === 19.5, 'inline rcon:<port>:<password> source works without a console');
+      m.writeConfig(c1, 'props', 'rcon.port=' + fr2.port + '\nrcon.password=changed\n'); col7.custom.clear();
+      eq(await col7.pollRcon(c1, tickDef), false, 'a failing RCON poll just yields no value'); const perr = col7.pollErrors.get(c1 + ':tps');
+      assert(/authentication failed/.test(perr) && !/S3cretRcon|changed/.test(perr), 'poll error names the problem, not the password: ' + perr); m.writeConfig(c1, 'props', 'rcon.port=' + fr2.port + '\nrcon.password=S3cretRcon\n');
+      eq(await col7.pollRcon(c1, tickDef), true, 'recovers once the password is right'); assert(!col7.pollErrors.has(c1 + ':tps'));
+      // timers start with the server and stop with it
+      col7.syncSources({ id: c1, status: 'Started' }); assert(col7.cmdTimers.has(c1 + ':tps') && col7.cmdTimers.has(c1 + ':tps2'), 'rcon metrics get a poll timer'); col7.syncSources({ id: c1, status: 'Stopped' }); assert(col7.cmdTimers.size === 0 && !col7.custom.has(c1 + ':tps'), 'timers and values dropped when the server stops');
+      eq(await col7.pollRcon(c1, { ...tickDef, rconConsole: 'nope' }), false, 'unknown rcon console: no value, no crash');
+      col7.stop(); pgame.metrics = []; pgame.query = null; a2sFake.close();
+      // pure helpers
+      const SS = String.fromCharCode(167); const ESC = String.fromCharCode(27);
+      eq([TK.parseTickNumber('TPS: ' + SS + 'a*20.0'), TK.parseTickNumber(ESC + '[32m19.8' + ESC + '[0m'), TK.parseTickNumber('1,234.5 ms'), TK.parseTickNumber('20,0'), TK.parseTickNumber('12.3ms'), TK.parseTickNumber('1.234.567'), TK.parseTickNumber('no number'), TK.parseTickNumber('')].map((x) => (Number.isNaN(x) ? 'NaN' : x)), [20, 19.8, 1234.5, 20, 12.3, 1234567, 'NaN', 'NaN'], 'tick number parsing: colour codes, ANSI, commas, units');
+      eq(TK.stripColours(String.fromCharCode(194, 167) + 'a20' + SS + 'r'), '20', 'mis-decoded section sign stripped too');
+      eq([TK.classify(14, tickDef), TK.classify(17, tickDef), TK.classify(19.9, tickDef)], ['bad', 'warn', 'good'], 'thresholds: higher is better');
+      eq([TK.classify(30, { higherIsBetter: false, warnAbove: 40, badAbove: 50 }), TK.classify(45, { higherIsBetter: false, warnAbove: 40, badAbove: 50 }), TK.classify(60, { higherIsBetter: false, warnAbove: 40, badAbove: 50 })], ['good', 'warn', 'bad'], 'thresholds: lower is better');
+      eq([TK.classify(20, { tickTarget: 20 }), TK.classify(17, { tickTarget: 20 }), TK.classify(10, { tickTarget: 20 }), TK.classify(5, {}), TK.classify(null, tickDef), TK.classify(NaN, tickDef)], ['good', 'warn', 'bad', '', '', ''], 'tickTarget defaults (90% / 75%); no thresholds = no colour');
+      eq([TK.classify(40, { higherIsBetter: false, tickTarget: 50 }), TK.classify(60, { higherIsBetter: false, tickTarget: 50 }), TK.classify(120, { higherIsBetter: false, tickTarget: 50 })], ['good', 'warn', 'bad'], 'tickTarget defaults for times');
+      const rowsA = [{ name: 'A', pid: 1, tick: { value: 19, unit: 'TPS', cls: 'warn', name: 'TPS' } }, { name: 'B', pid: 2, tick: { value: 20, unit: 'TPS', cls: 'good', name: 'TPS' } }, { name: 'C', pid: 0, status: 'Stopped', tick: { value: 5, unit: 'TPS', cls: 'bad' } }, { name: 'D', pid: 3, tick: null }];
+      let ag = TK.aggregateTick(rowsA); eq([ag.text, ag.cls, ag.count], ['19 TPS min', 'warn', 2], 'header aggregate: worst (min) of the running servers with a tick metric; stopped / no-tick ones ignored'); assert(/A: 19 TPS/.test(ag.title) && /B: 20 TPS/.test(ag.title) && !/C:/.test(ag.title), 'tooltip lists the server names');
+      eq(TK.aggregateTick(rowsA, 'avg').text, '19.5 TPS avg', 'avg mode'); eq(TK.aggregateTick([{ name: 'S', pid: 1, tick: { value: 20, unit: 'TPS', cls: 'good' } }]).text, '20 TPS', 'single server: no min suffix');
+      ag = TK.aggregateTick([{ name: 'M', pid: 1, tick: { value: 30, unit: 'ms', higherIsBetter: false, cls: 'good' } }, { name: 'N', pid: 2, tick: { value: 55, unit: 'ms', higherIsBetter: false, cls: 'bad' } }]); eq([ag.text, ag.cls], ['55 ms max', 'bad'], 'lower-is-better metrics: the worst is the max');
+      eq(TK.aggregateTick([]).text, 'n/a'); eq(TK.aggregateTick(undefined).text, 'n/a');
+      // plugin validation of the new fields
+      const tb = { ...mbase, consoles: [{ id: 'rc', name: 'R', type: 'rcon', source: 'rcon:25575:pw' }] }; const te = (x) => P.validate({ ...tb, metrics: [{ id: 't', name: 'T', pattern: '([0-9.]+)', source: 'console', command: 'tps', ...x }] }, null);
+      eq(te({ kind: 'tick', tickTarget: 20, higherIsBetter: true, warnBelow: 18, badBelow: 15, patternFlags: 'i' }).errors, [], 'valid tick metric'); eq(te({ kind: 'tick', source: 'rcon:tps', command: undefined, higherIsBetter: false, warnAbove: 40, badAbove: 50 }).errors, [], 'valid rcon tick metric (uses the first rcon console)');
+      eq(te({ kind: 'tick', source: 'rcon:tps', rconConsole: 'rc' }).errors, []); eq(te({ kind: 'tick', source: 'rcon:tps', rconSource: 'rcon:{port}:{cfg:pw}' }).errors, []);
+      for (const [bad, re] of [[{ kind: 'fps' }, /kind/], [{ kind: 'tick', tickTarget: 0 }, /tickTarget/], [{ kind: 'tick', tickTarget: 'x' }, /tickTarget/], [{ kind: 'tick', higherIsBetter: 'yes' }, /higherIsBetter/], [{ kind: 'tick', warnBelow: 'a' }, /warnBelow/], [{ kind: 'tick', warnBelow: 10, badBelow: 15 }, /badBelow/], [{ kind: 'tick', higherIsBetter: false, warnAbove: 50, badAbove: 40 }, /badAbove/], [{ tickTarget: 20 }, /only applies/], [{ patternFlags: 'zz' }, /patternFlags/], [{ source: 'rcon:' }, /needs a command/], [{ source: 'rcon:tps', rconConsole: 'zz' }, /rconConsole/], [{ source: 'rcon:tps', rconSource: 'nope' }, /rconSource/], [{ source: 'rcon:' + 'x'.repeat(5000) }, /too long/]]) assert(te(bad).errors.some((x) => re.test(x)), 'rejected: ' + JSON.stringify(bad) + ' -> ' + te(bad).errors);
+      assert(P.validate({ ...mbase, metrics: [{ id: 't', name: 'T', pattern: '([0-9.]+)', source: 'rcon:tps' }] }, null).errors.some((x) => /needs a console of type "rcon"/.test(x)), 'rcon source without any rcon console is rejected'); assert(te({ kind: 'tick', warnAbove: 4 }).warnings.some((x) => /warnAbove/.test(x)), 'warning: wrong-direction thresholds');
+      eq(S.sanitize({ dashboardChart: 'tick' }), { dashboardChart: 'tick' }, 'tick chart accepted'); eq(S.sanitize({ dashboardChart: 'latency' }), { dashboardChart: 'latency' });
+      for (const id of ['mc', 'csgo', 'rust']) assert(P.byId(id).metrics.some((x) => x.kind === 'tick'), 'bundled ' + id + ' declares a tick metric'); assert(P.byId('mc').metrics.some((x) => x.id === 'mspt' && x.higherIsBetter === false && /^rcon:/.test(x.source)), 'mc: vanilla /tick query metric in ms');
+      const html7 = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8'); assert(html7.includes('<script src="tick.js"></script>') && html7.indexOf('tick.js') < html7.indexOf('app.js') && html7.includes('value="tick"') && html7.includes('value="latency"'), 'tick.js loaded before app.js; chart options');
+    }
     // removing a server closes its connections
     rt1.proc = null; rt1.status = 'Stopped'; cs.stop(); fr2.close(); await m.remove(c1, true);
 

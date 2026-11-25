@@ -486,8 +486,11 @@ function renderHeaderStats() {
   const all = [...state.servers.values()];
   if (hs.servers) items.push(['Servers', `${all.filter((v) => v.status === 'Started').length}/${all.length}`]);
   if (hs.players) items.push(['Players', String(all.reduce((n, v) => n + (v.players || 0), 0))]);
-  if (hs.tick) items.push(['Tick', '-']);   // filled in once servers report a tick rate (planned)
-  $('#metrics').innerHTML = items.map(([k, v]) => `<span class="stat"><span class="k">${k}</span> ${esc(v)}</span>`).join('');
+  if (hs.tick) {   // worst tick metric of the running servers that report one; 'n/a' when none does (the server name is in the tooltip)
+    const t = NGSMTick.aggregateTick((dash.snap && dash.snap.servers || []).filter((r) => state.servers.get(r.id) && state.servers.get(r.id).pid));
+    items.push(['Tick', t.text, t.title, t.cls]);
+  }
+  $('#metrics').innerHTML = items.map(([k, v, title, cls]) => `<span class="stat"${title ? ` title="${esc(title)}"` : ''}><span class="k">${k}</span> <span class="${cls ? `tk tk-${esc(cls)}` : ''}">${esc(v)}</span></span>`).join('');
 }
 async function refreshMetrics() {
   const m = await api.call('metrics').catch(() => null);

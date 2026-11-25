@@ -138,8 +138,28 @@ function validate(m, dir) {
         else if (seen.has(x.id)) e(`${at}.id "${x.id}" is duplicated`);
         seen.add(x.id);
         if (!x.name) e(`${at}.name is required`);
-        if (x.source !== 'console' && !/^log:[a-z0-9_-]+$/i.test(String(x.source))) e(`${at}.source must be "console" or "log:<id of a declared log>"`);
-        else if (x.source !== 'console' && !logIds.has(String(x.source).slice(4))) e(`${at}.source refers to an undeclared log "${String(x.source).slice(4)}"`);
+        const src = String(x.source);
+        if (src.startsWith('rcon:')) {
+          // source "rcon:<command>": the command is sent through RCON (the game's rcon console, or an inline rconSource)
+          const cmd = src.slice(5);
+          if (!cmd.trim()) e(`${at}.source "rcon:<command>" needs a command, e.g. "rcon:tps"`);
+          else if (Buffer.byteLength(cmd, 'utf8') > 4096) e(`${at}.source command is too long (limit 4096 bytes)`);
+          const rc = (m.consoles || []).filter((c) => c && c.type === 'rcon');
+          if (x.rconSource !== undefined && !/^rcon:(\{[^}]+\}|\d{1,5}):/.test(String(x.rconSource))) e(`${at}.rconSource must look like "rcon:<port>:<password>" (each part a literal or a {placeholder})`);
+          else if (x.rconSource === undefined && x.rconConsole !== undefined && !rc.some((c) => c.id === x.rconConsole)) e(`${at}.rconConsole "${x.rconConsole}" is not a declared console of type "rcon"`);
+          else if (x.rconSource === undefined && x.rconConsole === undefined && !rc.length) e(`${at}.source "rcon:..." needs a console of type "rcon" in consoles[] (or an inline "rconSource")`);
+        } else if (src !== 'console' && !/^log:[a-z0-9_-]+$/i.test(src)) e(`${at}.source must be "console", "log:<id of a declared log>" or "rcon:<command>"`);
+        else if (src !== 'console' && !logIds.has(src.slice(4))) e(`${at}.source refers to an undeclared log "${src.slice(4)}"`);
+        if (x.patternFlags !== undefined) { try { if (typeof x.patternFlags !== 'string') throw new Error('type'); new RegExp('', x.patternFlags); } catch { e(`${at}.patternFlags must be regular expression flags such as "i" or "is"`); } }
+        if (x.kind !== undefined && x.kind !== 'tick') e(`${at}.kind must be "tick" (or omitted)`);
+        for (const k of ['tickTarget', 'warnBelow', 'badBelow', 'warnAbove', 'badAbove']) if (x[k] !== undefined && !(typeof x[k] === 'number' && Number.isFinite(x[k]) && (k !== 'tickTarget' || x[k] > 0))) e(`${at}.${k} must be a ${k === 'tickTarget' ? 'positive ' : ''}number`);
+        if (x.higherIsBetter !== undefined && typeof x.higherIsBetter !== 'boolean') e(`${at}.higherIsBetter must be true or false`);
+        if (x.kind !== 'tick') for (const k of ['tickTarget', 'higherIsBetter', 'warnBelow', 'badBelow', 'warnAbove', 'badAbove']) if (x[k] !== undefined) e(`${at}.${k} only applies to "kind": "tick"`);
+        if (typeof x.warnBelow === 'number' && typeof x.badBelow === 'number' && x.badBelow > x.warnBelow) e(`${at}.badBelow must not be above warnBelow`);
+        if (typeof x.warnAbove === 'number' && typeof x.badAbove === 'number' && x.badAbove < x.warnAbove) e(`${at}.badAbove must not be below warnAbove`);
+        if (x.kind === 'tick' && x.higherIsBetter !== false && (x.warnAbove !== undefined || x.badAbove !== undefined)) w(`${at}: warnAbove / badAbove only apply with "higherIsBetter": false (use warnBelow / badBelow)`);
+        if (x.kind === 'tick' && x.higherIsBetter === false && (x.warnBelow !== undefined || x.badBelow !== undefined)) w(`${at}: warnBelow / badBelow only apply when higher is better (use warnAbove / badAbove)`);
+        if (x.kind === 'tick' && src === 'console' && !x.command) w(`${at}: a tick metric on the console without "command" only updates when the game prints the value by itself`);
         try { const re = new RegExp(x.pattern); if (new RegExp(re.source + '|').exec('').length < 2) e(`${at}.pattern needs one capture group, e.g. "fps=([0-9.]+)"`); }
         catch { e(`${at}.pattern is not a valid regular expression`); }
         if (x.command !== undefined && typeof x.command !== 'string') e(`${at}.command must be text`);
@@ -261,7 +281,7 @@ function validateExtensions(m, e) {
       if (x.source !== undefined && typeof x.source !== 'string') e(`${at}.source must be text`);
       if (x.type === 'log' && !logIds.has(x.source)) e(`${at}.source must be the id of a declared log`);
       if (x.id === 'main' && x.type !== 'process') e(`${at}.id "main" is reserved for the game console`);
-      if (x.type === 'rcon' && !/^rcon:({[^}]+}|d{1,5}):/.test(String(x.source || ''))) e(`${at}.source must look like rcon:<port>:<password> (each part a literal or a {placeholder})`);
+      if (x.type === 'rcon' && !/^rcon:({[^}]+}|\d{1,5}):/.test(String(x.source || ''))) e(`${at}.source must look like rcon:<port>:<password> (each part a literal or a {placeholder})`);
     });
   }
   if (m.update !== undefined) {
@@ -390,7 +410,7 @@ function detail(id) {
     screenshots: (m.screenshots || []).map(rd).filter(Boolean),
     configs: g.configs.map(({ id: i, name, path: p, format, description }) => ({ id: i, name, path: p, format, description })),
     logs: g.logs.map(({ id: i, name, path: p, description }) => ({ id: i, name, path: p, description })),
-    metrics: g.metrics.map(({ id: i, name, unit, source, command, description }) => ({ id: i, name, unit, source, command, description })),
+    metrics: g.metrics.map(({ id: i, name, unit, source, command, description, kind, tickTarget, higherIsBetter }) => ({ id: i, name, unit, source, command, description, kind, tickTarget, higherIsBetter })),
   };
 }
 

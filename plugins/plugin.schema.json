@@ -99,12 +99,22 @@
           "id": { "type": "string" },
           "name": { "type": "string", "description": "Column title, e.g. Server FPS." },
           "unit": { "type": "string", "description": "e.g. fps, ms, %" },
-          "source": { "type": "string", "description": "console, or log:<id of a declared log>" },
+          "source": { "type": "string", "description": "console, log:<id of a declared log>, or rcon:<command> (command sent through RCON every intervalSec; the reply is parsed with pattern)." },
           "pattern": { "type": "string", "description": "JavaScript regex with ONE capture group holding the number, e.g. fps[:= ]+([0-9.]+). The newest match wins." },
           "command": { "type": "string", "description": "Console command sent every intervalSec so the game prints the value (needs run.stdin)." },
           "intervalSec": { "type": "number", "minimum": 2, "default": 10 },
           "staleSec": { "type": "number", "default": 120, "description": "Show - when no new value arrived for this long." },
-          "description": { "type": "string" }
+          "description": { "type": "string" },
+          "kind": { "enum": ["tick"], "description": "tick = the server's tick rate / tick time (TPS, tick rate, FPS, ms per tick). Shown as the Tick column, header stat, dashboard tile and chart, coloured by thresholds." },
+          "tickTarget": { "type": "number", "exclusiveMinimum": 0, "description": "Healthy value, e.g. 20 (TPS), 64 (tick rate), 50 (ms per tick). Used for colours when no thresholds are given." },
+          "higherIsBetter": { "type": "boolean", "default": true, "description": "false for times (ms per tick): bigger is worse." },
+          "warnBelow": { "type": "number", "description": "higherIsBetter: yellow below this value." },
+          "badBelow": { "type": "number", "description": "higherIsBetter: red below this value (<= warnBelow)." },
+          "warnAbove": { "type": "number", "description": "higherIsBetter false: yellow above this value." },
+          "badAbove": { "type": "number", "description": "higherIsBetter false: red above this value (>= warnAbove)." },
+          "patternFlags": { "type": "string", "description": "RegExp flags, default \"i\" (g / y are ignored)." },
+          "rconConsole": { "type": "string", "description": "source rcon:<command>: id of the rcon console to use (default: the first one)." },
+          "rconSource": { "type": "string", "description": "source rcon:<command>: inline rcon:<port>:<password> (placeholders allowed) instead of a console." }
         }
       }
     },

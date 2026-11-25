@@ -60,6 +60,8 @@ function statusRows(s) {
     + kv('Uptime', s.startedAt ? esc(fmtUptime(Date.now() - s.startedAt)) : '-')
     + kv('CPU', live.cpu != null ? `${live.cpu.toFixed(1)}%` : '-')
     + kv('Memory', live.mem != null ? esc(fmtBytes(live.mem)) : '-')
+    + kv('Tick', live.tick ? tickCell(live.tick, live.tick.cls) : '-')
+    + kv('Latency', live.metrics && live.metrics.latency ? `${esc(fmtNum(live.metrics.latency.value))} ms` : '-')
     + kv('Restarts', esc(s.restarts || 0));
 }
 

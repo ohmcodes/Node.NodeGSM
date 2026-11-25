@@ -38,7 +38,7 @@ function buildRegistry() {
       maxPlayers: d.maxPlayers || null, query: m.query || null,
       configs: (m.configs || []).map((c) => ({ name: c.name, path: c.path, format: c.format || 'text' })),
       logs: (m.logs || []).map((l) => ({ name: l.name, path: l.path })),
-      metrics: (m.metrics || []).map((x) => ({ id: x.id, name: x.name, unit: x.unit || '' })),
+      metrics: (m.metrics || []).map((x) => ({ id: x.id, name: x.name, unit: x.unit || '', ...(x.kind ? { kind: x.kind } : {}) })),
       media: {
         icon: rel(media.icon || 'icon.png'),
         banner: media.banner ? rel(media.banner) : null,

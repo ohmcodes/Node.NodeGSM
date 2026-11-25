@@ -561,7 +561,14 @@
           "path": "csgo/logs/*.log"
         }
       ],
-      "metrics": [],
+      "metrics": [
+        {
+          "id": "fps",
+          "name": "Server FPS",
+          "unit": "fps",
+          "kind": "tick"
+        }
+      ],
       "media": {
         "icon": "plugins/csgo/icon.png",
         "banner": null,
@@ -1657,7 +1664,20 @@
           "path": "logs/latest.log"
         }
       ],
-      "metrics": [],
+      "metrics": [
+        {
+          "id": "tps",
+          "name": "Server TPS",
+          "unit": "TPS",
+          "kind": "tick"
+        },
+        {
+          "id": "mspt",
+          "name": "Average tick time",
+          "unit": "ms",
+          "kind": "tick"
+        }
+      ],
       "media": {
         "icon": "plugins/mc/icon.png",
         "banner": null,
@@ -2358,7 +2378,14 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
-      "metrics": [],
+      "metrics": [
+        {
+          "id": "fps",
+          "name": "Server FPS",
+          "unit": "fps",
+          "kind": "tick"
+        }
+      ],
       "media": {
         "icon": "plugins/rust/icon.png",
         "banner": null,

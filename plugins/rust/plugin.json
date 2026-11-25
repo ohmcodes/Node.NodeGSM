@@ -44,6 +44,22 @@
     "additional": ""
   },
   "query": "a2s",
+  "metrics": [
+    {
+      "id": "fps",
+      "name": "Server FPS",
+      "unit": "fps",
+      "kind": "tick",
+      "source": "console",
+      "command": "fps",
+      "pattern": "([0-9]+(?:\\.[0-9]+)?)\\s*FPS",
+      "intervalSec": 15,
+      "tickTarget": 30,
+      "warnBelow": 25,
+      "badBelow": 15,
+      "description": "Server frame rate from the 'fps' console command (the console must be reachable: do not start with -nographics-only setups that hide stdin)."
+    }
+  ],
   "cluster": {
     "protectedConfigKeys": ["server.port", "server.identity", "rcon.*"],
     "preserve": ["server", "oxide/data"],

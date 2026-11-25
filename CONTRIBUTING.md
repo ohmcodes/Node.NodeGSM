@@ -24,7 +24,7 @@ Copy-Item -Recurse plugins\_template plugins\mygame
 
 3. **Edit `plugins/mygame/plugin.json`.** The comments in [PLUGINS.md](PLUGINS.md) explain every field. The minimum is `id`, `name`, `description`, `author`, `version`, `docs`, `install`, `run.exe`, `defaults`.
    **Add documentation links** (`docs`): official guides first, then unofficial ones (community wikis, forum guides, videos) - each with `title`, `url` and `type` (`official` / `unofficial`). Only add links you opened and checked.
-   Optional: `configs`, `logs`, and `metrics` (FPS / tick rate from the console or a log - only when you verified what the game prints).
+   Optional: `configs`, `logs`, and `metrics` (FPS / tick rate from the console, a log or an RCON command - only when you verified what the game prints; mark the server tick with `"kind": "tick"`, see [docs/GUIDE-metrics.md](docs/GUIDE-metrics.md)).
    Editors with JSON-schema support (VS Code does) autocomplete the fields because of the `$schema` line.
 4. **Add the media** next to it:
    - `icon.png` - square PNG, 64x64 up to 256x256 (**required**)
@@ -83,7 +83,7 @@ src/main/            Electron main process (server manager, plugin loader, insta
 src/main/api.js      the IPC/API table (name -> function); main.js mounts it on ipcMain
 src/main/services/   event-driven services (event log, Discord webhook + bot, backups, clusters, auto-clear, consoles); constructed in main.js, subscribe to mgr.events
 src/main/configEdit.js  structured config parse / edit (pure functions); src/main/rcon.js  Source RCON client
-src/renderer/        UI (plain JS/CSS): app.js (servers, detail tabs, games browser, settings), dashboard.js (table + metrics + view switching), shell.js (nav, panels, footer), discordView.js (Discord view + embed editor), logsView.js (Logs screen), backupsView.js (server Backups tab + Backups screen), links.js (footer URLs - placeholders), theme-boot.js (theme + layout before first paint)
+src/renderer/        UI (plain JS/CSS): app.js (servers, detail tabs, games browser, settings), dashboard.js (table + metrics + view switching), tick.js (shared tick helpers, also required by the main process), shell.js (nav, panels, footer), discordView.js (Discord view + embed editor), logsView.js (Logs screen), backupsView.js (server Backups tab + Backups screen), links.js (footer URLs - placeholders), theme-boot.js (theme + layout before first paint)
 scripts/             validate-plugins.js, build-registry.js, build-catalog.js (plugin catalog), build-site.js
 website/             the website + its community backend (npm run site, npm run site:serve; see website/README.md)
 test/                npm test

@@ -42,6 +42,35 @@
     "additional": "-Xmx1024M -Xms1024M"
   },
   "query": "ut3",
+  "metrics": [
+    {
+      "id": "tps",
+      "name": "Server TPS",
+      "unit": "TPS",
+      "kind": "tick",
+      "source": "rcon:tps",
+      "pattern": "TPS from last[^:]*:\\s*\\D*?([0-9.]+)",
+      "intervalSec": 15,
+      "tickTarget": 20,
+      "warnBelow": 18,
+      "badBelow": 15,
+      "description": "Paper / Spigot / Purpur only (/tps, first value = last minute). Needs enable-rcon=true in server.properties."
+    },
+    {
+      "id": "mspt",
+      "name": "Average tick time",
+      "unit": "ms",
+      "kind": "tick",
+      "source": "rcon:tick query",
+      "pattern": "Average (?:time per )?tick(?: time)?:\\s*([0-9.,]+)\\s*ms",
+      "intervalSec": 15,
+      "tickTarget": 50,
+      "higherIsBetter": false,
+      "warnAbove": 40,
+      "badAbove": 50,
+      "description": "Vanilla 1.20.3+ (/tick query). 50 ms per tick = 20 TPS. Needs enable-rcon=true."
+    }
+  ],
   "configs": [
     {
       "id": "server-properties",

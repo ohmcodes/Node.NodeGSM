@@ -33,10 +33,13 @@ const BUILTIN_COLS = [
   { id: 'uptime', label: 'Uptime', html: (r) => (r.uptime == null ? '' : fmtUptime(r.uptime)), key: (r) => (r.uptime == null ? -1 : r.uptime) },
   { id: 'threads', label: 'Threads', html: (r) => (r.threads == null ? '' : r.threads), key: (r) => (r.threads == null ? -1 : r.threads) },
   { id: 'restarts', label: 'Restarts', html: (r) => r.restarts, key: (r) => r.restarts },
+  { id: 'tick', label: 'Tick', html: (r) => (r.tick ? tickCell(r.tick, r.tick.cls) : ''), key: (r) => (r.tick ? r.tick.value : -1) },   // the server's tick metric (kind: tick) - never the latency estimate
 ];
+/** Value with unit, coloured by the tick thresholds (class tk-good / tk-warn / tk-bad); the title names the metric. */
+const tickCell = (t, cls) => `<span class="tk${cls ? ` tk-${esc(cls)}` : ''}" title="${esc(t.name || 'Tick')}">${esc(fmtNum(t.value))}${t.unit ? ` ${esc(t.unit)}` : ''}</span>`;
 const allCols = () => [...BUILTIN_COLS, ...((dash.snap && dash.snap.defs) || []).map((d) => ({
   id: d.id, plugin: true, label: d.unit ? `${d.name} (${d.unit})` : d.name,
-  html: (r) => (r.metrics && r.metrics[d.id] ? esc(fmtNum(r.metrics[d.id].value)) : ''), key: (r) => (r.metrics && r.metrics[d.id] ? r.metrics[d.id].value : -1),
+  html: (r) => (r.metrics && r.metrics[d.id] ? (r.metrics[d.id].kind === 'tick' ? tickCell({ ...r.metrics[d.id], name: d.name }, r.metrics[d.id].cls) : esc(fmtNum(r.metrics[d.id].value))) : ''), key: (r) => (r.metrics && r.metrics[d.id] ? r.metrics[d.id].value : -1),
 }))];
 const chosenCols = () => { const sel = appSettings.tableColumns || []; return allCols().filter((c) => sel.includes(c.id)); };
 
@@ -49,7 +52,7 @@ function liveRows() {
       id: v.id, name: v.name, game: v.game, gameName: v.gameName, icon: v.icon, status: v.status, pid: v.pid, ip: v.ip_display,
       port: v.port, queryPort: v.queryPort, players: v.players, maxPlayers: v.maxPlayersLive || v.maxPlayers, map: v.liveMap || v.map || '',
       restarts: v.restarts || 0, uptime: v.startedAt ? Date.now() - v.startedAt : null,
-      cpu: v.pid ? m.cpu ?? null : null, mem: v.pid ? m.mem ?? null : null, threads: v.pid ? m.threads ?? null : null, metrics: v.pid ? m.metrics || {} : {},
+      cpu: v.pid ? m.cpu ?? null : null, mem: v.pid ? m.mem ?? null : null, threads: v.pid ? m.threads ?? null : null, metrics: v.pid ? m.metrics || {} : {}, tick: v.pid ? m.tick || null : null,
     };
   });
 }
@@ -62,7 +65,7 @@ function renderColChecks(el) {
   const box = (c) => `<label class="check"><input type="checkbox" data-col="${esc(c.id)}" ${sel.includes(c.id) ? 'checked' : ''}> ${esc(c.label)}</label>`;
   const plug = cols.filter((c) => c.plugin);
   el.innerHTML = '<h5>Server</h5>' + cols.filter((c) => !c.plugin).map(box).join('')
-    + '<h5>From game plugins</h5>' + (plug.length ? plug.map(box).join('') : '<span class="muted small">None of your games declare extra metrics (FPS, tick rate ...) yet. Plugins can - see PLUGINS.md.</span>');
+    + '<h5>Game metrics (plugins, tick, latency)</h5>' + (plug.length ? plug.map(box).join('') : '<span class="muted small">None of your games declare extra metrics (FPS, tick rate ...) yet. Plugins can - see PLUGINS.md.</span>');
   el.querySelectorAll('input[data-col]').forEach((i) => (i.onchange = async () => {
     const next = cols.filter((c) => (c.id === i.dataset.col ? i.checked : (appSettings.tableColumns || []).includes(c.id))).map((c) => c.id);
     await saveSetting({ tableColumns: next });
@@ -163,7 +166,8 @@ function renderTiles() {
     + (m.disk ? tile(`Disk (${m.disk.drive})`, 'server data drive', (m.disk.used / m.disk.total) * 100, '#2ecc71', `${(m.disk.used / 2 ** 40).toFixed(2)} / ${(m.disk.total / 2 ** 40).toFixed(2)} TB`) : '');
   $('#dGame').innerHTML = tile('Servers', 'Installed server count', (g.installed / g.max) * 100, '#e84393', `${g.installed}/${g.max}`)
     + tile('Online', 'Started server count', g.installed ? (g.online / g.installed) * 100 : 0, '#1fb6d9', `${g.online}/${g.installed}`)
-    + `<div class="tile num" style="--c:#f5a623"><div class="t1"><span class="big">Active Players</span><span class="big">${g.players}</span></div></div>`;
+    + `<div class="tile num" style="--c:#f5a623"><div class="t1"><span class="big">Active Players</span><span class="big">${g.players}</span></div></div>`
+    + (() => { const a = NGSMTick.aggregateTick(s.servers); return `<div class="tile num" style="--c:#1fb6d9" title="${esc(a.title)}"><div class="t1"><span class="big">Server tick</span><span class="big${a.cls ? ` tk tk-${a.cls}` : ''}">${esc(a.text)}</span></div></div>`; })();
 }
 function renderDashTable() {
   const t = $('#dTable'); if (!t) return;
@@ -187,8 +191,8 @@ function drawChart() {
   const css = getComputedStyle(document.documentElement);
   const text = css.getPropertyValue('--muted').trim(); const line = css.getPropertyValue('--line').trim();
   const metric = appSettings.dashboardChart || 'players';
-  const unit = { players: '', cpu: '%', memory: ' GB' }[metric];
-  const val = { players: (p) => p.p, cpu: (p) => p.c, memory: (p) => p.m / 2 ** 30 }[metric];
+  const unit = { players: '', cpu: '%', memory: ' GB', tick: '', latency: ' ms' }[metric];
+  const val = { players: (p) => p.p, cpu: (p) => p.c, memory: (p) => p.m / 2 ** 30, tick: (p) => p.k, latency: (p) => p.l }[metric];   // tick / latency are missing (gap) for servers that do not report them
   const hist = dash.history;
   const ids = [...new Set(hist.flatMap((p) => Object.keys(p.s)))];
   const series = [];
@@ -201,7 +205,8 @@ function drawChart() {
   const L = 44; const R = 10; const T = 10; const B = 22;
   c.font = '11px Segoe UI, sans-serif'; c.fillStyle = text; c.strokeStyle = line;
   if (hist.length < 2) { c.fillText('Collecting data ...', L + 10, H / 2); $('#dLegend').innerHTML = ''; return; }
-  let max = Math.max(...series.flatMap((s) => s.pts.map((p) => p[1] || 0)), metric === 'players' ? 4 : metric === 'cpu' ? 10 : 1);
+  if ((metric === 'tick' || metric === 'latency') && !series.some((s) => s.pts.some((p) => p[1] != null))) { c.fillText(metric === 'tick' ? 'No running server reports a tick metric (see PLUGINS.md).' : 'No latency yet (needs a game with a query protocol).', L + 10, H / 2); $('#dLegend').innerHTML = ''; return; }
+  let max = Math.max(...series.flatMap((s) => s.pts.map((p) => p[1] || 0)), metric === 'players' ? 4 : metric === 'cpu' ? 10 : metric === 'tick' ? 20 : 1);
   const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find((s) => max / s <= 5) || 1000;
   max = Math.ceil(max / step) * step; if (metric === 'cpu') max = Math.min(100, max);
   const t0 = hist[0].t; const t1 = hist[hist.length - 1].t;

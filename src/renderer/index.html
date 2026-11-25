@@ -69,7 +69,7 @@
     <div class="dsec">Game servers</div>
     <div class="tiles" id="dGame"></div>
     <div class="dpanel">
-      <div class="row"><b>History</b><select id="dChart" class="inline"><option value="players">Players</option><option value="cpu">CPU %</option><option value="memory">Memory (GB)</option></select><span class="muted small" id="dChartNote"></span></div>
+      <div class="row"><b>History</b><select id="dChart" class="inline"><option value="players">Players</option><option value="cpu">CPU %</option><option value="memory">Memory (GB)</option><option value="tick">Tick (TPS / tick rate)</option><option value="latency">Latency (ms)</option></select><span class="muted small" id="dChartNote"></span></div>
       <canvas id="dashChart" height="240"></canvas>
       <div id="dLegend" class="legend"></div>
     </div>
@@ -261,6 +261,7 @@
 
 <div id="toast"></div>
 <script src="links.js"></script>
+<script src="tick.js"></script>
 <script src="app.js"></script>
 <script src="dashboard.js"></script>
 <script src="shell.js"></script>

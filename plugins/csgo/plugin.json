@@ -46,6 +46,20 @@
     "additional": "-tickrate 64 -usercon +game_type 0 +game_mode 0 +mapgroup mg_active"
   },
   "query": "a2s",
+  "metrics": [
+    {
+      "id": "fps",
+      "name": "Server FPS",
+      "unit": "fps",
+      "kind": "tick",
+      "source": "rcon:stats",
+      "pattern": "^\\s*[0-9.]+\\s+[0-9.]+\\s+[0-9.]+\\s+[0-9]+\\s+[0-9]+\\s+([0-9.]+)\\s+[0-9]+",
+      "patternFlags": "m",
+      "intervalSec": 10,
+      "tickTarget": 64,
+      "description": "Server frame rate from the 'stats' console command (CPU / NetIn / NetOut / Uptime / Maps / FPS / Players columns). Needs rcon_password in server.cfg."
+    }
+  ],
   "gslt": true,
   "configs": [
     {

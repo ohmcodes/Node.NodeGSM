@@ -9,7 +9,8 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | All 46 games are plugins in `plugins/<id>/` | ✅ | Edit/fix a game with a pull request - [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Declarative `plugin.json` + JSON Schema (`plugins/plugin.schema.json`) | ✅ | Editor auto-complete; format reference in [PLUGINS.md](PLUGINS.md) |
 | Listing metadata: title, description, author, version, tags, url, icon, banner, README, screenshots | ✅ | Shown in the in-app **Games** browser and the website |
-| Plugin `metrics`: game-specific live numbers (FPS, tick rate, entities ...) read with a regex from the console or a log, optionally polled with a console command | ✅ | Become selectable columns on Table / Dashboard; no built-in plugin ships one yet (a game must print the value - add only verified patterns) |
+| Plugin `metrics`: game-specific live numbers (FPS, tick rate, entities ...) read with a regex from the console, a log or an RCON command, optionally polled on a timer | ✅ | Become selectable columns on Table / Dashboard. `mc` (TPS / ms per tick), `csgo` and `rust` (FPS) ship a tick metric; other games add only verified patterns |
+| Plugin metric `kind: "tick"` + `tickTarget`, `higherIsBetter`, `warnBelow` / `badBelow` / `warnAbove` / `badAbove`, `patternFlags`, `source: "rcon:<command>"` (+ `rconConsole`, `rconSource`) | ✅ | Validated, in the schema / template, exported to `registry.json` (`kind`); see [PLUGINS.md](PLUGINS.md) |
 | Documentation links (`docs`): official and unofficial guides per game | ✅ | Grouped Official / Unofficial in the **Games** browser; exported in `registry.json`; at least one required for repository plugins. All 46 built-ins have links (Valve/SteamDB patterns + well-known guides) |
 | Install steps: `steamcmd`, `download`, `extract`, `run` (other installers), `write`, `mkdir`, `script` | ✅ | Confined to the server folder; zip built in, 7z/tar.gz via Windows `tar` |
 | Config files: any number per game (INI, JSON, XML, properties, cfg, YAML, text) | ✅ | **Config Files** tab and **Home > Configs** screen: pick a file, edit it **Structured** (key / value rows, search, add / remove key) or **Raw**, JSON validation + format, `.bak` of the previous version, create from template |
@@ -95,7 +96,9 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Start on Windows login, minimize to tray | ✅ | |
 | Table view: WindowsGSM-style horizontal server table | ✅ | ID, PID, game icon, status, name, IP, port, query port, map, players, CPU, memory, uptime ... sortable; double-click opens details |
 | Multi-select + bulk actions: Start, Stop, Restart, **Kill** (force), Update, Backup | ✅ | Checkboxes, header "select all", Ctrl/Shift click; Stop/Restart/Kill run in parallel, Start/Update/Backup one after another; buttons enable only when they apply; skipped (not applicable) servers are reported |
-| Choose which columns to show (Settings, Table and Dashboard) | ✅ | Built-in columns + plugin metrics; saved; reset to default |
+| Choose which columns to show (Settings, Table and Dashboard) | ✅ | Built-in columns (incl. **Tick**) + plugin metrics + **Latency**; saved; reset to default |
+| Server tick everywhere: Tick column, `Server tick` dashboard tile, Tick / Latency history chart options, header stat, details-panel rows, green / yellow / red by thresholds | ✅ | `src/renderer/tick.js` (shared pure helpers: number parsing, `classify`, `aggregateTick`) |
+| Built-in **Latency** estimate (query round trip, ms) for games without a tick metric | ✅ | A2S, UT3 / GameSpy4 and FiveM queries report `ping`; metric id `latency`; labelled Latency, never Tick; needs a game with a `query` protocol |
 | Dashboard: system CPU / memory / disk, installed + online servers, active players | ✅ | Refreshes every 5 s |
 | Dashboard: per-server CPU, memory (whole process tree), threads, uptime, players | ✅ | One PowerShell process table read per tick, only while servers run |
 | Dashboard: history chart (players / CPU / memory, per server) | ✅ | Last 30 minutes, canvas, follows the theme |
@@ -109,7 +112,7 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Left navigation: Home (List, Table), System Metrics, Games / Plugins, Settings, Discord | ✅ | Replaces the header view switch; Games and Settings are full views now (no longer dialogs); the nav itself collapses to an icon rail |
 | Collapsible server-list, details and quick-settings panels (`ui` setting) | ✅ | Toggle buttons in the header; state saved in settings and mirrored to localStorage so `theme-boot.js` applies it before first paint; collapsing maximises the main area |
 | Details panel (status, PID, address, players, map, uptime, CPU, memory) and quick-settings bottom panel (name, port, map, max players, start parameters, Save) | ✅ | Follow the selected server; unsaved quick-settings edits are not overwritten by status updates |
-| Header info bar: CPU, RAM, Disk, Servers (running/total), Players, Tick (`headerStats` setting) | ✅ | Chosen with checkboxes in Settings; Tick shows "-" until servers report a tick rate (planned) |
+| Header info bar: CPU, RAM, Disk, Servers (running/total), Players, Tick (`headerStats` setting) | ✅ | Chosen with checkboxes in Settings; Tick = the worst tick metric of the running servers that have one (server names in the tooltip, coloured), `n/a` when none does |
 | Footer links: Website, Discord, Donate (Patreon, PayPal, Buy Me a Coffee) | 🧪 | All URLs live in `src/renderer/links.js` and are PLACEHOLDERS to replace |
 | Discord view: webhook + Send test, event toggles, embed editor + preview (bot settings: coming) | ✅ | |
 | Logs screen under Home | ✅ | See server management table |
@@ -119,6 +122,16 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 
 ## Changelog
 Newest first. Add an entry for every change.
+
+### 2026-11-24 - Server tick metric
+- **Plugin metrics** (`plugins.js`, `plugin.schema.json`, `_template`): optional `kind: "tick"` with `tickTarget`, `higherIsBetter` (default true), `warnBelow` / `badBelow` (higher is better) or `warnAbove` / `badAbove` (times); `patternFlags`; new source `rcon:<command>` (+ `rconConsole` / inline `rconSource`). Validation: numbers, threshold order, the rcon console must exist, tick-only fields refused on other metrics, direction warnings. Existing metrics are unchanged. `registry.json` lists `kind`.
+- **Collector** (`metrics.js`): tick values are colour-stripped (ANSI, `§a`) and parsed tolerantly (commas, units); rows carry `metrics[id].{kind,cls,higherIsBetter}` and `row.tick` ({ name, value, unit, cls, target }); history points carry `k` (tick) and `l` (latency). RCON sources are polled silently through `Consoles.poll()` (no console output, no NGSM log entry, password never in errors) on a timer that starts / stops with the server.
+- **Latency fallback** (`query.js`, `serverManager.js`): a2s / ut3 / fivem queries return `ping` (ms of the answered request); `pollAll` keeps it as `rt.latency`; a game without a tick metric exposes it as metric `latency` (ms) while it is fresh (60 s).
+- **UI**: Table / Dashboard **Tick** column and Latency column, `Server tick` tile, chart options *Tick* and *Latency*, header Tick stat (worst of the running servers, `n/a` otherwise, tooltip with names), details-panel Tick / Latency rows, `.tk-good / .tk-warn / .tk-bad` colours. `tick.js` is shared by the main process and the renderer.
+- **RCON** (`rcon.js`): `send()` is now queued per connection (tick polling and a typed console command no longer collide).
+- **Fix:** plugin validation rejected literal ports in `rcon:<port>:<password>` console sources (`d{1,5}` instead of `\d{1,5}`).
+- **Plugins:** `mc` (`tps` via `rcon:tps` for Paper / Spigot, `mspt` via `rcon:tick query` for vanilla 1.20.3+), `csgo` (`fps` via `rcon:stats`), `rust` (`fps` via console `fps`); `registry.json` regenerated.
+- **Docs:** [docs/GUIDE-metrics.md](docs/GUIDE-metrics.md), PLUGINS.md, README, TECH-architecture, OPEN-QUESTIONS. **Tests:** number parsing, classification, header aggregate, console / RCON (local fake) polling, queued sends, A2S round trip + latency fallback, plugin validation.
 
 ### 2026-11-24 - Configs editor, files auto-clear, injected console, validate
 - **Configs:** new screen **Home > Configs** (server picker + the plugin's `configs[]` list; with several files nothing opens until you pick one, a single file opens at once) and the same editor in the server's **Config Files** tab (`configsView.js`). Toggle **Structured / Raw**; structured shows key / value rows with search, **Add** and **remove** for ini (sections), properties, cfg (`key value`), json (flat + nested dotted paths, typed values) and simple yaml. `src/main/configEdit.js` (pure `parse` / `edit` / `get`) keeps comments, blank and unknown lines, CRLF and BOM; only the edited line changes. JSON is re-serialised with the file's indentation. Anything that does not parse safely (invalid JSON, list-rooted JSON, tab-indented YAML, xml, text) is raw only and says why. Saving still goes through `configWrite` (`.bak`, `server:config` event in the NGSM log). IPC: `configParse(format, text)`, `configEdit(format, text, ops)`.

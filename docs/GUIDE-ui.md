@@ -16,7 +16,7 @@ Three buttons in the header toggle the panels. Everything you collapse is rememb
 - **Quick settings** (bottom): name, port, map, max players and start parameters with **Save**, next to the status details. Changes apply on the next start. Your unsaved edits are not overwritten while the server status updates. The right and bottom panels also appear in the Table and System Metrics views, following the last selected server.
 
 ## Header info bar
-Settings > **Header info bar**: pick any of CPU, RAM, Disk, Servers (running/total), Players, Tick. Tick shows `-` until servers report a tick rate.
+Settings > **Header info bar**: pick any of CPU, RAM, Disk, Servers (running/total), Players, Tick. Tick shows the worst tick metric (TPS, tick rate, FPS or ms per tick, coloured) of the running servers whose game declares one; hover it for the server names. It shows `n/a` when no running server reports one - see [GUIDE-metrics.md](GUIDE-metrics.md).
 
 ## Footer
 **Website**, **Discord** and **Donate** (Patreon, PayPal, Buy Me a Coffee) open in your default browser. The addresses are placeholders in `src/renderer/links.js` - replace each `...-replace-me` URL.

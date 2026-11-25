@@ -8,9 +8,11 @@ const { execFile } = require('child_process');
 const { EventEmitter } = require('events');
 const { byId } = require('./plugins');
 const { LogTail } = require('./logTail');
+const tickUtil = require('../renderer/tick');   // shared with the renderer (colours, number parsing, header aggregate)
 
 const HISTORY = 360;              // points kept (5 s apart = 30 minutes)
 const DEFAULT_STALE_MS = 120000;
+const LATENCY_FRESH_MS = 60000;   // the query round trip counts as 'latency' for this long after the last poll
 
 /** One PowerShell call returns every process; we sum each server's process tree. */
 function readProcesses() {
@@ -55,7 +57,7 @@ class MetricsCollector extends EventEmitter {
     this.prevSys = null; this.prevProc = new Map();   // id -> { cpuTime, t }
     this.custom = new Map();                          // "<id>:<metric>" -> { value, t }
     this.compiled = new Map();                        // metric object -> RegExp
-    this.tail = new LogTail(); this.tailing = new Set(); this.cmdTimers = new Map();
+    this.tail = new LogTail(); this.tailing = new Set(); this.cmdTimers = new Map(); this.inflight = new Set(); this.pollErrors = new Map();
     this.onConsole = ({ id, line }) => this.feed(id, 'console', line);
     this.onStatus = (v) => this.syncSources(v);
     this.tail.on('lines', ({ id, logId, lines }) => lines.forEach((l) => this.feed(id, `log:${logId.replace(/^m:/, '')}`, l)));
@@ -75,19 +77,39 @@ class MetricsCollector extends EventEmitter {
 
   // ---------- plugin metrics ----------
   regex(m) {
-    if (!this.compiled.has(m)) { try { this.compiled.set(m, new RegExp(m.pattern, 'i')); } catch { this.compiled.set(m, null); } }
+    if (!this.compiled.has(m)) {
+      // patternFlags (optional) replaces the default "i"; g / y are dropped (a stateful regex would skip matches)
+      try { this.compiled.set(m, new RegExp(m.pattern, typeof m.patternFlags === 'string' ? m.patternFlags.replace(/[gy]/g, '') : 'i')); } catch { this.compiled.set(m, null); }
+    }
     return this.compiled.get(m);
+  }
+  /** Match one line / text against a metric; stores the value (first capture group) when it parses. Tick metrics are colour-stripped and parsed tolerantly. */
+  record(id, m, line) {
+    const tick = m.kind === 'tick';
+    const re = this.regex(m); const r = re && re.exec(tick ? tickUtil.stripColours(line) : line);
+    if (!r || r[1] === undefined) return false;
+    const v = tick ? tickUtil.parseTickNumber(r[1]) : parseFloat(String(r[1]).replace(',', '.'));
+    if (Number.isNaN(v)) return false;
+    this.custom.set(`${id}:${m.id}`, { value: v, t: Date.now() });
+    return true;
   }
   feed(id, source, line) {
     const c = this.mgr.getConfig(id); const g = c && byId(c.game);
     if (!g || !g.metrics.length) return;
-    for (const m of g.metrics) {
-      if (m.source !== source) continue;
-      const re = this.regex(m); const r = re && re.exec(line);
-      if (!r || r[1] === undefined) continue;
-      const v = parseFloat(String(r[1]).replace(',', '.'));
-      if (!Number.isNaN(v)) this.custom.set(`${id}:${m.id}`, { value: v, t: Date.now() });
-    }
+    for (const m of g.metrics) if (m.source === source) this.record(id, m, line);
+  }
+  /** source "rcon:<command>": send the command through the server's RCON (silently) and read the first matching line of the reply. */
+  async pollRcon(id, m) {
+    const key = `${id}:${m.id}`; const cs = this.mgr._consoles;
+    if (!cs || this.inflight.has(key) || !this.mgr.isRunning(id)) return false;
+    this.inflight.add(key);
+    try {
+      const out = await cs.poll(id, m.source.slice(5), { consoleId: m.rconConsole, source: m.rconSource });
+      this.pollErrors.delete(key);
+      for (const line of String(out).split(/\r?\n/)) if (this.record(id, m, line)) return true;
+      return false;
+    } catch (e) { this.pollErrors.set(key, e.message); return false; }   // messages never contain the password
+    finally { this.inflight.delete(key); }
   }
   /** Start/stop log tails and command timers as servers start and stop. */
   syncSources(v) {
@@ -103,9 +125,13 @@ class MetricsCollector extends EventEmitter {
           try { this.tail.start(id, `m:${m.source.slice(4)}`, path.resolve(this.mgr.filesDir(id)), def.path); } catch { this.tailing.delete(key); }
         } else if (!up && this.tailing.has(key)) { this.tailing.delete(key); this.tail.stop(id, `m:${m.source.slice(4)}`); }
       }
-      if (m.command) {
+      const every = Math.max(2, Number(m.intervalSec) || 10) * 1000;
+      if (m.source.startsWith('rcon:')) {
+        if (up && !this.cmdTimers.has(key)) this.cmdTimers.set(key, setInterval(() => { this.pollRcon(id, m).catch(() => {}); }, every));
+        else if (!up && this.cmdTimers.has(key)) { clearInterval(this.cmdTimers.get(key)); this.cmdTimers.delete(key); }
+      } else if (m.command) {
         if (up && !this.cmdTimers.has(key)) {
-          this.cmdTimers.set(key, setInterval(() => { try { if (this.mgr.rt(id).proc) this.mgr.sendCommand(id, m.command, { silent: true }); } catch { /* no stdin */ } }, Math.max(2, Number(m.intervalSec) || 10) * 1000));
+          this.cmdTimers.set(key, setInterval(() => { try { if (this.mgr.rt(id).proc) this.mgr.sendCommand(id, m.command, { silent: true }); } catch { /* no stdin */ } }, every));
         } else if (!up && this.cmdTimers.has(key)) { clearInterval(this.cmdTimers.get(key)); this.cmdTimers.delete(key); }
       }
       if (!up) this.custom.delete(key);
@@ -115,9 +141,26 @@ class MetricsCollector extends EventEmitter {
     const out = {};
     for (const m of g.metrics) {
       const e = this.custom.get(`${id}:${m.id}`);
-      if (e && now - e.t <= (Number(m.staleSec) || 120) * 1000) out[`m:${m.id}`] = { value: e.value, unit: m.unit || '' };
+      if (!e || now - e.t > (Number(m.staleSec) || 120) * 1000) continue;
+      const entry = { value: e.value, unit: m.unit || '' };
+      if (m.kind === 'tick') { entry.kind = 'tick'; entry.cls = tickUtil.classify(e.value, m); entry.higherIsBetter = m.higherIsBetter !== false; }
+      out[`m:${m.id}`] = entry;
     }
     return out;
+  }
+  /** Row summary of the first available tick metric of a server ({ id, name, value, unit, cls, higherIsBetter, target }) or null. */
+  tickOf(g, metrics) {
+    for (const m of g.metrics) {
+      const e = m.kind === 'tick' && metrics[`m:${m.id}`];
+      if (e) return { id: `m:${m.id}`, name: m.name, value: e.value, unit: e.unit, cls: e.cls, higherIsBetter: e.higherIsBetter, target: Number(m.tickTarget) || null };
+    }
+    return null;
+  }
+  /** Built-in fallback for games without a tick metric: the query round trip (ms), clearly named Latency, never "tick". */
+  latencyFor(id, g, now) {
+    if (g && g.metrics.some((m) => m.kind === 'tick')) return null;
+    const l = this.mgr.rt(id).latency;
+    return l && now - l.t <= LATENCY_FRESH_MS ? { value: l.ms, unit: 'ms', kind: 'latency', higherIsBetter: false } : null;
   }
 
   // ---------- system ----------
@@ -150,13 +193,18 @@ class MetricsCollector extends EventEmitter {
       let online = 0;
       for (const v of views) {
         const g = byId(v.game);
-        for (const m of (g && g.metrics) || []) if (!defs.has(`m:${m.id}`)) defs.set(`m:${m.id}`, { id: `m:${m.id}`, name: m.name, unit: m.unit || '' });
+        for (const m of (g && g.metrics) || []) if (!defs.has(`m:${m.id}`)) defs.set(`m:${m.id}`, { id: `m:${m.id}`, name: m.name, unit: m.unit || '', ...(m.kind === 'tick' ? { kind: 'tick', higherIsBetter: m.higherIsBetter !== false } : {}) });
         const row = {
           id: v.id, name: v.name, game: v.game, gameName: v.gameName, icon: v.icon, status: v.status, pid: v.pid || null,
           ip: v.ip_display, port: v.port, queryPort: v.queryPort, players: v.players, maxPlayers: v.maxPlayersLive || v.maxPlayers,
           map: v.liveMap || v.map || '', restarts: v.restarts || 0, uptime: v.startedAt ? now - v.startedAt : null,
-          cpu: null, mem: null, threads: null, metrics: g ? this.customFor(v.id, g, now) : {},
+          cpu: null, mem: null, threads: null, metrics: g ? this.customFor(v.id, g, now) : {}, tick: null,
         };
+        if (g) {
+          row.tick = this.tickOf(g, row.metrics);
+          const lat = v.pid ? this.latencyFor(v.id, g, now) : null;
+          if (lat) { row.metrics.latency = lat; if (!defs.has('latency')) defs.set('latency', { id: 'latency', name: 'Latency', unit: 'ms', kind: 'latency', higherIsBetter: false }); }
+        }
         if (v.pid) online++;
         if (v.pid && table) {
           const t = treeTotals(table, v.pid);
@@ -166,7 +214,7 @@ class MetricsCollector extends EventEmitter {
           this.prevProc.set(v.id, { cpuTime: t.cpuTime, t: now });
           row.mem = t.mem; row.threads = t.threads;
         } else if (!v.pid) this.prevProc.delete(v.id);
-        if (v.pid) { point.players += v.players || 0; point.s[v.id] = { p: v.players || 0, c: row.cpu || 0, m: row.mem || 0 }; }
+        if (v.pid) { point.players += v.players || 0; point.s[v.id] = { p: v.players || 0, c: row.cpu || 0, m: row.mem || 0, ...(row.tick ? { k: row.tick.value } : {}), ...(row.metrics.latency ? { l: row.metrics.latency.value } : {}) }; }
         rows.push(row);
       }
       const snapshot = {

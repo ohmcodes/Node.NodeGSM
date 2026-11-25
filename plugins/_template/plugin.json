@@ -70,7 +70,11 @@
       "pattern": "fps[:= ]+([0-9.]+)",
       "command": "fps",
       "intervalSec": 10,
-      "description": "Optional: shown as a column on the Table and Dashboard views"
+      "kind": "tick",
+      "tickTarget": 60,
+      "warnBelow": 50,
+      "badBelow": 30,
+      "description": "Optional: shown as a column on the Table and Dashboard views. kind \"tick\" also feeds the Tick header stat, dashboard tile / chart and colours (warnBelow / badBelow; use higherIsBetter false + warnAbove / badAbove for times). source can also be \"rcon:<command>\"."
     }
   ],
   "logs": [

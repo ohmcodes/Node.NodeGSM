@@ -63,3 +63,15 @@ Decisions deferred while implementing, to confirm with the project owner.
 - Validate for games without a SteamCMD step re-runs the plugin install steps (same as Update); only `plugin.js` installers can tell the difference through `helpers.validate`. `update.validateArgs` supports only the key `steamcmd` for now.
 - Validate asks for a confirmation (it can overwrite edited game files, configs are normally kept). Auto update never validates.
 - The busy state text (`Validating`) was only checked through tests and the status events; the badge colour reuses the "Updating" style.
+
+## Phase 7 - server tick metric
+- **Real-world testing:** tick polling was tested with local fakes only (a fake RCON server, a fake A2S server, fake console processes). Please try a real Paper server (`rcon:tps`), a vanilla 1.20.3+ server (`rcon:tick query`), a csgo server (`rcon:stats` column layout) and Rust (`fps` console output) and correct the patterns if the real output differs.
+- Games with **no console / RCON access** (stdin-less hlds / srcds without RCON, Unreal / Unity servers that only log) cannot be polled; they get the Latency estimate only. Should a log-based tick (pattern on a periodic log line) be added per game, or a generic "stats" file reader?
+- Minecraft: `tps` exists on Paper / Spigot / Purpur only; vanilla < 1.20.3 has no tick command at all. Spark (`/spark tps`) or a mod would need its own pattern; should the mc plugin try `spark tps` as a third metric when Spark is installed?
+- The `stats` pattern for Source games reads the **FPS** column of the first numeric row; newer builds add `Svms +-ms ~tick` columns and the variance is not shown. Is a second metric (frame time / variance) wanted?
+- Header Tick with servers of different games mixes units (TPS and fps): it shows the *worst by colour*, then by value, with the unit. Should it be per game group, or average only for same-unit servers (`aggregateTick(rows, 'avg')` exists but there is no setting)?
+- Latency is the UDP / HTTP round trip from NodeGSM to the local query port (127.0.0.1), so it mostly reflects how busy the server's main loop is, not network latency. It is only measured every 15 s (the status poll). Is that acceptable, and should it also be offered as a column by default?
+- Colour defaults without thresholds come from `tickTarget` (90 % / 75 % higher is better; 1x / 2x lower is better); these are guesses. Plugin authors can set exact `warn*` / `bad*`.
+- Each RCON tick metric is a separate command per interval (mc ships two: `tps` and `tick query`, on Paper both answer). The unused one logs "unknown command" on the server console. Should a metric be disabled automatically after N consecutive failures?
+- RCON polls are not written to the NGSM log (to avoid a line every 15 s). Failures are only kept in memory (`pollErrors`); there is no UI for them yet - should a failing tick poll show a hint (for example "RCON not reachable") in the details panel?
+- `kind` is the only new `metrics[]` kind; the `registry.json` entry carries it, but the website catalog does not show it yet.

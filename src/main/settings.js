@@ -18,14 +18,14 @@ const DEFAULTS = {
   view: 'servers',            // servers (list) | table | dashboard (last opened view)
   tableColumns: ['id', 'pid', 'icon', 'status', 'name', 'ip', 'port', 'queryPort', 'map', 'players', 'cpu', 'memory', 'uptime'], // Table + Dashboard columns; plugin metrics are "m:<id>"
   dashboardShowStopped: false,
-  dashboardChart: 'players',  // players | cpu | memory
+  dashboardChart: 'players',  // players | cpu | memory | tick | latency
   ui: { leftCollapsed: false, rightCollapsed: false, bottomCollapsed: false, navCollapsed: false }, // panel collapse state
   headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
   discord: { webhookUrl: '', botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], allowRawCommands: false, events: {}, templates: {} },
   logging: { retentionDays: 30 }, // NGSM event log retention
 };
 const VIEWS = ['servers', 'table', 'dashboard'];
-const CHARTS = ['players', 'cpu', 'memory'];
+const CHARTS = ['players', 'cpu', 'memory', 'tick', 'latency'];
 
 const SNOWFLAKE = /^\d{1,25}$/;
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');

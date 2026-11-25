@@ -257,7 +257,7 @@ class ServerManager extends EventEmitter {
     if (!fs.existsSync(exePath)) { const m = `${g.exe} not found (${exePath}). Install the server first.`; this.log(id, m); throw new Error(m); }
     this.log(id, `> ${path.basename(cmd)} ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`);
 
-    this.setStatus(id, 'Started', { startedAt: Date.now(), stopping: false, players: null });
+    this.setStatus(id, 'Started', { startedAt: Date.now(), stopping: false, players: null, latency: null });
     let proc;
     try {
       proc = spawn(cmd, args, { cwd, windowsHide: true, stdio: [g.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], windowsVerbatimArguments: false });
@@ -281,7 +281,7 @@ class ServerManager extends EventEmitter {
     const c = this.getConfig(id);
     const crashed = !rt.stopping;
     this.log(id, `Server exited (code ${code}).`);
-    this.setStatus(id, 'Stopped', { startedAt: null, players: null });
+    this.setStatus(id, 'Stopped', { startedAt: null, players: null, latency: null });
     this.emitEvent(crashed ? 'server:crashed' : 'server:stopped', id, { code });
     if (!c) return;
     if (crashed) {
@@ -554,6 +554,7 @@ class ServerManager extends EventEmitter {
       const info = await query(g.query, c.ip, c.queryPort || c.port, 2500);
       const status = info ? 'Started' : 'Starting';
       rt.players = info ? info.players : null; rt.maxPlayersLive = info ? info.maxPlayers : null; rt.queryInfo = info || null;
+      rt.latency = info && Number.isFinite(info.ping) ? { ms: info.ping, t: Date.now() } : null;   // query round trip -> built-in 'latency' metric (metrics.js)
       if (rt.status !== status && rt.status !== 'Updating' && rt.status !== 'Validating') this.setStatus(id, status);
       else this.emit('status', this.view(id));
     }

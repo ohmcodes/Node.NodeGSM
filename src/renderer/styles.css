@@ -302,3 +302,5 @@ body:not([data-view=configs]) #vConfigs{display:none}
 .cfg-bar[hidden],.cfg-struct[hidden],.cfg-ed[hidden],.cfg-addsec[hidden]{display:none!important}
 .filesPage .files>div{min-width:0}.filesPage .files>div:last-child{display:flex;flex-direction:column;gap:6px}.filesPage #fileEd{flex:1;height:auto;min-height:200px}
 #acPanel{overflow-x:auto;min-width:0}#acPanel .bk-act{white-space:normal}#acPanel .bk-act button{margin:1px}
+/* server tick: value coloured by the plugin's thresholds */
+.tk-good{color:var(--ok)}.tk-warn{color:var(--warn)}.tk-bad{color:var(--bad);font-weight:600}

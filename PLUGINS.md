@@ -163,8 +163,43 @@ Every server already gets **CPU, memory (whole process tree), threads, uptime, P
 | `pattern` | yes | JavaScript regex with **one capture group** holding the number; the newest match wins |
 | `command` | no | console command sent every `intervalSec` (min 2, default 10) so the game prints the value (needs `run.stdin`, not for srcds/hlds) |
 | `staleSec` | no | show nothing when no new value arrived for this long (default 120) |
+| `patternFlags` | no | RegExp flags, default `i` (`g` / `y` are ignored); e.g. `m` when the pattern uses `^` on a multi-line reply |
+| `kind` | no | `"tick"` marks the server's tick rate / tick time (see below). Omit for ordinary metrics (unchanged) |
 
-NodeGSM cannot read FPS from a game by itself - the game has to print it. Check what your server prints (or which console command reports it) and describe it here. Only add metrics you have verified.
+NodeGSM cannot read FPS from a game by itself - the game has to print it (or answer a command). Check what your server prints (or which console command reports it) and describe it here. Only add metrics you have verified.
+
+#### Tick metric (`"kind": "tick"`) and the Latency fallback
+A metric with `kind: "tick"` is the server's tick rate (TPS, tick rate, FPS) or tick time (ms per tick). It is shown as the **Tick** column on the Table / Dashboard, the **Tick** header stat (worst value of the running servers that have one, server names in the tooltip, `n/a` when none does), a **Server tick** dashboard tile, the **Tick** history chart and the **Tick** row of the details panel, coloured green / yellow / red. A game *without* a tick metric gets the built-in **Latency** (ms, the query round trip, never called "tick") instead - column / chart `Latency`, no header stat.
+
+| Field (tick metrics only) | |
+|---|---|
+| `tickTarget` | healthy value, e.g. `20` (TPS), `64` (tick rate), `50` (ms per tick); gives default colours: higher is better = yellow below 90 %, red below 75 %; lower is better = yellow above the target, red above 2 x the target |
+| `higherIsBetter` | default `true`; `false` for times (ms per tick) |
+| `warnBelow`, `badBelow` | thresholds when higher is better (`badBelow` <= `warnBelow`); override the `tickTarget` defaults |
+| `warnAbove`, `badAbove` | thresholds when `higherIsBetter` is `false` (`badAbove` >= `warnAbove`) |
+
+`source` for a tick metric (any metric) can be:
+- `console` - the server's output; with `command` the command is written to the console every `intervalSec` (needs `run.stdin`; not for srcds / hlds).
+- `log:<id>` - a log declared in `logs[]`.
+- `rcon:<command>` - the command is sent **through RCON** every `intervalSec` and the first matching line of the reply is parsed (silent: nothing in the Console tab or the NGSM log; the password is never logged). It uses the game's first console of type `rcon` (`consoles[]`), or `rconConsole` (the id of one), or an inline `rconSource` (`rcon:<port>:<password>`, same `{placeholder}` rules as consoles). The server must be running and RCON enabled; a failing poll simply shows no value.
+
+The `pattern` has **one capture group**; its text is parsed tolerantly (ANSI colours like `ESC[32m`, Minecraft `§a` codes, `*` markers, `1,234.5`, `20,0`, units like `12.3ms` - the first number counts).
+```json
+"metrics": [
+  { "id": "tps", "name": "Server TPS", "unit": "TPS", "kind": "tick", "source": "rcon:tps",
+    "pattern": "TPS from last[^:]*:\\s*\\D*?([0-9.]+)", "intervalSec": 15, "tickTarget": 20, "warnBelow": 18, "badBelow": 15 },
+  { "id": "mspt", "name": "Average tick time", "unit": "ms", "kind": "tick", "source": "rcon:tick query",
+    "pattern": "Average (?:time per )?tick(?: time)?:\\s*([0-9.,]+)\\s*ms", "higherIsBetter": false, "tickTarget": 50, "warnAbove": 40, "badAbove": 50 }
+]
+```
+Bundled examples (check what your game version prints before copying):
+| Game | Metric | How |
+|---|---|---|
+| `mc` | `tps` | `rcon:tps` - **Paper / Spigot / Purpur only** (`/tps`, the first value is the last minute). Needs `enable-rcon=true` + `rcon.password` in `server.properties` |
+| `mc` | `mspt` (ms, lower is better) | `rcon:tick query` - **vanilla 1.20.3+** (`/tick query`, "Average time per tick"). 50 ms = 20 TPS. Older vanilla has no tick command: use a mod / Spark (see [docs/GUIDE-metrics.md](docs/GUIDE-metrics.md)) |
+| `csgo` | `fps` | `rcon:stats` - the Source `stats` command (CPU / NetIn / NetOut / Uptime / Maps / **FPS** / Players); srcds has no stdin, so RCON is used. Needs `rcon_password` in `server.cfg`. `tickTarget` 64 (raise it for 128-tick servers) |
+| `rust` | `fps` | console `fps` (output like `60 FPS`); Rust's console must be reachable (stdin) |
+Other Source games (tf2, css, gmod ...) can use the same `stats` pattern as csgo; they currently show Latency only.
 
 ### Optional fields for clusters, backups, events, logging, consoles, update and auto-clear
 All of these are optional. They are validated and carried onto the game object (and exported in `registry.json` when present). All of them are used by the app (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
