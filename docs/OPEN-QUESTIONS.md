@@ -114,7 +114,7 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - The in-app header mark is inline SVG coloured by the accent; the website logo is a fixed-blue PNG (mark only, transparent) and the favicon is the dark tile.
 
 ## Phase 9 - docs, tests and release
-- Features not done and listed as ⏳ in FEATURES.md: scheduled (cron) backups, `logging.logFiles` scanning, Steam login, mod manager, WindowsGSM plugin converter, online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
+- Features not done and listed as ⏳ in FEATURES.md: scheduled (cron) backups, `logging.logFiles` scanning, Steam login, mod manager, online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
 - Which of the unverified (🧪) features do you want promoted to ✅ after the manual run in [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md)?
 - *(Resolved: `GUIDE-web-linux.md` exists.)*
 
@@ -132,3 +132,13 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - **Crash handling in web mode:** uncaught exceptions are logged to `logs/crash.log` and the process keeps running (the desktop app can relaunch itself, a service relies on systemd `Restart=`). Exit and let the supervisor restart instead?
 - **Windows web mode:** `npm run serve` also works on Windows (used for the automated tests); it is not packaged as a Windows service.
 - **New dependency:** `ws` 8.23.0 (about 0.2 MB; it was already installed transitively by `discord.js`, now pinned as a direct dependency).
+
+## Website - WindowsGSM plugin converter
+- **Hosting for the backend:** option 3 (automated submission) needs the Website's Node server; the production site is static GitHub Pages, where the option is disabled automatically. Where should the backend run (a small VPS, a container host), and which URL goes into `API_URL` / `ALLOWED_ORIGINS`?
+- **Moderation process:** who reviews submissions, how often, and what is the bar (the draft PR still needs icon, docs links, a test in NodeGSM and the Catalogue CI)? Should rejected submissions be kept, and for how long? There is only the `ADMIN_TOKEN` + curl / `admin-submissions.html`, no e-mail notification.
+- **Bot token scope:** `GITHUB_TOKEN` should be a **fine-grained token limited to the Catalogue repository** with *Contents* and *Pull requests* read/write only. Should the PRs come from a dedicated bot account / GitHub App instead of a personal token, and should branches `submit/*` be cleaned up after merge?
+- **Spam handling / captcha:** the only protections are per-hashed-IP limits (1 per 10 minutes, 3 per day), a 200-pending cap, size / character checks and owner review. Add a captcha, a proof-of-work, or require a verified contact?
+- **Accept `plugin.js` conversions?** Today only `plugin.json` + README are accepted automatically; anything that needs code (custom install / update, version checks) must go through a normal PR so a person reviews the script. Keep it that way?
+- **Licence consent wording:** the checkbox says *"I agree this plugin may be published under the repository licence"* (the Catalogue is MIT) and that the submitter has the right to share it. Is that enough, or should it name the licence and the original WindowsGSM plugin author (WindowsGSM plugins are often MIT but not always)? The converter keeps the original author only as text in the README / PR body.
+- **Contact data:** the optional contact is stored as plain text and shown to the owners only. Retention (delete after the PR is merged?) and whether to ask for it at all.
+- **Real-world check:** the converter was tested on the three WindowsGSM samples, original fixtures and by temporarily adding metadata to WindowsGSM's built-in engine classes (not committed); it has not been run on real third-party plugins from the plugin repository, and the GitHub flow has only run against a fake local GitHub.

@@ -119,6 +119,10 @@ Every function of the app backend is one entry of the table returned by `buildAp
 | `openExternal` | `url` | - | Opens an `http(s)` link in the default browser; anything else throws |
 | `pickFolder` | - | path or `null` | Folder dialog. Web mode: throws ("not available in web mode"); the UI hides the button and lets the user type the path |
 | `relaunch` | - | - | Stops the servers gracefully and relaunches the app. Web mode: throws a hint to restart the service yourself |
+| `dataLocation` | - | `{ current, standard, pointer, envOverride, oldFolder }` | Where the data folder is: `current` (in use), `standard` (`%APPDATA%\NodeGSM`), `pointer` (folder in `data-location.txt`, or `null`), `envOverride` (set by `NODEGSM_DATA`), `oldFolder` (the pre-NodeGSM folder). Desktop only |
+| `dataLocationPlan` | `to, mode` | `{ ok, error?, files, bytes, skipped, free }` | Dry run for a new data folder. `mode` = `copy` (target must be empty) or `use` (target already holds NodeGSM data). Refused while any server is not `Stopped` |
+| `dataLocationMove` | `to, mode` | `{ from, to, files, bytes, skipped }` | Copies (or just points at) the new folder, writes `data-location.txt`, keeps the old folder. The UI then calls `relaunch`. Progress as `dataLocation:progress`. Desktop only |
+| `dataLocationOpenOld` | `dir?` | - | Opens the data folder (or `dir`) in Explorer |
 | `platformInfo` | - | `{ mode, platform, features }` | `mode` = `desktop` or `web`; `platform` = `windows`, `linux` or `macos`; `features` = booleans the UI uses to hide what cannot work: `pickFolder`, `openFolder`, `revealBackup`, `backupDownload` (web only), `relaunch`, `tray`, `startOnLogin`, `hardwareAcceleration`, `installPluginFile`, `pluginsFolder`, `firewall` (Windows only) |
 
 ## Push events (main -> renderer)
@@ -133,6 +137,7 @@ Subscribe with `window.wgsm.on(channel, cb)`.
 | `removed` | `id` (string) | A server was deleted |
 | `metrics` | `{ snapshot, point }` | Every 5 s while the collector runs: the full snapshot (`system`, `game`, `defs`, `servers[]`) and the new history point (`players`, `cpu`, `mem`, `k` tick, `l` latency) |
 | `cluster:progress` | `{ phase, percent, memberId, memberName, memberIndex, memberCount, message }` | During a cluster update (parent update, then each member) |
+| `dataLocation:progress` | `{ files, totalFiles, bytes, totalBytes, done? }` | While `dataLocationMove` copies the data folder |
 | `discordBot` | `{ state, user, error, guilds, registered }` | The bot's connection state changed (the token is redacted from `error`) |
 
 ## Server-side event bus (not IPC)
@@ -153,5 +158,5 @@ The headless server ([`src/server/headless.js`](../src/server/headless.js), `npm
 
 - **Credentials:** the browser uses the `nodegsm_session` cookie (`HttpOnly; SameSite=Strict; Path=/`, `Secure` when `--https` or `X-Forwarded-Proto: https`). Scripts can send `Authorization: Bearer <token>` instead (no Origin header needed, no cookie).
 - **CSRF:** for cookie (and no-auth) requests the `Origin` header must be present and equal to `Host`; otherwise 403. JSON content type only; there is no CORS (no `Access-Control-*` headers).
-- **Not available in web mode** (they throw an error, the UI hides them): `pickFolder`, `openFolder`, `backupOpenFolder`, `backupDownload` (use the HTTP download above), `pluginsInstallZip`, `pluginsInstallFolder`, `pluginsFolder`, `openExternal` (the browser opens links itself), `relaunch`.
+- **Not available in web mode** (they throw an error, the UI hides them): `pickFolder`, `openFolder`, `backupOpenFolder`, `backupDownload` (use the HTTP download above), `pluginsInstallZip`, `pluginsInstallFolder`, `pluginsFolder`, `openExternal` (the browser opens links itself), `relaunch`, `dataLocation*` (a service is configured with `--data` / `NODEGSM_DATA`).
 - **Example:** `curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"args":["1"]}' http://127.0.0.1:8730/api/start`

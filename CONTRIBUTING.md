@@ -4,12 +4,14 @@ NodeGSM is split into three repositories:
 
 | Repository | What goes there |
 |---|---|
-| **[NodeGSM](https://github.com/ohmcodes/Node.WGSM2026)** (this one) | the app: Electron UI, server manager, services, the plugin *format* |
+| **[NodeGSM](https://github.com/ohmcodes/Node.NodeGSM)** (this one) | the app: Electron UI, server manager, services, the plugin *format* |
 | **[Catalogue](https://github.com/ohmcodes/Node.NodeGSM.Catalogue)** | **games**: add a new game or fix an outdated one. See its [CONTRIBUTING.md](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/blob/main/CONTRIBUTING.md) |
 | **[Website](https://github.com/ohmcodes/Node.NodeGSM.Website)** | the website, ratings, comments |
 
 ## Add or fix a game
 Open a pull request in the **Catalogue** repository (copy `plugins/_template`, run `npm test` there). You do not need to build or even download NodeGSM for that. To try your plugin, install the folder in the app: **Games → Install plugin (folder)**. Can't code? Open a [Game request](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/issues/new?template=game-request.md).
+
+Migrating a plugin from **WindowsGSM**? The website has a converter (`/convert.html`, in the Website repository) that turns the C# file into a `plugin.json` + README and can guide or automate the pull request; see the Catalogue's CONTRIBUTING.md (*Migrating a WindowsGSM C# plugin*) for what converts and what does not.
 
 You can also fix a game locally without a PR: put the edited folder in the app's plugins folder (**Games → Plugins folder**) with the same id; it overrides the catalogue copy.
 

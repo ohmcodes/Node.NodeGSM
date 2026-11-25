@@ -24,7 +24,8 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 | Game browser in the app (search, README, screenshots, defaults, configs/logs) | ✅ | **Games** button → **Add server** |
 | PR guide, PR template, game-request issue template, CI | ✅ | `CONTRIBUTING.md`, `.github/` |
 | Optional plugin fields: `cluster`, `configs[].protect`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` | ✅ | Validated (relative paths only, regexes must compile, `rcon:` sources must have the `rcon:<port>:<password>` shape), in the schema, template, `toGame()` and `registry.json`; all of them are used by the app |
-| Converter for WindowsGSM C# plugins | ⏳ | Manual mapping table in PLUGINS.md for now |
+| Converter for WindowsGSM C# plugins (website page `convert.html`, `public/convert-cs.js` in the Website repository) | ✅ | Pure text parsing, no dependencies, never runs the C#: `plugin.json` + README + PR body; custom `Install()` / `Update()` / RCON etc. are reported as TODOs, never guessed. Output checked against the Catalogue validator. What converts: Catalogue `CONTRIBUTING.md` |
+| Website: guided pull request and **automated submission** of a converted plugin (`POST /api/submissions`, owner approval, optional draft PR to the Catalogue through the GitHub REST API) | 🧪 | Only `plugin.json` + `README.md` are accepted (never `plugin.js`); needs the Website backend (not GitHub Pages) and optionally `GITHUB_TOKEN`; tested against a fake local GitHub only |
 | **In-app catalogue** (Games → Catalogue): list downloaded once and cached, refreshed at most daily or on demand, search, one-click install / update, sha256 check, `plugin.js` warning | ✅ | `src/main/catalogue.js`; address configurable (`catalogueUrl`, https or a local folder); tested with a local folder, not against the live Pages site yet |
 | Scanning of `logging.logFiles` (game log files) by the NGSM log | ⏳ | Declared and validated, but only console lines are matched |
 
@@ -131,11 +132,31 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 | NodeGSM logo and icons: hand-written SVG (`assets/logo.svg`, `logo-wordmark.svg`, `icon.svg`), `npm run icons` redraws PNG / ICO without dependencies | 🧪 | N from stacked server blocks + a network link, accent = default `--accent`. Checked as PNG / SVG here; tray, taskbar and high-DPI look not checked on a real screen. First pass: direction awaits your review |
 | Logo in the app: header mark (inline SVG, follows the accent colour), window and taskbar icon, tray icon (16 + 32 px) | 🧪 | `assets/icon*.png`; the `.exe` file icon stays the Electron one while `signAndEditExecutable` is false (README) |
 | External links open in the default browser; in-app navigation blocked | ✅ | |
-| Legacy data folder kept after rename | ✅ | `%APPDATA%\node-wgsm2026\WGSM` if present, else `%APPDATA%\NodeGSM`; on Linux `$XDG_DATA_HOME/NodeGSM` (default `~/.local/share/NodeGSM`) |
+| Legacy data folder kept after rename | ✅ | `%APPDATA%\node-wgsm2026\WGSM` if present, else `%APPDATA%\NodeGSM`; on Linux `$XDG_DATA_HOME/NodeGSM` (default `~/.local/share/NodeGSM`); Settings can move it to the NodeGSM folder |
+| Choose the data folder (Settings -> Data location) | ✅ | **Change folder...** copies everything to an empty folder with progress, then restarts; **Use existing data...** points at a folder that already holds NodeGSM data; **Use the standard folder**; the old folder is never deleted; refused while a server runs or an install / update is in progress; stored in `data-location.txt` outside the data folder; `NODEGSM_DATA` overrides it |
+| Installer asks for the data folder | ✅ | NSIS page after the install-folder page (skipped for silent installs and when a folder was already chosen); the portable .exe uses Settings instead |
 | Documentation: guides, `TECH-api.md` (all IPC channels), `TECH-architecture.md`, `TECH-data-formats.md`, `docs/README.md` index, `OPEN-QUESTIONS.md`, `TESTING-CHECKLIST.md` | ✅ | [docs/README.md](docs/README.md); a test fails when an IPC channel is missing from TECH-api.md |
 
 ## Changelog
 Newest first. Add an entry for every change. One entry = one `### <date> - <unique title>` heading followed by bullets (the website parses this format).
+
+### 2026-11-25 - Choose where NodeGSM keeps its data
+- **Settings -> Data location:** shows the data folder and lets you **Change folder...** (copy to an empty folder with progress, switch, restart), **Use existing data...** (switch without copying) or **Use the standard folder** (moves the pre-NodeGSM folder `%APPDATA%\node-wgsm2026\WGSM` to `%APPDATA%\NodeGSM`). The old folder is kept; the move is refused while servers run, installs / updates are in progress, the target is not empty, the disk is too small, or `NODEGSM_DATA` is set.
+- **Installer:** new "Data folder" page (Browse...). Silent installs and re-installs keep the current choice.
+- **How it is stored:** `%APPDATA%\NodeGSM\data-location.txt` (Linux: `~/.config/NodeGSM/data-location.txt`), read before anything else; order is `NODEGSM_DATA` > this file > pre-NodeGSM folder > standard folder.
+- **API:** `dataLocation`, `dataLocationPlan`, `dataLocationMove`, `dataLocationOpenOld`, event `dataLocation:progress` (desktop only).
+- **Tests:** pointer parsing (BOM / CRLF / relative), precedence, plan rejections, copy + progress + cleanup after a failed copy, use-existing, API guards.
+
+### 2026-11-25 - WindowsGSM plugin converter on the website
+- **Added:** a converter page (`/convert.html`) in the Website repository: paste or upload a WindowsGSM C# plugin and get a NodeGSM `plugin.json`, a README and a pre-filled pull request description. `public/convert-cs.js` is dependency-free and only reads text (it never compiles or runs the C#); real code (custom install / update, RCON ...) is listed as warnings / TODOs pointing to `plugin.js` hooks, never guessed.
+- **Three ways to use the result:** convert only (copy / download / zip), a guided pull request (fork, pre-filled GitHub new-file links, PR body, checklist for icon / docs), or an automated submission to the owners (no GitHub account needed, optional contact, licence consent, status check). Automated submissions are stored as `pending`, rate limited (1 per 10 minutes, 3 per day per hashed IP), moderated with `ADMIN_TOKEN`, and an approval opens a **draft** PR in the Catalogue when `GITHUB_TOKEN` is configured (otherwise the files are returned for a manual PR).
+- **Docs:** Website README (feature, backend env vars, moderation, privacy, hosting), Catalogue `CONTRIBUTING.md` / `README.md` / `PLUGINS.md` (what converts and what does not), PR template, this file, `CONTRIBUTING.md`, `PLUGINS.md`, `docs/OPEN-QUESTIONS.md`.
+- **Not done / not verified:** never run against the real GitHub API or a real production backend (fake local GitHub only); no captcha; plugin.js conversions are not accepted.
+
+### 2026-11-25 - GitHub repository renamed to Node.NodeGSM
+- **Changed:** the app repository is now https://github.com/ohmcodes/Node.NodeGSM (was Node.WGSM2026). Links in CONTRIBUTING.md, docs/GUIDE-web-linux.md, the Catalogue (README, PLUGINS.md) and the Website (README, config, Download page, `sync-app.js`, site data) were updated; GitHub redirects the old URL.
+- **Kept:** the legacy data folder `%APPDATA%\node-wgsm2026\WGSM` and the internal names (`wgsm.json`, `.wgsm-version`, `window.wgsm`) are unchanged on purpose.
+- **Website:** `npm run sync:app` now looks for `../Node.NodeGSM` first and falls back to the old `../Node.WGSM2026` checkout folder name.
 
 ### 2026-11-25 - Project separation: Catalogue and Website repositories, in-app catalogue
 - **Why:** the plugin list and the website do not belong in the app repository. Games are community-contributed and the site has its own data (ratings, comments), so each now lives, builds and deploys on its own.
@@ -292,7 +313,7 @@ Newest first. Add an entry for every change. One entry = one `### <date> - <uniq
 - **Tests:** template expansion, install steps against a local HTTP server (download/extract/write, path-traversal blocked), config read/write/validate/backup, live log tail (append, rotation, wildcard), plugin install/override, run a fake server.
 
 ### 2026-11-24 - Earlier
-- **Docs rule:** FEATURES.md, README.md, CLAUDE.md added; every change updates docs.
+- **Docs rule:** FEATURES.md and README.md added, plus a project rules file; every change updates docs.
 - **Renamed to NodeGSM.** User-visible names changed; internal names (`wgsm.json`, `.wgsm-version`) kept. Legacy data folder still used if it exists. Firewall rules are now named `NodeGSM #...`.
 - **Install progress and honest results.** Percent/GB progress; install fails if the download did not complete or the exe is missing; SteamCMD self-updates on first run (previously exit code 7 was wrongly treated as success).
 - **First plugin system** (flat `plugin.json`), Plugins dialog, Palworld example.

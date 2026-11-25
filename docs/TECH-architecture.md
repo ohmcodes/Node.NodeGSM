@@ -7,6 +7,7 @@ This document grows with each release. It describes what exists today.
 - `src/main/main.js` - Electron main process: creates the window/tray, calls `createCore({ mode: 'desktop' })`, subscribes the window to the hub and mounts the API table on `ipcMain` (behaviour unchanged).
 - `src/server/headless.js` + `auth.js` - the web server (see [Web mode](#web-mode-headless-server)). Uses `core.js` with `headlessHost()` stand-ins for the Electron-only ctx members.
 - `src/main/platform.js` - the OS layer (see [Platform layer](#platform-layer)).
+- `src/main/dataLocation.js` - the `data-location.txt` pointer and the safe copy used by Settings -> Data location (plan, copy with progress, switch; never deletes).
 - `src/main/api.js` - **transport-agnostic API table** `{ name: fn }` (`buildApi(ctx)`). Functions return data or throw; the transport wraps the result as `{ ok, data }` / `{ ok: false, error }`. A future HTTP/WebSocket server mounts the same table.
 - `src/main/preload.js` - exposes `window.wgsm.call(name, ...args)` / `on(channel, cb)`.
 - `src/renderer/` - plain JS/HTML/CSS, no framework, no inline scripts (CSP).
@@ -29,7 +30,7 @@ This document grows with each release. It describes what exists today.
 
 | Concern | Windows | Linux |
 |---|---|---|
-| Data folder | legacy `%APPDATA%\node-wgsm2026\WGSM` if it exists, else `%APPDATA%\NodeGSM` | `$XDG_DATA_HOME/NodeGSM` or `~/.local/share/NodeGSM` |
+| Data folder | `NODEGSM_DATA`, else the folder in `data-location.txt` (Settings / installer), else the pre-NodeGSM `%APPDATA%\node-wgsm2026\WGSM` if it exists, else `%APPDATA%\NodeGSM` | `$XDG_DATA_HOME/NodeGSM` or `~/.local/share/NodeGSM` |
 | Spawn | `windowsHide` | `detached: true` (own process group) |
 | Stop / kill tree | `taskkill /T` then `/T /F` | `kill(-pgid, SIGTERM)` then `SIGKILL` (falls back to the pid) |
 | CPU / RAM / threads | one PowerShell CIM call | `/proc/<pid>/stat` (+ `status` VmRSS) scan, clock ticks from `getconf CLK_TCK`, summed through ppid |

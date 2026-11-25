@@ -40,7 +40,7 @@ function platformInfo(mode, plat = platform.current()) {
     platform: plat,
     features: {
       pickFolder: desktop, openFolder: desktop, revealBackup: desktop, backupDownload: !desktop,
-      relaunch: desktop, tray: desktop, startOnLogin: desktop, hardwareAcceleration: desktop,
+      relaunch: desktop, dataLocation: desktop, tray: desktop, startOnLogin: desktop, hardwareAcceleration: desktop,
       installPluginFile: desktop, pluginsFolder: desktop, firewall: plat === 'windows',
     },
   };
@@ -80,7 +80,7 @@ function createCore({ dataDir, mode = 'desktop' }) {
     dataDir, mode, mgr, collector, hub, catalogue, services: instances, eventLog, discord, discordBot, cluster, autoClear, consoles, publicGames,
     platformInfo: () => platformInfo(mode),
     /** IPC table for this core; extra = transport specific ctx (shell, dialog, app, nativeTheme, getWin, currentBg, beforeRelaunch). */
-    buildApi: (extra = {}) => buildApi({ mgr, collector, publicGames, catalogue, eventLog, discord, discordBot, cluster, autoClear, consoles, platformInfo: () => platformInfo(mode), ...extra }),
+    buildApi: (extra = {}) => buildApi({ mgr, collector, publicGames, catalogue, eventLog, discord, discordBot, cluster, autoClear, consoles, platformInfo: () => platformInfo(mode), emit: (ch, p) => hub.emit(ch, p), ...extra }),
     start() {
       if (started) return; started = true;
       instances.forEach((s) => s.start());

@@ -75,12 +75,13 @@ The logo is hand-written SVG in [`assets/`](assets) (`logo.svg` mark, `logo-word
 
 ## Data location
 Servers, backups, user plugins and SteamCMD live in `%APPDATA%\NodeGSM` on Windows and in `$XDG_DATA_HOME/NodeGSM` (default `~/.local/share/NodeGSM`) on Linux (override with the `NODEGSM_DATA` env var).
-If you ran the app before the rename, the old folder `%APPDATA%\node-wgsm2026\WGSM` is still used.
+You can keep it somewhere else (another drive, a bigger disk): in the installer ("Data folder" page) or later under **Settings -> Data location -> Change folder...** (everything is copied for you, then NodeGSM restarts; the old folder is kept until you delete it). The choice is stored in `%APPDATA%\NodeGSM\data-location.txt`.
+If your data is still in the folder used by builds from before the rename (`%APPDATA%\node-wgsm2026\WGSM`), it keeps working; **Settings -> Data location -> Use the standard folder** moves it to `%APPDATA%\NodeGSM`.
 
 ## Not done yet
 Planned or open (see [FEATURES.md](FEATURES.md) and [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md)):
 - **Web / Linux version:** built (🧪): the headless server, login, Docker / systemd / nginx files and the Linux platform layer exist, but nothing was run on a real Linux machine and only four games are declared for Linux. See [docs/GUIDE-web-linux.md](docs/GUIDE-web-linux.md).
-- **Scheduled (cron) backups**, scanning of `logging.logFiles`, a mod manager, Steam account login, a converter for WindowsGSM C# plugins, an online plugin repository, published releases.
+- **Scheduled (cron) backups**, scanning of `logging.logFiles`, a mod manager, Steam account login, an online plugin repository, published releases.
 - **Untested against the real thing** (marked 🧪 in FEATURES.md): clusters, config sync, the Discord bot and webhooks, RCON and tick patterns, large backups, auto-clear on live servers. Use [docs/TESTING-CHECKLIST.md](docs/TESTING-CHECKLIST.md).
 
 ## Notes

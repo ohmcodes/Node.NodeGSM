@@ -44,7 +44,7 @@ sudo apt install -y nodejs tar curl ca-certificates lib32gcc-s1 lib32stdc++6
 
 sudo useradd --system --create-home --home-dir /var/lib/nodegsm nodegsm
 sudo mkdir -p /opt/nodegsm && sudo chown $USER /opt/nodegsm
-git clone https://github.com/ohmcodes/Node.WGSM2026 /opt/nodegsm && cd /opt/nodegsm
+git clone https://github.com/ohmcodes/Node.NodeGSM /opt/nodegsm && cd /opt/nodegsm
 npm ci --omit=dev --ignore-scripts
 ```
 
@@ -119,7 +119,7 @@ These need a native window and are hidden or replaced:
 
 ## Linux specifics
 
-- **Data folder:** `$XDG_DATA_HOME/NodeGSM` or `~/.local/share/NodeGSM` (set `NODEGSM_DATA` to change). On Windows nothing changes: the legacy `%APPDATA%\node-wgsm2026\WGSM` folder is still used when it exists.
+- **Data folder:** `$XDG_DATA_HOME/NodeGSM` or `~/.local/share/NodeGSM` (set `NODEGSM_DATA` to change). Settings -> Data location is desktop only; a service uses `--data` / `NODEGSM_DATA`. On Windows nothing changes: the legacy `%APPDATA%\node-wgsm2026\WGSM` folder is still used when it exists.
 - **SteamCMD:** downloaded as `steamcmd_linux.tar.gz` from the Steam CDN into `<data>/bin/steamcmd`, extracted with `tar`, run as `steamcmd.sh` with the same arguments as on Windows. It needs the 32-bit libraries: `sudo apt install lib32gcc-s1` (Debian 12 / Ubuntu 22.04+; older: `lib32gcc1`). The first run self-updates.
 - **Processes:** every game server is started in its own process group; *Stop* sends the console stop command, then `SIGTERM` to the group, then `SIGKILL` after 15 s. *Kill* sends `SIGKILL` to the group.
 - **Metrics:** CPU / RAM / threads per server are read from `/proc` (the whole process tree). Disk uses the data folder's file system.

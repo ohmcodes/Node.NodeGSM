@@ -124,6 +124,13 @@ Linux only (everything here is **untested**):
 - [ ] Firewall button. *Message with a ufw hint, nothing changed.*
 - [ ] `docker compose up -d --build`; `docker ps` shows healthy; `deploy/nodegsm.service` starts and survives a reboot.
 
+## 13. Data location
+- [ ] Settings -> Data location shows the folder in use. *With `NODEGSM_DATA` set the buttons are disabled and a note says why.*
+- [ ] Change folder... to an empty folder (not the real data) with a stopped server: the confirm shows size and file count, progress appears, after the restart the servers are there and the old folder still exists.
+- [ ] Try it with a server running: refused ("Stop all servers ..."). Try a non-empty folder and a folder inside the data folder: refused with a clear message.
+- [ ] Use existing data... on a folder without NodeGSM data: refused. On the previous data folder: switches back without copying.
+- [ ] Installer (`npm run dist`): the "Data folder" page shows after the install folder; Browse works; a relative path is refused; the default writes nothing; a changed folder creates `%APPDATA%\NodeGSM\data-location.txt`. A silent install (`/S`) shows no page.
+
 ## 11. Website and docs
 - [ ] In the **Website** repository: `npm start`, open the printed address. *Header shows the N mark; the browser tab shows the favicon; Features page lists the tables and the changelog newest first.*
 - [ ] Open [docs/README.md](README.md) on GitHub. *Every link works.*

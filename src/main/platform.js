@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync, execFile } = require('child_process');
+const dataLocation = require('./dataLocation');
 
 const ALL = ['windows', 'linux'];
 
@@ -20,14 +21,22 @@ const isWindows = (p) => current(p) === 'windows';
  * Windows: the legacy %APPDATA%\node-wgsm2026\WGSM if it exists, else %APPDATA%\NodeGSM.
  * Linux / other: $XDG_DATA_HOME/NodeGSM or ~/.local/share/NodeGSM.
  */
-function defaultDataDir({ platform = process.platform, env = process.env, appData, home = os.homedir(), exists = fs.existsSync } = {}) {
+function defaultDataDir({ platform = process.platform, env = process.env, appData, home = os.homedir(), exists = fs.existsSync, readPointer = dataLocation.readPointer } = {}) {
   if (env.NODEGSM_DATA) return env.NODEGSM_DATA;
   if (env.WGSM_DATA) return env.WGSM_DATA;
+  const chosen = readPointer({ platform, env, appData, home });   // Settings -> Data location / the installer
+  if (chosen) return chosen;
   if (current(platform) === 'windows') {
     const base = appData || env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    const legacy = path.join(base, 'node-wgsm2026', 'WGSM');
+    const legacy = path.join(base, 'node-wgsm2026', 'WGSM');   // folder of the pre-NodeGSM builds; Settings can move it to NodeGSM
     return exists(legacy) ? legacy : path.join(base, 'NodeGSM');
   }
+  return path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'NodeGSM');
+}
+
+/** The standard NodeGSM data folder (ignores the pointer file and the pre-NodeGSM folder). */
+function standardDataDir({ platform = process.platform, env = process.env, appData, home = os.homedir() } = {}) {
+  if (current(platform) === 'windows') return path.join(appData || env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'NodeGSM');
   return path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'NodeGSM');
 }
 
@@ -186,7 +195,7 @@ function supports(platforms, platform = process.platform) {
 }
 
 module.exports = {
-  ALL, current, isWindows, defaultDataDir, spawnOptions, killTree, makeExecutable, affinityCommand, setAffinity,
+  ALL, current, isWindows, defaultDataDir, standardDataDir,spawnOptions, killTree, makeExecutable, affinityCommand, setAffinity,
   readProcesses, readProcessesLinux, readProcessesWindows, parseProcStat, parseProcStatus,
   steamcmdInfo, tarArgs, steamPlatform, firewall, supports,
 };

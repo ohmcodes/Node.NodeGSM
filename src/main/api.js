@@ -3,7 +3,10 @@
 // Electron mounts it on ipcMain (see main.js); the headless server (src/server/headless.js) mounts the same table on POST /api/<channel>.
 // Functions return plain data or throw; the transport wraps the result as { ok, data } / { ok:false, error }.
 const { detail: pluginDetail } = require('./plugins');
+const path = require('path');
 const appSettings = require('./settings');
+const dataLocation = require('./dataLocation');
+const platformMod = require('./platform');
 const configEdit = require('./configEdit');
 const { tokenFormatOk, registrationJson } = require('./services/discordCommands');
 const discordPerms = require('./services/discordPermissions');
@@ -36,6 +39,8 @@ function cleanSettingsPatch(p) {
 function buildApi(ctx) {
   const { mgr, collector, shell, dialog, app, nativeTheme, getWin, currentBg } = ctx;
   const svc = (k) => { if (!ctx[k]) throw new Error(`Service not available: ${k}`); return ctx[k]; };
+  const dlOpts = () => ({ appData: app && app.getPath ? app.getPath('appData') : undefined });
+  const dlBusy = () => mgr.list().some((v) => v.status !== 'Stopped');
   const installedPlugins = () => Object.fromEntries((mgr.pluginInfo.loaded || []).map((p) => [p.id, p.version]));
   return {
     games: () => ctx.publicGames(),
@@ -159,6 +164,26 @@ function buildApi(ctx) {
       app.relaunch();
       app.exit(0);
     },
+    // data folder (dataLocation.js): where servers, backups, settings and downloads live. Desktop only - a web/headless server is configured with --data / NODEGSM_DATA.
+    dataLocation: () => {
+      const opts = dlOpts();
+      const standard = platformMod.standardDataDir(opts);
+      const old = path.basename(mgr.dir).toLowerCase() === 'wgsm' && path.basename(path.dirname(mgr.dir)).toLowerCase() === 'node-wgsm2026';
+      return {
+        current: mgr.dir, standard, pointer: dataLocation.readPointer(opts),
+        envOverride: !!(process.env.NODEGSM_DATA || process.env.WGSM_DATA),
+        oldFolder: old,   // the folder used by pre-NodeGSM builds; "Use the standard folder" moves it to `standard`
+      };
+    },
+    dataLocationPlan: async (to, mode) => dataLocation.plan({ from: mgr.dir, to, mode, busy: dlBusy() }),
+    dataLocationMove: async (to, mode) => {
+      if (!ctx.emit || (ctx.platformInfo && ctx.platformInfo().mode === 'web')) throw new Error('Changing the data folder is only available in the desktop app.');
+      if (process.env.NODEGSM_DATA || process.env.WGSM_DATA) throw new Error('The data folder is set by the NODEGSM_DATA environment variable; remove it first.');
+      const r = await dataLocation.relocate({ from: mgr.dir, to, mode, busy: dlBusy(), pointerOpts: dlOpts(), onProgress: (p) => ctx.emit('dataLocation:progress', p) });
+      ctx.emit('dataLocation:progress', { ...r, done: true, moved: true });
+      return r;   // the renderer then asks for relaunch; the old folder is left in place
+    },
+    dataLocationOpenOld: (dir) => shell.openPath(String(dir || mgr.dir)),
     pickFolder: async () => {
       const r = await dialog.showOpenDialog(getWin(), { properties: ['openDirectory'] });
       return r.canceled ? null : r.filePaths[0];

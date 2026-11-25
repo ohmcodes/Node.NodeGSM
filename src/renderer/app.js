@@ -455,11 +455,46 @@ $('#setLogin').onchange = (e) => saveSetting({ startOnLogin: e.target.checked })
 $('#setTray').onchange = (e) => saveSetting({ minimizeToTray: e.target.checked });
 $('#setCrash').onchange = (e) => saveSetting({ autoRestartApp: e.target.checked });
 $('#setRestart').onclick = () => { if (confirm('Restart NodeGSM now? Running servers will be stopped first.')) run('relaunch'); };
+// ---------- data location ----------
+const gb = (n) => (n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(2)} GB` : `${(n / 2 ** 20).toFixed(0)} MB`);
+async function paintDataLocation() {
+  const d = await run('dataLocation'); if (!d) return;
+  state.dl = d;
+  $('#dlCurrent').textContent = d.current;
+  const note = d.envOverride ? 'Set by the NODEGSM_DATA environment variable, so it cannot be changed here.'
+    : d.oldFolder ? 'This is the folder used by earlier builds. "Use the standard folder" copies it to the NodeGSM folder; the old one is kept until you delete it.' : '';
+  $('#dlNote').textContent = note; $('#dlNote').style.display = note ? 'block' : 'none';
+  for (const id of ['#dlChange', '#dlUse', '#dlStd']) $(id).disabled = d.envOverride;
+  $('#dlStd').hidden = d.current.toLowerCase() === d.standard.toLowerCase();
+  $('#dlStd').title = d.standard;
+}
+async function moveData(to, mode) {
+  const p = await run('dataLocationPlan', to, mode); if (!p) return;
+  if (!p.ok) { toast(p.error, true); return; }
+  const what = mode === 'use' ? `Switch to the existing data in\n${to}\n\nNothing is copied.` : `Copy all NodeGSM data (${gb(p.bytes)}, ${p.files} files) to\n${to}`;
+  if (!confirm(`${what}\n\nNodeGSM restarts afterwards. The current folder is not deleted.\n\nContinue?`)) return;
+  const prog = $('#dlProg'); prog.hidden = false; prog.textContent = mode === 'use' ? 'Switching...' : 'Copying...';
+  for (const id of ['#dlChange', '#dlUse', '#dlStd']) $(id).disabled = true;
+  const r = await run('dataLocationMove', to, mode);
+  prog.hidden = true; await paintDataLocation();
+  if (!r) return;
+  toast('The data folder was changed.');
+  if (confirm(`Done${r.skipped ? ` (${r.skipped} link(s) were not copied)` : ''}. Restart NodeGSM now to use ${r.to}?\nThe old folder ${r.from} was kept; delete it yourself once everything works.`)) run('relaunch');
+}
+api.on('dataLocation:progress', (p) => {
+  const prog = $('#dlProg'); if (!prog || p.moved) return;
+  prog.hidden = false; prog.textContent = `Copying... ${gb(p.bytes)} of ${gb(p.totalBytes)} (${p.files} / ${p.totalFiles} files)`;
+});
+$('#dlChange').onclick = async () => { const f = await run('pickFolder'); if (f) moveData(f, 'copy'); };
+$('#dlUse').onclick = async () => { const f = await run('pickFolder'); if (f) moveData(f, 'use'); };
+$('#dlStd').onclick = () => { if (state.dl) moveData(state.dl.standard, 'copy'); };
+$('#dlOpen').onclick = () => run('dataLocationOpenOld');
 /** Settings view: refresh every control from the saved settings (called when the view opens). */
 async function openSettingsView() {
   const s = (await run('settings')) || appSettings;
   $('#hwNote').hidden = true;
   paintSettings(s);
+  if (state.features.dataLocation) paintDataLocation();
   renderColChecks($('#setCols'));
 }
 

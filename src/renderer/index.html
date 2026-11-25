@@ -122,6 +122,18 @@
     <label class="srow desktop-only"><span>Start NodeGSM on Windows login<small>Servers flagged Auto Start will launch.</small></span><input type="checkbox" class="switch" id="setLogin"></label>
     <label class="srow desktop-only"><span>Minimize to tray on close</span><input type="checkbox" class="switch" id="setTray"></label>
     <label class="srow desktop-only"><span>Auto restart NodeGSM on crash<small>Relaunches at most 3 times in 10 minutes. Crashes are logged to logs/crash.log.</small></span><input type="checkbox" class="switch" id="setCrash"></label>
+    <h4 class="desktop-only">Data location</h4>
+    <div class="srow col desktop-only" id="dlBox">
+      <span>Servers, backups, settings and downloads are stored in<small id="dlNote"></small></span>
+      <code id="dlCurrent" style="word-break:break-all"></code>
+      <div class="row">
+        <button type="button" id="dlChange" title="Copy everything to an empty folder and switch to it">Change folder...</button>
+        <button type="button" id="dlUse" title="Switch to a folder that already holds NodeGSM data (nothing is copied)">Use existing data...</button>
+        <button type="button" id="dlStd" hidden>Use the standard folder</button>
+        <button type="button" id="dlOpen">Open folder</button>
+      </div>
+      <div id="dlProg" class="muted small" hidden></div>
+    </div>
     <p class="muted small">Changes are saved immediately. NodeGSM sends no statistics or telemetry.</p>
   </div>
 </section>

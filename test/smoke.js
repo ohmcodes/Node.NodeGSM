@@ -1455,6 +1455,62 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     eq(PL.affinityCommand(5, '1100', 'linux'), { cmd: 'taskset', args: ['-a', '-p', 'c', '5'] }); assert(/ProcessorAffinity = 12/.test(PL.affinityCommand(5, '1100', 'win32').args[2])); assert.strictEqual(PL.affinityCommand(5, 'x', 'linux'), null);
     assert.strictEqual(PL.defaultDataDir({ platform: 'linux', env: {}, home: '/home/u' }), path.join('/home/u', '.local', 'share', 'NodeGSM')); assert.strictEqual(PL.defaultDataDir({ platform: 'linux', env: { XDG_DATA_HOME: '/x' }, home: '/h' }), path.join('/x', 'NodeGSM')); assert.strictEqual(PL.defaultDataDir({ platform: 'linux', env: { NODEGSM_DATA: '/d' } }), '/d');
     assert.strictEqual(PL.defaultDataDir({ platform: 'win32', env: {}, appData: 'C:\\A', exists: () => true }), path.join('C:\\A', 'node-wgsm2026', 'WGSM'), 'legacy Windows data folder still wins'); assert.strictEqual(PL.defaultDataDir({ platform: 'win32', env: {}, appData: 'C:\\A', exists: () => false }), path.join('C:\\A', 'NodeGSM'));
+    // ---- data location: pointer file, defaultDataDir, plan / copy / use ----
+    {
+      const DL = require('../src/main/dataLocation');
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-dl-'));
+      const po = { platform: 'win32', env: {}, appData: path.join(root, 'AppData') };
+      eq(DL.pointerPath(po), path.join(root, 'AppData', 'NodeGSM', 'data-location.txt'), 'pointer file sits in %APPDATA%\\NodeGSM');
+      assert.strictEqual(DL.readPointer(po), null, 'no pointer yet');
+      const chosen = path.join(root, 'D-drive', 'games');
+      DL.writePointer(chosen, po); assert.strictEqual(DL.readPointer(po), chosen);
+      fs.writeFileSync(DL.pointerPath(po), `\uFEFF${chosen}\r\nignored second line\r\n`); assert.strictEqual(DL.readPointer(po), chosen, 'BOM / CRLF (written by the installer) tolerated');
+      fs.writeFileSync(DL.pointerPath(po), 'relative\\path\n'); assert.strictEqual(DL.readPointer(po), null, 'a relative path is ignored');
+      DL.writePointer(chosen, po);
+      assert.strictEqual(PL.defaultDataDir({ ...po, exists: () => true }), chosen, 'pointer beats the pre-NodeGSM folder');
+      assert.strictEqual(PL.defaultDataDir({ ...po, exists: () => true, env: { NODEGSM_DATA: path.join(root, 'env') } }), path.join(root, 'env'), 'environment variable beats the pointer');
+      assert.strictEqual(PL.standardDataDir({ platform: 'win32', env: {}, appData: 'C:\\A' }), path.join('C:\\A', 'NodeGSM'));
+
+      const from = path.join(root, 'from'); fs.mkdirSync(path.join(from, 'servers', '1', 'files'), { recursive: true });
+      fs.writeFileSync(path.join(from, 'settings.json'), '{"a":1}'); fs.writeFileSync(path.join(from, 'servers', '1', 'files', 'big.bin'), Buffer.alloc(300000, 7));
+      const to = path.join(root, 'to');
+      assert.strictEqual((await DL.plan({ from, to: 'rel', mode: 'copy' })).ok, false, 'relative target rejected');
+      assert.strictEqual((await DL.plan({ from, to: from })).ok, false, 'same folder rejected');
+      assert(/inside/.test((await DL.plan({ from, to: path.join(from, 'sub') })).error), 'inside the current folder rejected');
+      assert(/contain/.test((await DL.plan({ from: path.join(root, 'from', 'servers'), to: from })).error || ''), 'target containing the source rejected');
+      assert(/Stop all servers/.test((await DL.plan({ from, to, busy: true })).error), 'refused while servers run');
+      fs.mkdirSync(path.join(root, 'full')); fs.writeFileSync(path.join(root, 'full', 'x.txt'), 'x');
+      assert(/not empty/.test((await DL.plan({ from, to: path.join(root, 'full') })).error), 'non-empty target rejected');
+      const pl = await DL.plan({ from, to }); assert(pl.ok && pl.files === 2 && pl.bytes === 300007, 'plan counts files and bytes: ' + JSON.stringify(pl));
+      const seen = []; const rel = await DL.relocate({ from, to, pointerOpts: po, onProgress: (p) => seen.push(p) });
+      assert(rel.files === 2 && rel.bytes === 300007 && seen.length > 0 && seen[seen.length - 1].done, 'copy reports progress');
+      assert.strictEqual(fs.readFileSync(path.join(to, 'settings.json'), 'utf8'), '{"a":1}'); assert.strictEqual(fs.statSync(path.join(to, 'servers', '1', 'files', 'big.bin')).size, 300000);
+      assert(fs.existsSync(path.join(from, 'settings.json')), 'the old folder is left untouched');
+      assert.strictEqual(DL.readPointer(po), path.resolve(to), 'pointer now points at the new folder');
+      // a folder holding only the pointer file counts as empty (moving back to the standard folder)
+      const std = path.join(root, 'AppData', 'NodeGSM'); assert((await DL.plan({ from: to, to: std })).ok, 'standard folder with only the pointer file is usable');
+      // use existing data: no copy
+      assert(/does not contain/.test((await DL.plan({ from, to: path.join(root, 'nope'), mode: 'use' })).error), 'use needs NodeGSM data');
+      const used = await DL.relocate({ from: to, to: from, mode: 'use', pointerOpts: po }); assert(used.files === 0 && DL.readPointer(po) === path.resolve(from), 'use switches the pointer only');
+      // a failed copy removes what it wrote
+      const bad = path.join(root, 'bad'); fs.mkdirSync(path.join(from, 'locked')); fs.writeFileSync(path.join(from, 'locked', 'f.txt'), 'f');
+      const origCopy = fs.promises.copyFile; fs.promises.copyFile = async (s, d) => { if (/f\.txt$/.test(s)) throw new Error('disk error'); return origCopy(s, d); };
+      await assert.rejects(DL.copyTree(from, bad), /disk error/); fs.promises.copyFile = origCopy;
+      assert(!fs.existsSync(bad), 'partial copy cleaned up');
+      // through the API table (fake manager): info, plan, move, web-mode and busy refusals
+      {
+        const { buildApi } = require('../src/main/api'); const ev = []; const savedEnv = [process.env.NODEGSM_DATA, process.env.WGSM_DATA]; delete process.env.NODEGSM_DATA; delete process.env.WGSM_DATA;
+        try {
+          const mk = (over) => buildApi({ mgr: { settings: {}, dir: from, list: () => [] }, collector: {}, shell: {}, dialog: {}, app: { getPath: () => path.join(root, 'AppData') }, nativeTheme: {}, getWin() {}, currentBg() {}, emit: (c, p) => ev.push([c, p]), platformInfo: () => ({ mode: 'desktop' }), ...over });
+          const api2 = mk(); const info = await api2.dataLocation(); assert(info.current === from && info.standard === path.join(root, 'AppData', 'NodeGSM') && !info.envOverride, 'dataLocation info');
+          const to2 = path.join(root, 'api-to'); const mv = await api2.dataLocationMove(to2, 'copy'); assert(mv.to === path.resolve(to2) && fs.existsSync(path.join(to2, 'settings.json')) && ev.some(([c, p]) => c === 'dataLocation:progress' && p.moved), 'dataLocationMove copies and reports');
+          await assert.rejects(mk({ mgr: { settings: {}, dir: from, list: () => [{ status: 'Started' }] } }).dataLocationMove(path.join(root, 'api-to2'), 'copy'), /Stop all servers/, 'busy servers block the move');
+          await assert.rejects(mk({ platformInfo: () => ({ mode: 'web' }) }).dataLocationMove(path.join(root, 'api-to3'), 'copy'), /desktop/, 'not in web mode');
+          process.env.NODEGSM_DATA = root; await assert.rejects(api2.dataLocationMove(path.join(root, 'api-to4'), 'copy'), /NODEGSM_DATA/, 'environment override blocks the move');
+        } finally { if (savedEnv[0] === undefined) delete process.env.NODEGSM_DATA; else process.env.NODEGSM_DATA = savedEnv[0]; if (savedEnv[1] === undefined) delete process.env.WGSM_DATA; else process.env.WGSM_DATA = savedEnv[1]; }
+      }
+      fs.rmSync(root, { recursive: true, force: true });
+    }
     const si = PL.steamcmdInfo('/d', 'linux'); assert(/steamcmd_linux\.tar\.gz$/.test(si.url) && /steamcmd\.sh$/.test(si.exe) && si.kind === 'tar'); assert(/steamcmd\.zip$/.test(PL.steamcmdInfo('C:\\d', 'win32').url));
     eq(PL.tarArgs('/x/steamcmd_linux.tar.gz', '/dest'), ['-xzf', '/x/steamcmd_linux.tar.gz', '-C', '/dest']); eq(PL.tarArgs('/x/a.tar', '/d')[0], '-xf');
     const sl = new SteamCMD('/d', 'linux'); assert(/steamcmd\.sh$/.test(sl.exe));
