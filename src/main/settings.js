@@ -19,9 +19,32 @@ const DEFAULTS = {
   tableColumns: ['id', 'pid', 'icon', 'status', 'name', 'ip', 'port', 'queryPort', 'map', 'players', 'cpu', 'memory', 'uptime'], // Table + Dashboard columns; plugin metrics are "m:<id>"
   dashboardShowStopped: false,
   dashboardChart: 'players',  // players | cpu | memory
+  ui: { leftCollapsed: false, rightCollapsed: false, bottomCollapsed: false, navCollapsed: false }, // panel collapse state
+  headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
+  discord: { webhookUrl: '', botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], allowRawCommands: false, events: {} },
+  logging: { retentionDays: 30 }, // NGSM event log retention
 };
 const VIEWS = ['servers', 'table', 'dashboard'];
 const CHARTS = ['players', 'cpu', 'memory'];
+
+const SNOWFLAKE = /^\d{1,25}$/;
+const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+const bools = (v, keys) => { const o = {}; if (v && typeof v === 'object') for (const k of keys) if (k in v) o[k] = !!v[k]; return o; };
+const idList = (v) => (Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter((x) => SNOWFLAKE.test(x)))].slice(0, 100) : []);
+const UI_KEYS = ['leftCollapsed', 'rightCollapsed', 'bottomCollapsed', 'navCollapsed'];
+const STAT_KEYS = ['cpu', 'ram', 'disk', 'servers', 'players', 'tick'];
+
+function sanitizeDiscord(v) {
+  v = v && typeof v === 'object' ? v : {};
+  const events = {};
+  if (v.events && typeof v.events === 'object') {
+    for (const [k, x] of Object.entries(v.events).slice(0, 100)) if (/^[a-z0-9:_.-]{1,60}$/i.test(k)) events[k] = !!x;
+  }
+  return {
+    webhookUrl: str(v.webhookUrl, 500), botToken: str(v.botToken, 200), applicationId: str(v.applicationId, 30), guildId: str(v.guildId, 30),
+    allowedUserIds: idList(v.allowedUserIds), adminRoleIds: idList(v.adminRoleIds), allowRawCommands: v.allowRawCommands === true, events,
+  };
+}
 
 /** Keep only known keys with valid values. Returns the cleaned patch. */
 function sanitize(patch) {
@@ -33,6 +56,10 @@ function sanitize(patch) {
     else if (k === 'view') { if (VIEWS.includes(v)) out.view = v; }
     else if (k === 'dashboardChart') { if (CHARTS.includes(v)) out.dashboardChart = v; }
     else if (k === 'tableColumns') { if (Array.isArray(v)) out.tableColumns = v.filter((c) => typeof c === 'string' && /^[a-z0-9:_-]{1,40}$/i.test(c)).slice(0, 40); }
+    else if (k === 'ui') { if (v && typeof v === 'object') out.ui = { ...DEFAULTS.ui, ...bools(v, UI_KEYS) }; }
+    else if (k === 'headerStats') { if (v && typeof v === 'object') out.headerStats = { ...DEFAULTS.headerStats, ...bools(v, STAT_KEYS) }; }
+    else if (k === 'discord') { if (v && typeof v === 'object') out.discord = sanitizeDiscord(v); }
+    else if (k === 'logging') { if (v && typeof v === 'object') { const d = Math.round(Number(v.retentionDays)); out.logging = { retentionDays: d >= 1 && d <= 3650 ? d : DEFAULTS.logging.retentionDays }; } }
     else if (typeof DEFAULTS[k] === 'boolean') out[k] = !!v;
     else if (typeof DEFAULTS[k] === 'string') out[k] = String(v);
   }

@@ -166,6 +166,46 @@ Every server already gets **CPU, memory (whole process tree), threads, uptime, P
 
 NodeGSM cannot read FPS from a game by itself - the game has to print it. Check what your server prints (or which console command reports it) and describe it here. Only add metrics you have verified.
 
+### Optional fields for clusters, backups, events, logging, consoles, update and auto-clear
+All of these are optional. They are validated and carried onto the game object now (and exported in `registry.json` when present); the features that use them are being built (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
+```json
+"cluster": {
+  "protectedConfigKeys": ["Port", "RCONPort"],
+  "clearFolders": [{ "path": "Saved/Logs", "pattern": "*.log", "olderThanDays": 7 }],
+  "preserve": ["Saved/SaveGames"]
+},
+"configs": [{ "id": "server-ini", "name": "server.ini", "path": "Saved/Config/server.ini", "protect": ["Port", "rcon.*"] }],
+"backup": {
+  "presets": [{ "id": "saves", "name": "Save games only", "paths": ["Saved/SaveGames"] }],
+  "exclude": ["Saved/Logs", "*.tmp"]
+},
+"events": [{ "id": "player-join", "label": "Player joined", "default": false }],
+"logging": {
+  "logFiles": ["Saved/Logs/*.log"],
+  "patterns": [{ "id": "sudden-stop", "regex": "stopped suddenly", "level": "error" }]
+},
+"consoles": [
+  { "id": "game", "name": "Game console", "type": "process" },
+  { "id": "server-log", "name": "Server log", "type": "log", "source": "server-log" }
+],
+"update": { "validateArgs": { "steamcmd": "validate" } },
+"files": { "autoClear": [{ "path": "Saved/Crashes", "pattern": "*", "olderThanDays": 14, "intervalMin": 1440, "default": false }] }
+```
+| Field | Meaning |
+|---|---|
+| `cluster.protectedConfigKeys` | keys never overwritten when a config is synced from a cluster parent to its members (ports, RCON password ...) |
+| `cluster.clearFolders[]` | `{ path, pattern, olderThanDays }` folders cleaned by the cluster "clear folders" action |
+| `cluster.preserve[]` | paths never overwritten by a cluster update (saves, per-server data) |
+| `configs[].protect[]` | keys/lines of that config kept during cluster config sync (lines marked `# NGSM:ignore` are kept too) |
+| `backup.presets[]` | `{ id, name, paths[] }` named "neat-pick" selections for backups |
+| `backup.exclude[]` | paths / wildcard patterns left out of every backup |
+| `events[]` | `{ id, label, default }` extra game-specific events that can be logged / sent to Discord |
+| `logging.logFiles[]` | log files (wildcards allowed) scanned by the NGSM event log |
+| `logging.patterns[]` | `{ id, regex, level }` (`info` / `warn` / `error`); a matching log or console line becomes an event log entry; `regex` must compile |
+| `consoles[]` | `{ id, name, type, source }` extra consoles; `type` is `process`, `log` (`source` = id of a declared log) or `rcon` |
+| `update.validateArgs` | per-installer text used for "Validate", e.g. `{ "steamcmd": "validate" }` |
+| `files.autoClear[]` | `{ path, pattern, olderThanDays, intervalMin, default }` rules that delete old files periodically (`olderThanDays` >= 0, `intervalMin` >= 1) |
+
 ## plugin.js (optional)
 Use it only when JSON cannot do the job (for example resolving the latest download URL). It runs with **full Node.js access** - only install plugins you trust; repository plugins get a security review.
 ```js

@@ -43,6 +43,8 @@ class ServerManager extends EventEmitter {
     this.logTail.on('lines', (m) => this.emit('logLines', m));
     this.runtime = new Map(); // id -> { proc, console:[], status, startedAt, stopping, busy }
     this.timers = [];
+    /** Event bus for services: server:started|stopped|crashed|restarted|updated|backup|restore|command, payload { id, name, game, ts, detail } */
+    this.events = new EventEmitter();
     this.settings = this.loadSettings();
   }
 
@@ -52,6 +54,11 @@ class ServerManager extends EventEmitter {
   // ---------- settings / paths ----------
   loadSettings() { return require('./settings').read(this.dir); }
   saveSettings(patch) {
+    patch = { ...patch };
+    // nested groups are merged key-wise so a partial patch (e.g. { ui: { leftCollapsed: true } }) keeps the other keys
+    for (const k of ['ui', 'headerStats', 'discord', 'logging']) {
+      if (patch[k] && typeof patch[k] === 'object' && !Array.isArray(patch[k])) patch[k] = { ...this.settings[k], ...patch[k] };
+    }
     this.settings = { ...this.settings, ...require('./settings').sanitize(patch) };
     fs.writeFileSync(this.settingsFile, JSON.stringify(this.settings, null, 2));
     return this.settings;
@@ -59,6 +66,14 @@ class ServerManager extends EventEmitter {
   serverRoot(id) { return path.join(this.serversDir, String(id)); }
   cfgFile(id) { return path.join(this.serverRoot(id), 'configs', 'wgsm.json'); }
   filesDir(id) { const c = this.getConfig(id); return c && c.installDir ? c.installDir : path.join(this.serverRoot(id), 'serverfiles'); }
+
+  /** Emit a lifecycle event on this.events (never throws into the caller). */
+  emitEvent(type, id, detail = {}) {
+    try {
+      const c = this.getConfig(id);
+      this.events.emit(type, { id: String(id), name: c ? c.name : '', game: c ? c.game : '', ts: Date.now(), detail });
+    } catch { /* listeners must not break server management */ }
+  }
 
   // ---------- config CRUD ----------
   ids() {
@@ -252,9 +267,11 @@ class ServerManager extends EventEmitter {
     const pipe = (s) => { s.setEncoding('utf8'); s.on('data', (d) => this.log(id, d)); };
     pipe(proc.stdout); pipe(proc.stderr);
     proc.on('error', (e) => { this.log(id, `Process error: ${e.message}`); });
+    if (proc.stdin) proc.stdin.on('error', () => { /* EPIPE when the process is already gone (e.g. a command written during stop) */ });
     proc.on('exit', (code) => this.onExit(id, proc, code));
     this.applyPriority(id, proc.pid);
     this.alert(id, 'autoStartAlert', 'Server started');
+    this.emitEvent('server:started', id, { pid: proc.pid });
     return this.view(id);
   }
 
@@ -266,13 +283,14 @@ class ServerManager extends EventEmitter {
     const crashed = !rt.stopping;
     this.log(id, `Server exited (code ${code}).`);
     this.setStatus(id, 'Stopped', { startedAt: null, players: null });
+    this.emitEvent(crashed ? 'server:crashed' : 'server:stopped', id, { code });
     if (!c) return;
     if (crashed) {
       this.alert(id, 'crashAlert', `Server crashed (exit code ${code})`);
       if (c.autoRestart) {
         rt.restarts = (rt.restarts || 0) + 1;
         this.log(id, 'Auto-restarting in 5s ...');
-        setTimeout(() => { if (!this.rt(id).proc && !this.rt(id).stopping) this.start(id).then(() => this.alert(id, 'autoRestartAlert', 'Server auto-restarted')).catch((e) => this.log(id, e.message)); }, 5000);
+        setTimeout(() => { if (!this.rt(id).proc && !this.rt(id).stopping) this.start(id).then(() => { this.alert(id, 'autoRestartAlert', 'Server auto-restarted'); this.emitEvent('server:restarted', id, { reason: 'crash' }); }).catch((e) => this.log(id, e.message)); }, 5000);
       }
     }
   }
@@ -343,13 +361,16 @@ class ServerManager extends EventEmitter {
   async restart(id) {
     await this.stop(id);
     await new Promise((r) => setTimeout(r, 1000));
-    return this.start(id);
+    const v = await this.start(id);
+    this.emitEvent('server:restarted', id, { reason: 'manual' });
+    return v;
   }
 
   sendCommand(id, text, { silent = false } = {}) {
     const rt = this.rt(id);
     if (!rt.proc || !rt.proc.stdin || !rt.proc.stdin.writable) throw new Error('Console input is not available for this server');
     rt.proc.stdin.write(text + '\n');
+    this.emitEvent('server:command', id, { command: text, silent });
     if (!silent) this.log(id, `> ${text}`);
   }
 
@@ -391,6 +412,7 @@ class ServerManager extends EventEmitter {
     try {
       await this.runSteps(id, { validate, mode: 'update' });
       this.log(id, 'Update finished.');
+      this.emitEvent('server:updated', id, { validate: !!validate });
     } finally {
       rt.busy = null;
       this.setStatus(id, 'Stopped');
@@ -424,6 +446,7 @@ class ServerManager extends EventEmitter {
       await new Promise((res, rej) => zip.writeZip(file, (e) => (e ? rej(e) : res())));
     } finally { rt.busy = prev; this.emit('status', this.view(id)); }
     this.log(id, `Backup created: ${path.basename(file)}`);
+    this.emitEvent('server:backup', id, { file: path.basename(file) });
     return path.basename(file);
   }
   async restore(id, file) {
@@ -434,6 +457,7 @@ class ServerManager extends EventEmitter {
     this.log(id, `Restoring ${path.basename(file)} ...`);
     new AdmZip(f).extractAllTo(this.filesDir(id), true);
     this.log(id, 'Restore finished.');
+    this.emitEvent('server:restore', id, { file: path.basename(file) });
   }
   deleteBackup(id, file) { fs.rmSync(path.join(this.backupsDir, String(id), path.basename(file)), { force: true }); }
 

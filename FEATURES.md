@@ -22,6 +22,7 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | `plugins/registry.json` for the website (`npm run registry`) | ✅ | id, metadata, ports, configs, logs and relative media paths |
 | Game browser in the app (search, README, screenshots, defaults, configs/logs) | ✅ | **Games** button → **Add server** |
 | PR guide, PR template, game-request issue template, CI | ✅ | `CONTRIBUTING.md`, `.github/` |
+| Optional plugin fields: `cluster`, `configs[].protect`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` | ✅ | Validated (relative paths only, regexes must compile), in the schema, template, `toGame()` and `registry.json`; the features that read them are ⏳ below |
 | Converter for WindowsGSM C# plugins | ⏳ | Manual mapping table in PLUGINS.md for now |
 | Online plugin repository / one-click install from the website | ⏳ | |
 
@@ -64,6 +65,12 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Steam login for games that need a real account | ⏳ | Anonymous only for now |
 | Discord bot remote control | ⏳ | |
 | Mod manager | ⏳ | |
+| Clusters: same-game server groups, cluster update, config sync (protected keys), clear folders | ⏳ | Foundation (`cluster` plugin fields, `services/cluster.js` skeleton) is in |
+| NGSM event log (start/stop/crash/update/backup/restore/commands, retention) | ⏳ | `server:*` events and `services/eventLog.js` skeleton are in; setting `logging.retentionDays` |
+| Discord embeds, per-event toggles, test button | ⏳ | Settings `discord.*` keys and `services/discord.js` skeleton are in; the old webhook alerts keep working |
+| Discord bot slash commands (`/start`, `/stop`, `/backup` ...) | ⏳ | Settings `discord.botToken/guildId/allowedUserIds/adminRoleIds/allowRawCommands`, `services/discordBot.js` skeleton |
+| Neat-pick backups, restore-as-new, backups screen | ⏳ | Plugin `backup` field and `services/backup.js` skeleton |
+| Files auto-clear rules | ⏳ | Plugin `files.autoClear` and `services/autoClear.js` skeleton |
 
 ## App
 | Feature | Status | Notes |
@@ -83,12 +90,22 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Auto restart NodeGSM on crash | ✅ | Relaunches at most 3x per 10 min (no crash loops); crashes logged to `logs/crash.log`; renderer crashes reload the window |
 | Telemetry / "send statistics" | - | Deliberately none |
 | System metrics in header | ✅ | |
+| Collapsible panels, left navigation, header stat checkboxes (`ui`, `headerStats` settings) | ⏳ | Settings keys are in and validated; the UI comes with the new shell |
 | Windows installer + portable exe (electron-builder) | ✅ | `npm run dist`; unsigned, default icon; bundles `plugins/` |
 | External links open in the default browser; in-app navigation blocked | ✅ | |
 | Legacy data folder kept after rename | ✅ | `%APPDATA%\node-wgsm2026\WGSM` if present, else `%APPDATA%\NodeGSM` |
 
 ## Changelog
 Newest first. Add an entry for every change.
+
+### 2026-11-24 - Foundation for clusters, Discord and backups
+- **`src/main/api.js`:** the IPC `handle()` table moved out of `main.js` into `buildApi(ctx)` (`{ name: fn }`); `main.js` mounts it on `ipcMain` with the same channel names and `{ ok, data }` / `{ ok: false, error }` wrapping. No behaviour change; a web transport can mount the same table later.
+- **Event bus:** `ServerManager.events` (EventEmitter) emits `server:started | stopped | crashed | restarted | updated | backup | restore | command` with `{ id, name, game, ts, detail }`. The existing Discord `alert()` calls are unchanged.
+- **Service skeletons** in `src/main/services/` (`eventLog`, `discord`, `discordBot`, `backup`, `cluster`, `autoClear`): constructed and started/stopped from `main.js`, no behaviour yet.
+- **New settings keys** (validated in `settings.js`): `ui` (panel collapse flags), `headerStats` (cpu, ram, disk, servers, players, tick), `discord` (webhook, bot token, application/guild id, allowed user ids, admin role ids, `allowRawCommands`, per-event toggles) and `logging.retentionDays`. Nested patches merge key-wise. Note: the bot token is stored as plain text in `settings.json`.
+- **Optional plugin fields** (all backward compatible): `cluster`, `configs[].protect`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear`. Added to `plugin.schema.json`, validation (relative paths without `..`, regexes compile, ids unique), `toGame()`, `registry.json` (only when present), `plugins/_template` and PLUGINS.md.
+- **Fixed:** a console command written while a server was being stopped could raise an unhandled `EPIPE` on the process stdin; stdin errors are now ignored.
+- **Tests:** new fields accepted/rejected, settings sanitising of the new keys, `server:*` events from a fake server (start, command, stop, backup, restore, kill, crash), API table and service skeletons.
 
 ### 2026-11-24 - Dashboard, server table and bulk actions
 - **Views:** header switch *List / Table / Dashboard* (last view remembered). **Table** is the horizontal WindowsGSM-style list with checkboxes; **Dashboard** shows system CPU/memory/disk, server counts, active players, a 30-minute history chart (players / CPU / memory) and the running-server table.

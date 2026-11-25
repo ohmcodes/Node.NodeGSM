@@ -84,7 +84,8 @@
           "path": { "type": "string", "description": "Relative to the server files folder." },
           "format": { "enum": ["ini", "json", "xml", "properties", "cfg", "yaml", "text"] },
           "description": { "type": "string" },
-          "template": { "type": "string", "description": "File in the plugin folder copied when the user clicks Create." }
+          "template": { "type": "string", "description": "File in the plugin folder copied when the user clicks Create." },
+          "protect": { "type": "array", "items": { "type": "string" }, "description": "Keys/lines kept when this file is synced to cluster members, e.g. port, rcon.*" }
         }
       }
     },
@@ -107,6 +108,51 @@
         }
       }
     },
+    "cluster": {
+      "type": "object",
+      "description": "Optional. Cluster behaviour: what must stay unique per member server and what to clean.",
+      "properties": {
+        "protectedConfigKeys": { "type": "array", "items": { "type": "string" }, "description": "Config keys never overwritten when a config is synced to cluster members, e.g. port, rcon.*" },
+        "clearFolders": { "type": "array", "items": { "$ref": "#/definitions/clearRule" }, "description": "Folders cleaned by the cluster 'clear folders' action." },
+        "preserve": { "type": "array", "items": { "$ref": "#/definitions/relPath" }, "description": "Paths (relative to the server files folder) never overwritten by a cluster update, e.g. saves." }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "description": "Optional. Neat-pick backup presets and exclusions.",
+      "properties": {
+        "presets": { "type": "array", "items": { "type": "object", "required": ["id", "name", "paths"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "paths": { "type": "array", "items": { "$ref": "#/definitions/relPath" } } } } },
+        "exclude": { "type": "array", "items": { "$ref": "#/definitions/relPath" }, "description": "Paths / wildcard patterns left out of backups." }
+      }
+    },
+    "events": {
+      "type": "array",
+      "description": "Optional. Extra game-specific events that can be logged / sent to Discord.",
+      "items": { "type": "object", "required": ["id", "label"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "default": { "type": "boolean" } } }
+    },
+    "logging": {
+      "type": "object",
+      "description": "Optional. What the NGSM event log should read from the game.",
+      "properties": {
+        "logFiles": { "type": "array", "items": { "$ref": "#/definitions/relPath" }, "description": "Log files (relative paths, wildcards allowed) to scan." },
+        "patterns": { "type": "array", "items": { "type": "object", "required": ["id", "regex"], "properties": { "id": { "type": "string" }, "regex": { "type": "string", "description": "JavaScript regex matched against each line." }, "level": { "enum": ["info", "warn", "error"] } } } }
+      }
+    },
+    "consoles": {
+      "type": "array",
+      "description": "Optional. Extra consoles shown in the Console tab.",
+      "items": { "type": "object", "required": ["id", "name", "type"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "type": { "enum": ["process", "log", "rcon"] }, "source": { "type": "string", "description": "For type log: id of a declared log." } } }
+    },
+    "update": {
+      "type": "object",
+      "description": "Optional. Update / validate behaviour.",
+      "properties": { "validateArgs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Per-installer arguments used for Validate, e.g. { \"steamcmd\": \"validate\" }." } }
+    },
+    "files": {
+      "type": "object",
+      "description": "Optional. File-browser helpers.",
+      "properties": { "autoClear": { "type": "array", "items": { "$ref": "#/definitions/clearRule" }, "description": "Rules that delete old files periodically." } }
+    },
     "logs": {
       "type": "array",
       "description": "Log files shown live in the app. Any number. Wildcards * ? allowed in the file name (newest match is followed).",
@@ -123,6 +169,18 @@
     }
   },
   "definitions": {
+    "relPath": { "type": "string", "minLength": 1, "description": "Relative path, no .. and not absolute." },
+    "clearRule": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "$ref": "#/definitions/relPath" },
+        "pattern": { "type": "string", "description": "File name wildcard, e.g. *.log" },
+        "olderThanDays": { "type": "number", "minimum": 0 },
+        "intervalMin": { "type": "number", "minimum": 1 },
+        "default": { "type": "boolean", "description": "Enabled by default." }
+      }
+    },
     "arg": {
       "description": "A string, or an array of strings that is kept or dropped as a group when a {placeholder} is empty.",
       "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]

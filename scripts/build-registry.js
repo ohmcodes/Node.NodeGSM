@@ -19,6 +19,15 @@ function buildRegistry() {
     const steps = m.install && m.install.steps ? m.install.steps : m.install && m.install.type === 'steamcmd' ? [{ type: 'steamcmd', appId: m.install.appId }] : [];
     const steam = steps.find((s) => s.type === 'steamcmd');
     const d = m.defaults || {};
+    // optional extension fields: only present when the plugin declares them
+    const ext = {};
+    if (m.cluster) ext.cluster = m.cluster;
+    if (m.backup) ext.backup = m.backup;
+    if (Array.isArray(m.events) && m.events.length) ext.events = m.events;
+    if (m.logging) ext.logging = m.logging;
+    if (Array.isArray(m.consoles) && m.consoles.length) ext.consoles = m.consoles;
+    if (m.update) ext.update = m.update;
+    if (m.files && Array.isArray(m.files.autoClear) && m.files.autoClear.length) ext.files = { autoClear: m.files.autoClear };
     plugins.push({
       id: m.id, name: m.name, description: m.description || '', author: m.author || '', version: m.version || '', url: m.url || '',
       tags: m.tags || [],
@@ -36,6 +45,7 @@ function buildRegistry() {
         readme: rel(media.readme || 'README.md'),
         screenshots: (media.screenshots || []).map(rel),
       },
+      ...ext,
       folder: `plugins/${e.name}`,
     });
   }

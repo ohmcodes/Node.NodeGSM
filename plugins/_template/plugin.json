@@ -49,7 +49,8 @@
       "name": "server.ini",
       "path": "MyGame/Saved/Config/server.ini",
       "format": "ini",
-      "description": "Main server settings"
+      "description": "Main server settings",
+      "protect": ["Port", "QueryPort", "RCONPort"]
     },
     {
       "id": "admins",
@@ -79,5 +80,35 @@
       "path": "MyGame/Saved/Logs/*.log",
       "description": "Wildcards allowed - the newest matching file is followed"
     }
-  ]
+  ],
+
+  "cluster": {
+    "protectedConfigKeys": ["Port", "QueryPort", "RCONPort"],
+    "clearFolders": [{ "path": "MyGame/Saved/Logs", "pattern": "*.log", "olderThanDays": 7 }],
+    "preserve": ["MyGame/Saved/SaveGames"]
+  },
+  "backup": {
+    "presets": [
+      { "id": "saves", "name": "Save games only", "paths": ["MyGame/Saved/SaveGames"] },
+      { "id": "settings", "name": "Settings", "paths": ["MyGame/Saved/Config"] }
+    ],
+    "exclude": ["MyGame/Saved/Logs", "*.tmp"]
+  },
+  "events": [
+    { "id": "player-join", "label": "Player joined", "default": false }
+  ],
+  "logging": {
+    "logFiles": ["MyGame/Saved/Logs/*.log"],
+    "patterns": [{ "id": "sudden-stop", "regex": "stopped suddenly", "level": "error" }]
+  },
+  "consoles": [
+    { "id": "game", "name": "Game console", "type": "process" },
+    { "id": "server-log", "name": "Server log", "type": "log", "source": "server-log" }
+  ],
+  "update": {
+    "validateArgs": { "steamcmd": "validate" }
+  },
+  "files": {
+    "autoClear": [{ "path": "MyGame/Saved/Crashes", "pattern": "*", "olderThanDays": 14, "intervalMin": 1440, "default": false }]
+  }
 }

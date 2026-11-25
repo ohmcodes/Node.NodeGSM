@@ -11,6 +11,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-'));
 const m = new ServerManager(dir);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const eq = assert.deepStrictEqual;
+const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true });
 
 (async () => {
   // ---- catalog (everything is a plugin) ----
@@ -196,6 +197,84 @@ const eq = assert.deepStrictEqual;
   await assert.rejects(m.bulk('explode', [a1]), /Unknown action/, 'unknown bulk action rejected');
   const bk = await m.bulk('backup', [a1, a2]); assert(bk.every((r) => r.ok) && m.backupList(a1).length === 1 && m.backupList(a2).length === 1, 'bulk backup, one after another');
   col.stop(); await m.remove(a1, true); await m.remove(a2, true);
+
+  // ---- Phase 0: new optional plugin fields ----
+  const xbase = { id: 'okext', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' }, logs: [{ id: 'l', name: 'L', path: 'x.log' }], configs: [{ id: 'c', name: 'C', path: 'a.ini', protect: ['port', 'rcon.*'] }] };
+  const xErr = (extra) => P.validate({ ...xbase, ...extra }, null).errors;
+  const goodExt = {
+    cluster: { protectedConfigKeys: ['port'], clearFolders: [{ path: 'Saved/Logs', pattern: '*.log', olderThanDays: 7 }], preserve: ['Saved/SaveGames'] },
+    backup: { presets: [{ id: 'saves', name: 'Saves', paths: ['Saved/SaveGames'] }], exclude: ['*.tmp'] },
+    events: [{ id: 'join', label: 'Join', default: true }],
+    logging: { logFiles: ['logs/*.log'], patterns: [{ id: 'sud', regex: 'stopped suddenly', level: 'error' }] },
+    consoles: [{ id: 'game', name: 'Game', type: 'process' }, { id: 'lg', name: 'Log', type: 'log', source: 'l' }, { id: 'r', name: 'RCON', type: 'rcon', source: 'rcon' }],
+    update: { validateArgs: { steamcmd: 'validate' } },
+    files: { autoClear: [{ path: 'Saved/Crashes', pattern: '*', olderThanDays: 14, intervalMin: 60, default: false }] },
+  };
+  eq(xErr(goodExt), [], 'new optional fields accepted');
+  assert.strictEqual(P.validate(xbase, null).errors.length, 0, 'plugins without the new fields still valid');
+  assert(xErr({ cluster: { preserve: ['../saves'] } }).some((x) => /cluster\.preserve/.test(x)), '".." rejected in cluster.preserve');
+  assert(xErr({ backup: { presets: [{ id: 'a', name: 'A', paths: ['C:/Windows'] }] } }).length > 0, 'absolute backup path rejected');
+  assert(xErr({ files: { autoClear: [{ path: '../x' }] } }).length > 0, '".." rejected in files.autoClear');
+  assert(xErr({ cluster: { clearFolders: [{ path: '/etc' }] } }).length > 0, 'absolute clearFolders path rejected');
+  assert(xErr({ logging: { patterns: [{ id: 'p', regex: '(' }] } }).some((x) => /regular expression/.test(x)), 'bad logging regex rejected');
+  assert(xErr({ logging: { patterns: [{ id: 'p', regex: 'x', level: 'loud' }] } }).length > 0, 'bad log level rejected');
+  assert(xErr({ consoles: [{ id: 'c', name: 'C', type: 'telnet' }] }).length > 0, 'bad console type rejected');
+  assert(xErr({ consoles: [{ id: 'c', name: 'C', type: 'log', source: 'nope' }] }).length > 0, 'log console needs a declared log');
+  assert(xErr({ events: [{ id: 'a', label: 'A' }, { id: 'a', label: 'B' }] }).length > 0, 'duplicate event id rejected');
+  assert(xErr({ cluster: 'yes' }).length > 0 && xErr({ backup: [] }).length > 0, 'wrong types rejected');
+  assert(P.validate({ ...xbase, configs: [{ id: 'c', name: 'C', path: 'a.ini', protect: 'port' }] }, null).errors.length > 0, 'configs[].protect must be an array');
+  const xdir = path.join(dir, 'extplug'); fs.mkdirSync(xdir);
+  fs.writeFileSync(path.join(xdir, 'plugin.json'), JSON.stringify({ ...xbase, ...goodExt })); fs.writeFileSync(path.join(xdir, 'README.md'), '# x');
+  const xg = P.validate({ ...xbase, ...goodExt }, xdir); eq(xg.errors, [], 'valid with a plugin folder');
+  const xgame = require('../src/main/plugins').toGame({ ...xbase, ...goodExt }, xdir, 'user');
+  eq([xgame.cluster.preserve, xgame.backup.presets[0].id, xgame.events[0].id, xgame.logging.patterns[0].id, xgame.consoles.length, xgame.update.validateArgs.steamcmd, xgame.autoClear[0].path, xgame.configs[0].protect],
+    [['Saved/SaveGames'], 'saves', 'join', 'sud', 3, 'validate', 'Saved/Crashes', ['port', 'rcon.*']], 'toGame carries the new fields');
+  const plain = require('../src/main/plugins').toGame(xbase, xdir, 'user');
+  eq([plain.cluster.clearFolders, plain.backup.presets, plain.events, plain.consoles, plain.autoClear], [[], [], [], [], []], 'toGame defaults are empty');
+  const reg = require('../scripts/build-registry').buildRegistry();
+  assert(reg.plugins.every((p) => !('cluster' in p) && !('backup' in p) || p.cluster || p.backup), 'registry includes new fields only when present');
+  eq(P.validate(JSON.parse(fs.readFileSync(path.join(P.BUNDLED_DIR, '_template', 'plugin.json'), 'utf8')), null).errors, [], 'template (with all example fields) is valid');
+
+  // ---- Phase 0: new settings keys ----
+  const sd = S.DEFAULTS;
+  assert(sd.ui.leftCollapsed === false && sd.headerStats.cpu && sd.headerStats.ram && sd.headerStats.servers && !sd.headerStats.disk && sd.logging.retentionDays === 30 && sd.discord.allowRawCommands === false, 'new defaults');
+  eq(S.sanitize({ ui: { leftCollapsed: 1, bogus: true, navCollapsed: 'x' } }), { ui: { leftCollapsed: true, rightCollapsed: false, bottomCollapsed: false, navCollapsed: true } }, 'ui booleans coerced, unknown dropped');
+  eq(S.sanitize({ headerStats: { tick: true, cpu: false, evil: 1 } }).headerStats, { cpu: false, ram: true, disk: false, servers: true, players: false, tick: true }, 'headerStats');
+  const dc = S.sanitize({ discord: { webhookUrl: '  https://x/y  ', botToken: 'T'.repeat(500), applicationId: 123, guildId: {}, allowedUserIds: ['123', 'abc', '123', 456, ' 789 '], adminRoleIds: 'nope', allowRawCommands: 'true', events: { 'server:started': 1, 'bad key!': true } } }).discord;
+  assert.strictEqual(dc.webhookUrl, 'https://x/y', 'trimmed'); assert.strictEqual(dc.botToken.length, 200, 'length capped');
+  assert(dc.applicationId === '' && dc.guildId === '', 'non-strings become empty');
+  eq(dc.allowedUserIds, ['123', '456', '789'], 'ids: digit strings only, de-duplicated'); eq(dc.adminRoleIds, []);
+  assert(dc.allowRawCommands === false, 'allowRawCommands only accepts real true'); eq(dc.events, { 'server:started': true }, 'event keys validated');
+  eq(S.sanitize({ logging: { retentionDays: 0 } }).logging, { retentionDays: 30 }, 'bad retention -> default'); eq(S.sanitize({ logging: { retentionDays: '14' } }).logging, { retentionDays: 14 });
+  fs.writeFileSync(path.join(dir, 'settings.json'), '{}');
+  m.settings = S.read(dir); m.saveSettings({ ui: { leftCollapsed: true } }); m.saveSettings({ discord: { botToken: 'abc' } }); m.saveSettings({ discord: { guildId: '42' } });
+  const pst = S.read(dir); assert(pst.ui.leftCollapsed === true && pst.ui.navCollapsed === false && pst.discord.botToken === 'abc' && pst.discord.guildId === '42', 'partial nested patches merge instead of resetting siblings');
+
+  // ---- Phase 0: server events from a fake server ----
+  const evs = []; const evNames = ['started', 'stopped', 'crashed', 'restarted', 'updated', 'backup', 'restore', 'command'];
+  for (const n of evNames) m.events.on('server:' + n, (p) => evs.push([n, p]));
+  const ev = m.importServer('sw', 'EvSrv', fakeDir); m.saveConfig(ev.id, { param: '-e "process.stdin.on(\'data\',d=>{if(/quit/.test(d))process.exit(0)});setInterval(()=>{},1000)"' });
+  await m.start(ev.id); await sleep(300);
+  assert(evs.some(([n, p]) => n === 'started' && p.id === ev.id && p.name === 'EvSrv' && p.game === 'sw' && typeof p.ts === 'number' && p.detail.pid), 'server:started payload');
+  m.sendCommand(ev.id, 'hi'); assert(evs.some(([n, p]) => n === 'command' && p.detail.command === 'hi'), 'server:command');
+  await m.stop(ev.id); await sleep(300);
+  assert(evs.some(([n]) => n === 'stopped') && !evs.some(([n]) => n === 'crashed'), 'server:stopped on graceful stop, no crash');
+  await m.backup(ev.id); await m.restore(ev.id, m.backupList(ev.id)[0].file);
+  assert(evs.some(([n]) => n === 'backup') && evs.some(([n]) => n === 'restore'), 'server:backup / server:restore');
+  await m.start(ev.id); await sleep(300); await m.kill(ev.id); await sleep(300);
+  assert(evs.some(([n]) => n === 'stopped'), 'kill is an intentional stop');
+  await m.start(ev.id); await sleep(300); m.runtime.get(ev.id).stopping = false; spawnKill(m.runtime.get(ev.id).proc.pid); await sleep(1500);
+  assert(evs.some(([n, p]) => n === 'crashed' && p.id === ev.id), 'server:crashed when the process dies unexpectedly');
+  await m.remove(ev.id, true);
+
+  // ---- Phase 0: api table + services skeleton ----
+  const { buildApi } = require('../src/main/api');
+  const api = buildApi({ mgr: m, collector: { state: () => ({}) }, publicGames: () => [], shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {} });
+  for (const k of ['games', 'list', 'get', 'create', 'import', 'install', 'save', 'start', 'stop', 'restart', 'remove', 'console', 'command', 'checkUpdate', 'update', 'backups', 'backup', 'restore', 'deleteBackup', 'firewall', 'listDir', 'readFile', 'writeFile', 'openFolder', 'configList', 'configRead', 'configWrite', 'configCreate', 'logsList', 'logStart', 'logStop', 'pluginDetail', 'openExternal', 'bulk', 'kill', 'settingsDefaults', 'metricsState', 'pluginsInfo', 'pluginsReload', 'pluginsInstallZip', 'pluginsInstallFolder', 'pluginsFolder', 'metrics', 'settings', 'saveSettings', 'relaunch', 'pickFolder']) assert.strictEqual(typeof api[k], 'function', 'api.' + k);
+  assert.throws(() => api.openExternal('file:///c:/x'), /http/, 'api.openExternal rejects non-http');
+  for (const [f, C] of [['eventLog', 'EventLog'], ['discord', 'Discord'], ['discordBot', 'DiscordBot'], ['backup', 'BackupService'], ['cluster', 'Cluster'], ['autoClear', 'AutoClear']]) {
+    const svc = new (require('../src/main/services/' + f)[C])(m, P, m.settings, dir); svc.start(); svc.stop();
+  }
 
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });

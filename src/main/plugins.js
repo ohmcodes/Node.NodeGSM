@@ -14,6 +14,8 @@ const STEP_TYPES = ['steamcmd', 'download', 'extract', 'run', 'write', 'mkdir', 
 const FORMATS = ['ini', 'json', 'xml', 'properties', 'cfg', 'yaml', 'text'];
 const QUERIES = ['a2s', 'ut3', 'fivem'];
 const DOC_TYPES = ['official', 'unofficial'];
+const CONSOLE_TYPES = ['process', 'log', 'rcon'];
+const LOG_LEVELS = ['info', 'warn', 'error'];
 
 /** @type {Array<object>} live list of loaded games (mutated by loadAll) */
 const GAMES = [];
@@ -161,6 +163,7 @@ function validate(m, dir) {
       if (key === 'configs' && x.template && dir && !fs.existsSync(path.join(dir, x.template))) w(`${at}.template "${x.template}" not found in the plugin folder`);
     });
   }
+  validateExtensions(m, e);
   if (dir) {
     const media = m.media || {};
     const need = [media.icon || 'icon.png'];
@@ -174,6 +177,101 @@ function validate(m, dir) {
     if (!fs.existsSync(path.join(dir, 'README.md')) && !media.readme) w('no README.md (shown in the game browser and on the website)');
   }
   return { errors, warnings };
+}
+
+/** Validation of the optional cluster / backup / events / logging / consoles / update / files fields. */
+function validateExtensions(m, e) {
+  const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+  const strList = (v, at, rel) => {
+    if (!Array.isArray(v)) return e(`${at} must be an array of text`);
+    v.forEach((x, i) => {
+      if (typeof x !== 'string' || !x) e(`${at}[${i}] must be text`);
+      else if (rel && !safeRel(x)) e(`${at}[${i}] must be a relative path without ".." (no absolute paths)`);
+    });
+  };
+  const idOk = (x) => typeof x === 'string' && /^[a-z0-9_-]+$/i.test(x);
+  const regexOk = (r) => { try { new RegExp(r); return typeof r === 'string' && r.length > 0; } catch { return false; } };
+  const num = (v, at, min) => { if (v !== undefined && !(Number(v) >= min)) e(`${at} must be a number >= ${min}`); };
+  const clearRule = (r, at) => {
+    if (!isObj(r)) return e(`${at} must be an object`);
+    if (!safeRel(r.path)) e(`${at}.path must be a relative path without ".."`);
+    if (r.pattern !== undefined && typeof r.pattern !== 'string') e(`${at}.pattern must be text (wildcards * ?)`);
+    num(r.olderThanDays, `${at}.olderThanDays`, 0);
+    num(r.intervalMin, `${at}.intervalMin`, 1);
+    if (r.default !== undefined && typeof r.default !== 'boolean') e(`${at}.default must be true or false`);
+  };
+  const list = (v, name, each) => { if (v === undefined) return; if (!Array.isArray(v)) e(`"${name}" must be an array`); else v.forEach((x, i) => each(x, `${name}[${i}]`)); };
+  const uniqueId = (x, at, seen) => {
+    if (!idOk(x.id)) e(`${at}.id is required (letters, digits, _ -)`); else if (seen.has(x.id)) e(`${at}.id "${x.id}" is duplicated`);
+    seen.add(x.id);
+  };
+
+  if (m.cluster !== undefined) {
+    if (!isObj(m.cluster)) e('"cluster" must be an object');
+    else {
+      if (m.cluster.protectedConfigKeys !== undefined) strList(m.cluster.protectedConfigKeys, 'cluster.protectedConfigKeys', false);
+      if (m.cluster.preserve !== undefined) strList(m.cluster.preserve, 'cluster.preserve', true);
+      list(m.cluster.clearFolders, 'cluster.clearFolders', clearRule);
+    }
+  }
+  if (Array.isArray(m.configs)) m.configs.forEach((c, i) => { if (c && c.protect !== undefined) strList(c.protect, `configs[${i}].protect`, false); });
+  if (m.backup !== undefined) {
+    if (!isObj(m.backup)) e('"backup" must be an object');
+    else {
+      if (m.backup.exclude !== undefined) strList(m.backup.exclude, 'backup.exclude', true);
+      const seen = new Set();
+      list(m.backup.presets, 'backup.presets', (p, at) => {
+        if (!isObj(p)) return e(`${at} must be an object`);
+        uniqueId(p, at, seen);
+        if (!p.name || typeof p.name !== 'string') e(`${at}.name is required`);
+        if (p.paths === undefined) e(`${at}.paths is required`); else strList(p.paths, `${at}.paths`, true);
+      });
+    }
+  }
+  if (m.events !== undefined) {
+    const seen = new Set();
+    list(m.events, 'events', (x, at) => {
+      if (!isObj(x)) return e(`${at} must be an object`);
+      uniqueId(x, at, seen);
+      if (!x.label || typeof x.label !== 'string') e(`${at}.label is required`);
+      if (x.default !== undefined && typeof x.default !== 'boolean') e(`${at}.default must be true or false`);
+    });
+  }
+  if (m.logging !== undefined) {
+    if (!isObj(m.logging)) e('"logging" must be an object');
+    else {
+      if (m.logging.logFiles !== undefined) strList(m.logging.logFiles, 'logging.logFiles', true);
+      const seen = new Set();
+      list(m.logging.patterns, 'logging.patterns', (x, at) => {
+        if (!isObj(x)) return e(`${at} must be an object`);
+        uniqueId(x, at, seen);
+        if (!regexOk(x.regex)) e(`${at}.regex is not a valid regular expression`);
+        if (x.level !== undefined && !LOG_LEVELS.includes(x.level)) e(`${at}.level must be one of ${LOG_LEVELS.join(', ')}`);
+      });
+    }
+  }
+  if (m.consoles !== undefined) {
+    const seen = new Set(); const logIds = new Set((Array.isArray(m.logs) ? m.logs : []).map((l) => l && l.id));
+    list(m.consoles, 'consoles', (x, at) => {
+      if (!isObj(x)) return e(`${at} must be an object`);
+      uniqueId(x, at, seen);
+      if (!x.name || typeof x.name !== 'string') e(`${at}.name is required`);
+      if (!CONSOLE_TYPES.includes(x.type)) e(`${at}.type must be one of ${CONSOLE_TYPES.join(', ')}`);
+      if (x.source !== undefined && typeof x.source !== 'string') e(`${at}.source must be text`);
+      if (x.type === 'log' && !logIds.has(x.source)) e(`${at}.source must be the id of a declared log`);
+    });
+  }
+  if (m.update !== undefined) {
+    if (!isObj(m.update)) e('"update" must be an object');
+    else if (m.update.validateArgs !== undefined) {
+      if (!isObj(m.update.validateArgs)) e('"update.validateArgs" must be an object');
+      else for (const [k, v] of Object.entries(m.update.validateArgs)) if (typeof v !== 'string') e(`update.validateArgs.${k} must be text`);
+    }
+  }
+  if (m.files !== undefined) {
+    if (!isObj(m.files)) e('"files" must be an object');
+    else list(m.files.autoClear, 'files.autoClear', clearRule);
+  }
 }
 
 // ---------- build a game object ------------------------------------------------------------------
@@ -201,6 +299,14 @@ function toGame(m, dir, source) {
     maxPlayers: String(d.maxPlayers || ''), additional: String(d.additional || ''), portIncrement: d.portIncrement || 1,
     query: m.query || null, gslt: !!m.gslt,
     configs: m.configs || [], logs: m.logs || [], metrics: Array.isArray(m.metrics) ? m.metrics : [],
+    // optional extension fields (clusters, backups, events, logging, consoles, update, auto-clear); always present with empty defaults
+    cluster: { protectedConfigKeys: [], clearFolders: [], preserve: [], ...(m.cluster || {}) },
+    backup: { presets: [], exclude: [], ...(m.backup || {}) },
+    events: Array.isArray(m.events) ? m.events : [],
+    logging: { logFiles: [], patterns: [], ...(m.logging || {}) },
+    consoles: Array.isArray(m.consoles) ? m.consoles : [],
+    update: { validateArgs: {}, ...(m.update || {}) },
+    autoClear: m.files && Array.isArray(m.files.autoClear) ? m.files.autoClear : [],
     args: hooks.args ? (c, ctx) => hooks.args(c, ctx) : (c, ctx) => items.flatMap((it) => expandItem(it, c, { appId: steam && steam.appId, ...ctx })),
   };
 }
@@ -285,4 +391,4 @@ function detail(id) {
   };
 }
 
-module.exports = { GAMES, byId, splitArgs, expandItem, expandString, loadAll, installFrom, validate, detail, safeRel, BUNDLED_DIR, STEP_TYPES, FORMATS };
+module.exports = { GAMES, byId, splitArgs, expandItem, expandString, loadAll, installFrom, validate, toGame, detail, safeRel, BUNDLED_DIR, STEP_TYPES, FORMATS };
