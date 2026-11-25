@@ -138,7 +138,25 @@
     </div>
     <div class="row end"><button type="button" id="dcSave" class="primary">Save all</button></div>
     <h4>Bot (slash commands)</h4>
-    <p class="muted small">Coming in a later release: /start, /stop, /restart, /backup, /list ... with user and role permissions.</p>
+    <p class="muted small">Control servers from Discord with <code>/check</code> <code>/list</code> <code>/start</code> <code>/stop</code> <code>/restart</code> <code>/update</code> <code>/backup</code> <code>/stats</code> (and <code>/send</code>). Nobody can use the bot until you add user IDs or admin role IDs below. Setup steps: docs/GUIDE-discord.md.</p>
+    <div class="row wrap"><span id="dcBotBadge" class="badge bot-off">Off</span><span id="dcBotMsg" class="small muted"></span><span class="spacer"></span><button type="button" id="dcBotCopy" title="Builds the invite link from the application ID (no network)">Copy invite link</button><button type="button" id="dcBotReconnect" title="Saves, then reconnects the bot">Reconnect</button></div>
+    <label class="srow"><span>Enable the bot<small>Connects to Discord when NodeGSM starts and whenever you save these settings.</small></span><input type="checkbox" class="switch" id="dcBotOn"></label>
+    <div class="dc-form" style="margin-top:10px">
+      <label>Bot token<input type="password" id="dcBotToken" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep the saved token"></label>
+      <label>Application ID<input id="dcBotApp" autocomplete="off" spellcheck="false" inputmode="numeric" placeholder="Discord Developer Portal &gt; General Information"></label>
+      <label>Server (guild) ID<input id="dcBotGuild" autocomplete="off" spellcheck="false" inputmode="numeric" placeholder="Optional: registers the commands instantly in this server only"></label>
+      <div class="bt-tok"><span id="dcBotTokState" class="small muted"></span><button type="button" id="dcBotTokClear" class="danger" hidden>Remove saved token</button></div>
+    </div>
+    <p class="muted small" style="margin:6px 0 0">The token is stored in plain text in <code>settings.json</code> in the NodeGSM data folder and is never shown here again. Treat that file like a password.</p>
+    <div class="dc-form" style="margin-top:10px">
+      <label>Allowed user IDs (one per line)<textarea id="dcBotUsers" rows="4" spellcheck="false" placeholder="123456789012345678"></textarea><span id="dcBotUsersMsg" class="small muted"></span></label>
+      <label>Admin role IDs (one per line)<textarea id="dcBotRoles" rows="4" spellcheck="false" placeholder="123456789012345678"></textarea><span id="dcBotRolesMsg" class="small muted"></span></label>
+    </div>
+    <div id="dcBotWarn" class="small dc-bad" style="margin-top:6px"></div>
+    <label class="srow"><span>Allow raw console commands (<code>/send</code>)<small class="dc-bad">Dangerous: anyone allowed above can run any console command on any server, including ones that kick, ban or change passwords. Off by default.</small></span><input type="checkbox" class="switch" id="dcBotRaw"></label>
+    <div class="row end"><button type="button" id="dcBotSave" class="primary">Save bot settings</button></div>
+    <h4>Commands</h4>
+    <div id="dcBotCmds" class="bt-cmds"></div>
   </section>
   <section id="vConfigs">
     <div class="toolbar lg-bar"><label class="inline">Server <select id="cfServer" class="inline"></select></label><span class="spacer"></span><span class="muted small">Pick a config file on the left; nothing opens until you choose one.</span></div>

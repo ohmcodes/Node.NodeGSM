@@ -26,6 +26,7 @@ Builds are unsigned and use the default Electron icon. To use a custom icon, ena
 - CPU priority/affinity, firewall helper, file editor
 - **Clusters:** group same-game servers; **update** them together (parent first, then its files are copied, configs and saves are kept), **sync config files** with protected keys and `NGSM:ignore` lines, **clear folders** - [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md)
 - **NGSM event log** (start / stop / crash / update / backup / restore / commands / config edits, daily files, retention) with a **Logs** screen: filter, export, clear - [docs/GUIDE-logging.md](docs/GUIDE-logging.md)
+- **Discord bot** (optional): slash commands `/check /list /start /stop /restart /update /backup /stats` (and `/send`, off by default) for allowed users and admin roles; every command is logged - [docs/GUIDE-discord.md](docs/GUIDE-discord.md)
 - **Discord alerts** as embeds or simple messages: global + per-server webhook, per-event toggles and overrides, an embed editor with live preview and a Send-test button - [docs/GUIDE-discord.md](docs/GUIDE-discord.md)
 - Player counts via A2S/UT3/FiveM queries; start on login and tray support
 - **Views:** *List* (sidebar + details), *Table* (WindowsGSM-style horizontal table with **multi-select and bulk Start / Stop / Restart / Kill / Update / Backup**), *Dashboard* (system CPU / memory / disk, server counts, active players, history chart, running-server table). You choose the columns (CPU, memory, players, uptime, map, ports ... and plugin metrics like FPS) in Settings
@@ -44,7 +45,7 @@ Builds are unsigned and use the default Electron icon. To use a custom icon, ena
 | [docs/GUIDE-backups.md](docs/GUIDE-backups.md) | full / neat-pick backups, retention, restore, restore as new server, the Backups screen |
 | [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md) | clusters: create, update, config sync (protected keys, `NGSM:ignore`), clear folders |
 | [docs/GUIDE-logging.md](docs/GUIDE-logging.md) | the NGSM event log: where it is, the format, retention, plugin patterns, the Logs screen |
-| [docs/GUIDE-discord.md](docs/GUIDE-discord.md) | Discord webhook alerts, the embed editor, per-server overrides (bot: coming) |
+| [docs/GUIDE-discord.md](docs/GUIDE-discord.md) | Discord webhook alerts, the embed editor, per-server overrides, the slash-command bot (setup, permissions, token warning) |
 | [docs/TECH-architecture.md](docs/TECH-architecture.md) | event bus, services, log format, data files (for contributors) |
 | [docs/TECH-data-formats.md](docs/TECH-data-formats.md) | backup manifest, event log line, `clusters.json`, auto-clear rules, `rcon:` sources |
 | [PLUGINS.md](PLUGINS.md) | the `plugin.json` format, install steps, configs, logs, `plugin.js`, converting WindowsGSM plugins |
@@ -57,7 +58,7 @@ Servers, backups, user plugins and SteamCMD live in `%APPDATA%\NodeGSM` (overrid
 If you ran the app before the rename, the old folder `%APPDATA%\node-wgsm2026\WGSM` is still used.
 
 ## Not done yet
-Discord bot remote control, mod manager, Steam account login. See [FEATURES.md](FEATURES.md).
+Mod manager, Steam account login. See [FEATURES.md](FEATURES.md).
 
 ## Notes
 - The Minecraft installer writes `eula.txt` with `eula=true`; using it means you accept Mojang's EULA.

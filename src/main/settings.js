@@ -21,7 +21,7 @@ const DEFAULTS = {
   dashboardChart: 'players',  // players | cpu | memory | tick | latency
   ui: { leftCollapsed: false, rightCollapsed: false, bottomCollapsed: false, navCollapsed: false }, // panel collapse state
   headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
-  discord: { webhookUrl: '', botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], allowRawCommands: false, events: {}, templates: {} },
+  discord: { webhookUrl: '', botEnabled: false, botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], allowRawCommands: false, events: {}, templates: {} },
   logging: { retentionDays: 30 }, // NGSM event log retention
 };
 const VIEWS = ['servers', 'table', 'dashboard'];
@@ -84,6 +84,7 @@ function sanitizeServerDiscord(patch) {
   const out = {};
   if (!patch || typeof patch !== 'object') return out;
   if ('discordEvents' in patch) out.discordEvents = sanitizeEventToggles(patch.discordEvents);
+  if ('discordAllowedUserIds' in patch) out.discordAllowedUserIds = idList(patch.discordAllowedUserIds);   // bot: only these users (and admin roles) may control this server; empty = no extra restriction
   if ('discordMessage' in patch) out.discordMessage = str(patch.discordMessage, 500);
   if ('discordWebhook' in patch) {
     const raw = str(patch.discordWebhook, 500);
@@ -151,7 +152,7 @@ function sanitizeServerAutoClear(patch) {
 function sanitizeDiscord(v) {
   v = v && typeof v === 'object' ? v : {};
   return {
-    webhookUrl: webhook(v.webhookUrl), botToken: str(v.botToken, 200), applicationId: str(v.applicationId, 30), guildId: str(v.guildId, 30),
+    webhookUrl: webhook(v.webhookUrl), botEnabled: v.botEnabled === true, botToken: str(v.botToken, 200).replace(/^Bot\s+/i, ''), applicationId: str(v.applicationId, 30), guildId: str(v.guildId, 30),
     allowedUserIds: idList(v.allowedUserIds), adminRoleIds: idList(v.adminRoleIds), allowRawCommands: v.allowRawCommands === true,
     events: sanitizeEventToggles(v.events), templates: sanitizeTemplates(v.templates),
   };

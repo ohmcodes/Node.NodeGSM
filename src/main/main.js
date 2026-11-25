@@ -95,10 +95,13 @@ app.whenReady().then(() => {
   const cluster = instances.find((x) => x instanceof Cluster);
   const autoClear = instances.find((x) => x instanceof AutoClear);
   const consoles = instances.find((x) => x instanceof Consoles);
+  const discordBot = instances.find((x) => x instanceof DiscordBot);
+  discordBot.collector = collector;
+  discordBot.onStatus = (st) => send('discordBot', st);
   cluster.onProgress = (p) => send('cluster:progress', p);
 
   const api = buildApi({
-    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord, cluster, autoClear, consoles,
+    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord, discordBot, cluster, autoClear, consoles,
     getWin: () => win,
     beforeRelaunch: () => { quitting = 'done'; },
   });
@@ -124,7 +127,7 @@ app.on('before-quit', async (e) => {
   if (quitting === 'done') return;
   e.preventDefault();
   quitting = true;
-  try { collector.stop(); services.forEach((x) => x.stop()); await mgr.shutdown(); } catch {}
+  try { collector.stop(); await Promise.all(services.map((x) => Promise.resolve(x.stop()).catch(() => {}))); await mgr.shutdown(); } catch {}
   quitting = 'done';
   app.quit();
 });

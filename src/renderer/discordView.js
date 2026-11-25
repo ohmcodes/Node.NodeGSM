@@ -111,8 +111,70 @@ async function dcSendTest(kind, tpl) {
 }
 function dcFillMissingTemplates() { for (const e of dc.info.events) if (!dc.templates[e.key]) dc.templates[e.key] = JSON.parse(JSON.stringify(dc.info.templates[e.key] || dcDefault(e.key))); }
 
+// ---------- Bot (slash commands) ----------
+const bt = { st: { state: 'off' }, tokenSet: false, clearToken: false, cmds: [] };
+const NL = String.fromCharCode(10);
+const BT_ID =/^\d{15,25}$/;
+const btList = (el) => el.value.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+const BT_LABEL = { off: 'Off', connecting: 'Connecting', online: 'Online', error: 'Error' };
+
+function btPaintStatus() {
+  const st = bt.st || { state: 'off' };
+  const b = $('#dcBotBadge'); b.className = 'badge bot-' + (BT_LABEL[st.state] ? st.state : 'off'); b.textContent = BT_LABEL[st.state] || 'Off';
+  const parts = [];
+  if (st.user) parts.push(`Logged in as ${st.user}`);
+  if (st.state === 'online') parts.push(`${st.guilds || 0} server${st.guilds === 1 ? '' : 's'}`, st.registered ? 'commands registered' : 'commands not registered');
+  if (st.error) parts.push(st.error);
+  const m = $('#dcBotMsg'); m.textContent = parts.join(' - '); m.className = 'small ' + (st.state === 'error' || st.error ? 'dc-bad' : 'muted');
+}
+function btListMsg(el, msgEl) {
+  const bad = btList(el).filter((x) => !BT_ID.test(x));
+  msgEl.textContent = bad.length ? `Not a Discord ID (17-19 digits): ${bad.slice(0, 3).join(', ')}${bad.length > 3 ? ' ...' : ''}` : `${btList(el).length} ID${btList(el).length === 1 ? '' : 's'}`;
+  msgEl.className = 'small ' + (bad.length ? 'dc-bad' : 'muted');
+  return !bad.length;
+}
+function btPaintForm() {
+  btListMsg($('#dcBotUsers'), $('#dcBotUsersMsg')); btListMsg($('#dcBotRoles'), $('#dcBotRolesMsg'));
+  const none = !btList($('#dcBotUsers')).length && !btList($('#dcBotRoles')).length;
+  $('#dcBotWarn').textContent = none ? 'Nobody is allowed to use the bot yet: add at least one user ID or admin role ID. Every command is refused until then.' : '';
+  const ts = bt.clearToken ? 'The saved token will be removed when you save.' : bt.tokenSet ? 'A token is saved (hidden). Leave the field blank to keep it.' : 'No token saved.';
+  $('#dcBotTokState').textContent = ts; $('#dcBotTokClear').hidden = !bt.tokenSet || bt.clearToken;
+}
+function btInvite() { const id = $('#dcBotApp').value.trim(); return /^\d{15,25}$/.test(id) ? `https://discord.com/oauth2/authorize?client_id=${id}&scope=applications.commands%20bot&permissions=0` : ''; }
+function btPaintCmds() {
+  $('#dcBotCmds').innerHTML = bt.cmds.map((c) => `<code>/${esc(c.name)}${(c.options || []).map((o) => ` ${o.required ? '&lt;' : '['}${esc(o.name)}${o.required ? '&gt;' : ']'}`).join('')}</code><span>${esc(c.description)}</span>`).join('');
+}
+function btFill(d) {
+  $('#dcBotOn').checked = !!d.botEnabled; $('#dcBotToken').value = ''; $('#dcBotApp').value = d.applicationId || ''; $('#dcBotGuild').value = d.guildId || '';
+  $('#dcBotUsers').value = (d.allowedUserIds || []).join(NL); $('#dcBotRoles').value = (d.adminRoleIds || []).join(NL); $('#dcBotRaw').checked = !!d.allowRawCommands;
+  bt.tokenSet = !!d.botTokenSet; bt.clearToken = false; btPaintForm();
+}
+async function btSave() {
+  if (!btListMsg($('#dcBotUsers'), $('#dcBotUsersMsg')) || !btListMsg($('#dcBotRoles'), $('#dcBotRolesMsg'))) { toast('Fix the invalid Discord IDs first', true); return false; }
+  const token = $('#dcBotToken').value.trim();
+  const patch = { botEnabled: $('#dcBotOn').checked, applicationId: $('#dcBotApp').value.trim(), guildId: $('#dcBotGuild').value.trim(), allowedUserIds: btList($('#dcBotUsers')), adminRoleIds: btList($('#dcBotRoles')), allowRawCommands: $('#dcBotRaw').checked };
+  if (token) patch.botToken = token; else if (bt.clearToken) patch.clearBotToken = true;
+  if (token) { const t = await run('discordBotTest', token); if (t && !t.ok) { toast(t.error, true); return false; } }
+  const s = await run('saveSettings', { discord: patch });
+  if (!s) return false;
+  appSettings.discord = s.discord; btFill(s.discord);
+  return true;
+}
+$('#dcBotSave').onclick = async () => { if (await btSave()) toast('Bot settings saved'); };
+$('#dcBotReconnect').onclick = async () => { if (!(await btSave())) return; const st = await run('discordBotRestart'); if (st) { bt.st = st; btPaintStatus(); } };
+$('#dcBotTokClear').onclick = () => { bt.clearToken = true; $('#dcBotToken').value = ''; btPaintForm(); };
+$('#dcBotToken').oninput = () => { if ($('#dcBotToken').value) bt.clearToken = false; btPaintForm(); };
+$('#dcBotUsers').oninput = $('#dcBotRoles').oninput = btPaintForm;
+$('#dcBotCopy').onclick = async () => {
+  const link = btInvite();
+  if (!link) { toast('Enter the application ID first (digits only)', true); return; }
+  try { await navigator.clipboard.writeText(link); toast('Invite link copied'); }
+  catch { const t = document.createElement('textarea'); t.value = link; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast('Invite link copied'); } catch { toast(link); } t.remove(); }
+};
+api.on('discordBot', (st) => { bt.st = st; btPaintStatus(); });
+
 async function openDiscordView() {
-  const [info, st] = await Promise.all([run('discordInfo'), run('settings')]);
+  const [info, st, bst, bcmds] = await Promise.all([run('discordInfo'), run('settings'), run('discordBotStatus'), run('discordBotCommands')]);
   if (!info) return;
   if (st) appSettings = { ...appSettings, ...st };
   const d = (st && st.discord) || {};
@@ -121,6 +183,7 @@ async function openDiscordView() {
   dc.templates = {}; for (const e of info.events) dc.templates[e.key] = JSON.parse(JSON.stringify(info.templates[e.key]));
   if (!dc.sel || !dc.templates[dc.sel]) dc.sel = info.events[0] && info.events[0].key;
   $('#dcWebhook').value = dc.hook; dcHookMsg('');
+  bt.st = bst || bt.st; bt.cmds = bcmds || []; btFill(d); btPaintStatus(); btPaintCmds();
   dcRenderEvents(); dcRenderEditor();
 }
 $('#dcTest').onclick = () => dcSendTest('plain');

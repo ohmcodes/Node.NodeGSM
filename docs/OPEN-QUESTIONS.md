@@ -75,3 +75,18 @@ Decisions deferred while implementing, to confirm with the project owner.
 - Each RCON tick metric is a separate command per interval (mc ships two: `tps` and `tick query`, on Paper both answer). The unused one logs "unknown command" on the server console. Should a metric be disabled automatically after N consecutive failures?
 - RCON polls are not written to the NGSM log (to avoid a line every 15 s). Failures are only kept in memory (`pollErrors`); there is no UI for them yet - should a failing tick poll show a hint (for example "RCON not reachable") in the details panel?
 - `kind` is the only new `metrics[]` kind; the `registry.json` entry carries it, but the website catalog does not show it yet.
+
+## Phase 6 - Discord bot
+- **Live testing needed:** nothing was run against real Discord. Please create a test application / bot (see [GUIDE-discord.md](GUIDE-discord.md)), add it to a throw-away server, and try `/check`, `/list`, `/start`, `/stop`, `/update`, `/backup`, `/stats` and the denial path. Unverified: the exact look of the embeds, autocomplete latency, command registration timing, and discord.js reconnect behaviour after a network drop.
+- Should `/send` exist at all? It is off by default behind a toggle and logged, but it gives every allowed user full console access. Options: remove it, restrict it to admin roles only, or add a per-server deny list of commands.
+- The bot stores the token in `settings.json` in plain text (as planned). Encrypting it would need Electron `safeStorage` (OS-bound, breaks when the data folder is copied to another PC) - wanted?
+- Allowed users and admin roles currently have the **same** rights (all commands). A split (for example only admins may `/update` or `/send`, allowed users read-only plus start / stop) is easy to add; what split do you want?
+- Per-server `discordAllowedUserIds` has no UI (edit `wgsm.json`). Add a field to the server's Automation tab?
+- `/update` and `/backup` can run longer than Discord's 15 minute limit for editing the reply; the operation continues but the final embed is lost. Alternatives: post a channel message via the webhook, or only reply "started" and rely on the alert webhook for the result.
+- `serverid` is the numeric NodeGSM id (ids are reused after a server is deleted). Names are shown only in the autocomplete list.
+- Server names are visible to everyone on the allow list via `/list` and autocomplete (not to others). Servers restricted by `discordAllowedUserIds` are hidden from autocomplete but still appear in `/list`.
+- `/stats` uses the dashboard's 5-second sampling; the first answer after app start can be "no metrics yet".
+- Commands are guild-only (`dm_permission: false`); DMs to the bot are not supported. Registration uses "set" (replaces all commands of that scope); switching from a guild id to global leaves the old guild commands registered - a clean-up step is not implemented.
+- The bot logs the `/send` length, not the text, but the normal `server:command` event (and therefore the NGSM log) still contains the text, as for commands typed in the app console.
+- The token format check is loose (three dot-separated parts); the real validation is the login attempt.
+- `discord.js` adds about 9 MB of dependencies (undici, @discordjs/*) to the installer even for users who never enable the bot. Acceptable, or should the bot become an optional download?

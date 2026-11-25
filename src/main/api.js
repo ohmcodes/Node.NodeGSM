@@ -5,6 +5,7 @@
 const { detail: pluginDetail } = require('./plugins');
 const appSettings = require('./settings');
 const configEdit = require('./configEdit');
+const { tokenFormatOk, registrationJson } = require('./services/discordCommands');
 
 /**
  * @param {object} ctx
@@ -15,8 +16,22 @@ const configEdit = require('./configEdit');
  *   getWin       () => BrowserWindow | undefined
  *   currentBg    () => string
  *   beforeRelaunch  async () => void   (marks the app as quitting)
- *   eventLog, discord, cluster, autoClear, consoles   service instances (services/*.js)
+ *   eventLog, discord, discordBot, cluster, autoClear, consoles   service instances (services/*.js)
  */
+/** Settings as the renderer sees them: the bot token never leaves the main process (botTokenSet tells whether one is saved). */
+function publicSettings(s) {
+  const { botToken, ...discord } = (s && s.discord) || {};
+  return { ...s, discord: { ...discord, botTokenSet: !!botToken } };
+}
+/** Settings patch from the renderer: a blank / missing token keeps the saved one; clearBotToken:true removes it. */
+function cleanSettingsPatch(p) {
+  if (!p || !p.discord || typeof p.discord !== 'object') return p;
+  const { clearBotToken, botTokenSet, ...d } = p.discord;
+  if (clearBotToken === true) d.botToken = '';
+  else if (typeof d.botToken !== 'string' || !d.botToken.trim()) delete d.botToken;
+  return { ...p, discord: d };
+}
+
 function buildApi(ctx) {
   const { mgr, collector, shell, dialog, app, nativeTheme, getWin, currentBg } = ctx;
   const svc = (k) => { if (!ctx[k]) throw new Error(`Service not available: ${k}`); return ctx[k]; };
@@ -105,14 +120,23 @@ function buildApi(ctx) {
     },
     pluginsFolder: () => shell.openPath(mgr.pluginsDir),
     metrics: () => mgr.metrics(),
-    settings: () => mgr.settings,
+    discordBotStatus: () => svc('discordBot').status(),
+    discordBotRestart: async () => svc('discordBot').restart(),
+    // validates the token format only (no network); without an argument it checks the saved token
+    discordBotTest: (candidate) => {
+      const t = typeof candidate === 'string' && candidate.trim() ? candidate.trim() : mgr.settings.discord.botToken;
+      return tokenFormatOk(t) ? { ok: true } : { ok: false, error: t ? 'This does not look like a bot token (three parts separated by dots).' : 'No bot token is saved.' };
+    },
+    discordBotCommands: () => registrationJson(),
+    settings: () => publicSettings(mgr.settings),
     saveSettings: (p) => {
-      const s = mgr.saveSettings(p);
+      const s = mgr.saveSettings(cleanSettingsPatch(p));
+      if (ctx.discordBot) ctx.discordBot.apply().catch(() => {});   // reconnects only when the bot fields changed
       app.setLoginItemSettings({ openAtLogin: !!s.startOnLogin });
       nativeTheme.themeSource = s.theme;
       const win = getWin();
       if (win && !win.isDestroyed()) win.setBackgroundColor(currentBg());
-      return s;
+      return publicSettings(s);
     },
     relaunch: async () => {
       ctx.beforeRelaunch();

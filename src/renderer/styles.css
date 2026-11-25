@@ -233,7 +233,12 @@ footer a,.linkbtn{color:var(--muted);text-decoration:none;cursor:pointer}footer 
 .lg-msg{overflow-wrap:anywhere}.lvl{font-size:11px;border-radius:4px;padding:1px 6px;background:var(--badge);text-transform:uppercase}
 .lvl.warn{background:var(--lwarn);color:#fff}.lvl.error{background:var(--bad);color:#fff}
 #lgTable tr.lv-error td{background:color-mix(in srgb,var(--bad) 8%,transparent)}
-#vDiscord .row>button,.lg-bar button{white-space:nowrap}.dc-form .check{flex-direction:row;align-items:center;white-space:nowrap}
+#vDiscord .row>button,.lg-bar button{white-space:nowrap}
+.badge.bot-off{background:var(--badge);color:var(--muted)}.badge.bot-connecting{background:#4a3f10;color:var(--warn)}.badge.bot-online{background:#17402a;color:var(--ok)}.badge.bot-error{background:var(--bad);color:#fff}
+:root[data-theme=light] .badge.bot-connecting{background:#f6e9c4}:root[data-theme=light] .badge.bot-online{background:#d6f0e0}
+.bt-tok{display:flex;align-items:center;gap:10px;grid-column:1/-1}
+.bt-cmds{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:6px 14px;font-size:13px;margin-bottom:12px}.bt-cmds code{align-self:start}.bt-cmds .bt-opt{color:var(--muted)}
+#vDiscord textarea[id^=dcBot]{font-family:var(--mono,Consolas,monospace);font-size:13px}.dc-form .check{flex-direction:row;align-items:center;white-space:nowrap}
 
 /* ---- Backups ---- */
 #vBackups{display:flex;flex-direction:column;padding:0}

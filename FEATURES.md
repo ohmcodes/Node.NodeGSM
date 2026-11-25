@@ -64,7 +64,7 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | File browser + text editor (any file in the server folder) | ✅ | 2 MB limit, path-traversal protected |
 | Discord webhook alerts (per-server webhook with the old flags) | ✅ | Start, crash, auto restart, auto update, crontab; now sent by `services/discord.js` |
 | Steam login for games that need a real account | ⏳ | Anonymous only for now |
-| Discord bot remote control | ⏳ | |
+| Discord bot remote control | 🧪 | See the slash-command rows below |
 | Mod manager | ⏳ | |
 | **Clusters** (Home > Clusters): same-game server groups with a parent, create / rename / change parent / add and remove servers, delete (never deletes servers) | 🧪 | `services/cluster.js`, `<data>/clusters.json`; tested headless with fake servers, not yet used on a real multi-server setup - [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md) |
 | Cluster **update**: update the parent (validate option), then copy its game files to every member without overwriting configs / saves / `cluster.preserve`; dry-run plan, only-changed option, sequential with progress, running members stopped and restarted, one failing member does not stop the rest | 🧪 | Links are never followed, paths are confined; per-member report |
@@ -77,7 +77,11 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Embed editor (title, description, colour, thumbnail, image, footer, fields) with live Discord-style preview, placeholders `{server} {event} {game} {ip} {port} {players} {time}`, Send test, Reset to default | ✅ | **Discord** view; templates stored in `settings.discord.templates` |
 | Per-event toggles (global) and per-server overrides (Default / On / Off); the old per-server flags (Start, Auto restart, Auto update, Crontab restart, Crash) keep working | ✅ | Per-server overrides in the server's **Automation** tab |
 | Webhook URL safety: only `https://discord.com` / `discordapp.com` `/api/webhooks/...` accepted; mentions disabled in messages | ✅ | Validated in `settings.js` and again at send time |
-| Discord bot slash commands (`/start`, `/stop`, `/backup` ...) | ⏳ | Settings `discord.botToken/guildId/allowedUserIds/adminRoleIds/allowRawCommands`, `services/discordBot.js` skeleton |
+| Discord bot slash commands: `/check` `/list` `/start` `/stop` `/restart` `/update [validate]` `/backup` `/stats` and `/send` (guild commands when a guild id is set, else global); server id autocomplete (`id - name`); long operations defer then edit with an embed; errors are ephemeral | 🧪 | `services/discordBot.js` (discord.js 14, Guilds intent only, lazy-loaded) + `services/discordCommands.js` (pure handlers, tested with fake interactions). **Not tested against real Discord** (needs your bot token) - [docs/GUIDE-discord.md](docs/GUIDE-discord.md) |
+| Bot authorisation: default deny; `allowedUserIds` and `adminRoleIds`; optional per-server `discordAllowedUserIds` in `wgsm.json` (no UI yet); per-user rate limit (5 commands / 10 s); every attempt logged as `discord:command` (who, command, server, result) | 🧪 | Denied users get an ephemeral "not authorised" |
+| `/send` (raw console command) only when **Allow raw console commands** is on (default off); single line, 500 characters max, the command text is never echoed or logged by the bot | 🧪 | Dangerous by design - see the guide |
+| Bot token kept out of the UI: stored as plain text in `settings.json`, but the `settings` / `saveSettings` IPC only return `botTokenSet`; blank keeps, "Remove saved token" clears; redacted from errors, status and logs | ✅ | |
+| Discord view **Bot** section: enable switch, token (password field), application id, guild id, allowed user ids, admin role ids, raw-commands switch with warning, status badge, Reconnect, Copy invite link, command list | 🧪 | Checked in the browser pane with a stub transport |
 | **Backups: Full or Neat pick** (plugin presets + a tick-box tree of folders/files + exclude patterns, optional server settings), size estimate | 🧪 | **Backups** tab of a server; `services/backup.js`; streaming zip (`services/zip.js`, zip64), manifest `<backup>.json`; tested headless with fake servers, not yet on a real multi-GB server |
 | Backup retention (keep the newest N per server, `backupKeep`) | ✅ | 0 = unlimited |
 | Restore (Full: extract over; Neat pick: only when the game is installed) with zip-slip / symlink protection | ✅ | Server is stopped first; optional restore of the saved server settings |
@@ -114,7 +118,7 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Details panel (status, PID, address, players, map, uptime, CPU, memory) and quick-settings bottom panel (name, port, map, max players, start parameters, Save) | ✅ | Follow the selected server; unsaved quick-settings edits are not overwritten by status updates |
 | Header info bar: CPU, RAM, Disk, Servers (running/total), Players, Tick (`headerStats` setting) | ✅ | Chosen with checkboxes in Settings; Tick = the worst tick metric of the running servers that have one (server names in the tooltip, coloured), `n/a` when none does |
 | Footer links: Website, Discord, Donate (Patreon, PayPal, Buy Me a Coffee) | 🧪 | All URLs live in `src/renderer/links.js` and are PLACEHOLDERS to replace |
-| Discord view: webhook + Send test, event toggles, embed editor + preview (bot settings: coming) | ✅ | |
+| Discord view: webhook + Send test, event toggles, embed editor + preview, bot settings | ✅ | |
 | Logs screen under Home | ✅ | See server management table |
 | Windows installer + portable exe (electron-builder) | ✅ | `npm run dist`; unsigned, default icon; bundles `plugins/` |
 | External links open in the default browser; in-app navigation blocked | ✅ | |
@@ -122,6 +126,17 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 
 ## Changelog
 Newest first. Add an entry for every change.
+
+### 2026-11-24 - Discord bot: slash commands
+- **Dependency:** `discord.js` ^14 (runtime). It is `require`d lazily the first time the bot connects, so the app and the tests run without a bot and without network. electron-builder packs production dependencies automatically; no change to `build.files` was needed (its `src/**` patterns only add the app code).
+- **Bot service** (`services/discordBot.js`): connects when `settings.discord.botEnabled` is on and a token is saved (Guilds intent only); registers the commands as guild commands when a guild id is set, else global; reconnects only when enabled / token / application id / guild id change (the allow lists are read live); `stop()` on quit; status `{ state: off | connecting | online | error, user, error, guilds, registered }` through IPC `discordBotStatus` and the pushed `discordBot` event. discord.js reconnects by itself. The token is redacted from every error and status string.
+- **Commands** (`services/discordCommands.js`, no discord.js import; plain JSON definitions in Discord's API shape, `registrationJson()`): `/check`, `/list`, `/start`, `/stop`, `/restart`, `/update [validate]`, `/send`, `/backup`, `/stats`. Operations are refused with a readable ephemeral message when the server is unknown, busy, already / not running; long ones `deferReply` and then edit with an embed. Mentions are disabled in every reply.
+- **Authorisation:** default deny (empty allow list and no admin role = nobody). `allowedUserIds` (Discord user ids) and `adminRoleIds`; new per-server `discordAllowedUserIds` in `wgsm.json` narrows who may control that server (admins always may). Per-user rate limit (5 / 10 s). Every attempt is written to the NGSM event log as `discord:command` (user id + tag, command, server id, result) and emitted on the event bus.
+- **/send** needs `allowRawCommands` (default off), is a single line up to 500 characters, goes through `mgr.sendCommand` and is never echoed back by the bot or stored in the bot's log entry (the normal `server:command` entry still records it).
+- **Settings / IPC:** `discord.botEnabled` (default false); `settings` and `saveSettings` now mask the token (`botTokenSet`); a blank token keeps the saved one, `clearBotToken: true` removes it; `saveSettings` asks the bot to re-apply. New IPC `discordBotStatus`, `discordBotRestart`, `discordBotTest` (token format only, no network), `discordBotCommands` (preview).
+- **UI:** Discord view > Bot section (see the table above). The "coming later" placeholder is gone.
+- **Not verified:** nothing was sent to or received from real Discord - it needs a bot token. Tests use a fake discord.js client and fake interactions. See [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md) (Phase 6).
+- **Docs:** [docs/GUIDE-discord.md](docs/GUIDE-discord.md) (Bot section), TECH-architecture, README, OPEN-QUESTIONS. **Tests:** registration JSON shape and limits (also against `SlashCommandBuilder`), authorisation matrix, per-server restriction, rate limit, every command, busy refusal, `/send` gating, autocomplete, token masking over IPC and in errors / status / logs, client wiring (login, register, reconnect on change, stop) against a fake discord.js.
 
 ### 2026-11-24 - Server tick metric
 - **Plugin metrics** (`plugins.js`, `plugin.schema.json`, `_template`): optional `kind: "tick"` with `tickTarget`, `higherIsBetter` (default true), `warnBelow` / `badBelow` (higher is better) or `warnAbove` / `badAbove` (times); `patternFlags`; new source `rcon:<command>` (+ `rconConsole` / inline `rconSource`). Validation: numbers, threshold order, the rcon console must exist, tick-only fields refused on other metrics, direction warnings. Existing metrics are unchanged. `registry.json` lists `kind`.

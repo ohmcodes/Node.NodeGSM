@@ -1130,6 +1130,195 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     for (const f of ['consolesView.js', 'configsView.js', 'autoClearView.js']) assert(html5.includes(`<script src="${f}">`) && fs.existsSync(path.join(__dirname, '..', 'src', 'renderer', f)), 'script ' + f);
   }
 
+  // ---- Phase 6: Discord bot (slash commands). No network, no real discord.js login ----
+  {
+    const DC = require('../src/main/services/discordCommands');
+    const { DiscordBot, buildCommands } = require('../src/main/services/discordBot');
+    const { EventEmitter } = require('events');
+    const { buildApi: buildApi6 } = require('../src/main/api');
+    const S6 = require('../src/main/settings');
+    const TOKEN = 'MTIzNDU2Nzg5MDEyMzQ1Njc4.GabcDe.abcdefghijklmnopqrstuvwxyz0';
+
+    // registration payload
+    const reg = DC.registrationJson();
+    eq(reg.map((c) => c.name), ['check', 'list', 'start', 'stop', 'restart', 'update', 'send', 'backup', 'stats'], 'command set');
+    for (const c of reg) {
+      assert(/^[a-z0-9_-]{1,32}$/.test(c.name) && c.name === c.name.toLowerCase(), 'command name rules: ' + c.name); assert(c.description.length >= 1 && c.description.length <= 100, 'description <= 100: ' + c.name);
+      assert((c.options || []).length <= 25 && !('mutating' in c), 'payload has no internal flags');
+      let seenOptional = false;
+      for (const o of c.options || []) { assert(/^[a-z0-9_-]{1,32}$/.test(o.name) && o.description.length <= 100 && [3, 5].includes(o.type), 'option ' + c.name + '.' + o.name); assert(!(seenOptional && o.required), 'required options come first'); if (!o.required) seenOptional = true; }
+    }
+    assert(JSON.stringify(reg).length < 8000, 'payload is small');
+    eq(reg.find((c) => c.name === 'send').options.find((o) => o.name === 'command').max_length, 500, '/send length cap in the payload'); assert(reg.filter((c) => c.options).every((c) => c.options[0].name === 'serverid' && c.options[0].autocomplete), 'serverid autocompletes');
+    eq(reg.find((c) => c.name === 'update').options.map((o) => [o.name, o.type, !!o.required]), [['serverid', 3, true], ['validate', 5, false]], '/update [validate:boolean]');
+    const D6 = require('discord.js'); const built = buildCommands(D6).map((b) => b.toJSON());
+    const shape = (c) => [c.name, c.description, (c.options || []).map((o) => [o.name, o.type, !!o.required, !!o.autocomplete, o.max_length || 0, o.min_length || 0])];
+    eq(built.map(shape), reg.map(shape), 'SlashCommandBuilder output matches the plain definitions'); assert(built.every((b) => b.dm_permission === false), 'guild only');
+
+    // fake server manager + interactions
+    const logs6 = []; const calls6 = []; let t6 = 1000000;
+    const fcfg = { 1: { id: '1', name: 'Alpha', game: 'mc', discordAllowedUserIds: [] }, 2: { id: '2', name: 'Beta Server', game: 'csgo', discordAllowedUserIds: ['222'] }, 3: { id: '3', name: 'Gamma', game: 'rust' } };
+    const st6 = { running: { 1: true }, pending: { 3: 'Updating' }, fail: null };
+    const fmgr = {
+      events: new EventEmitter(), eventLog: { log: (e) => logs6.push(e) },
+      settings: { discord: { ...S6.DEFAULTS.discord, botToken: TOKEN, allowedUserIds: ['111', '222'], adminRoleIds: ['900'], allowRawCommands: false } },
+      getConfig: (id) => fcfg[id] || null, list: () => Object.keys(fcfg).map((i) => fmgr.view(i)), isRunning: (id) => !!st6.running[id],
+      view: (id) => ({ ...fcfg[id], gameName: 'Game' + id, status: st6.running[id] ? 'Started' : 'Stopped', pending: st6.pending[id] || null, players: st6.running[id] ? 3 : null, maxPlayers: 20 }),
+      start: async (id) => { if (st6.fail) throw new Error(st6.fail); calls6.push(['start', id]); st6.running[id] = true; }, stop: async (id) => { calls6.push(['stop', id]); delete st6.running[id]; },
+      restart: async (id) => { calls6.push(['restart', id]); }, update: async (id, v) => { calls6.push(['update', id, !!v]); }, backup: async (id) => { calls6.push(['backup', id]); return 'backup-2026.zip'; },
+      sendCommand: (id, text) => { calls6.push(['send', id, text]); },
+    };
+    const coll = { state: () => ({ snapshot: { system: { cpuPercent: 12.4, memUsed: 8 * 2 ** 30, memTotal: 16 * 2 ** 30, disk: { drive: 'C:', used: 100 * 2 ** 30, total: 500 * 2 ** 30 } }, servers: [
+      { id: '1', name: 'Alpha', pid: 10, cpu: 3.2, mem: 2 ** 30, players: 3, maxPlayers: 20, tick: { value: 19.87, unit: 'TPS' }, metrics: {} }, { id: '2', name: 'Beta Server', pid: 0, cpu: null, mem: null }] } }) };
+    const mk = (extra = {}) => DC.createHandlers({ mgr: fmgr, getSettings: () => fmgr.settings, getCollector: () => coll, version: '1.2.3', now: () => t6, bootTime: t6 - 3 * 3600000, ...extra });
+    let H = mk();
+    const fi = (cmd, user, opts = {}, member) => {
+      const o = { replies: [], edits: [], follow: [], deleted: 0, deferred: false, choices: null };
+      return Object.assign(o, { commandName: cmd, user: { id: user, tag: 'u' + user + '#0' }, member: member === undefined ? { roles: { cache: new Map() } } : member,
+        options: { getString: (n) => (opts[n] === undefined ? null : opts[n]), getBoolean: (n) => (opts[n] === undefined ? null : opts[n]), getFocused: () => opts.focused },
+        reply: async (b) => { o.replies.push(b); }, deferReply: async () => { o.deferred = true; }, editReply: async (b) => { o.edits.push(b); }, followUp: async (b) => { o.follow.push(b); }, deleteReply: async () => { o.deleted++; }, respond: async (l) => { o.choices = l; } });
+    };
+    const go = async (cmd, user, opts, member) => { const i = fi(cmd, user, opts, member); i.res = await H.handle(i); return i; };
+    const eph = (b) => !!(b.flags & 64); const txt = (b) => JSON.stringify(b);
+    const lastLog = () => logs6[logs6.length - 1];
+
+    // authorisation matrix (default deny)
+    let r = await go('list', '999'); assert(r.replies.length === 1 && eph(r.replies[0]) && /not authorised/.test(txt(r.replies[0])), 'unknown user: ephemeral denial'); eq(calls6, [], 'nothing ran');
+    eq([lastLog().event, lastLog().detail.userId, lastLog().detail.command, lastLog().detail.result, lastLog().level], ['discord:command', '999', 'list', 'denied: not authorised', 'warn'], 'denied attempt is logged with who / what / result'); assert(/u999#0/.test(lastLog().message) && lastLog().detail.userTag === 'u999#0', 'tag is logged');
+    r = await go('start', '999', { serverid: '2' }); assert(eph(r.replies[0]) && calls6.length === 0 && !r.deferred, 'denied mutating command does nothing');
+    r = await go('list', '111'); assert(r.replies.length === 1 && !eph(r.replies[0]) && /Alpha/.test(txt(r.replies[0])) && /Beta Server/.test(txt(r.replies[0])) && /3\/20 players/.test(txt(r.replies[0])), '/list for an allowed user'); eq(lastLog().detail.result, 'ok');
+    const saved6 = fmgr.settings.discord; fmgr.settings.discord = { ...saved6, allowedUserIds: [], adminRoleIds: [] };
+    r = await go('list', '111'); assert(eph(r.replies[0]), 'empty allowlist and no admin role: nobody is allowed'); r = await go('list', '900'); assert(eph(r.replies[0]), 'a user id equal to a role id is not a role');
+    fmgr.settings.discord = { ...saved6, allowedUserIds: [], adminRoleIds: ['900'] };
+    const roleMember = (roles) => ({ roles: { cache: roles } });
+    for (const [label, mem] of [['Map', roleMember(new Map([['900', {}]]))], ['Set', roleMember(new Set(['900']))], ['array cache', roleMember(['900'])], ['raw id array', { roles: ['5', '900'] }]]) { r = await go('list', '555', {}, mem); assert(!eph(r.replies[0]), 'admin role (' + label + ') is allowed'); }
+    r = await go('list', '555', {}, roleMember(new Map([['901', {}]]))); assert(eph(r.replies[0]), 'other role: denied'); r = await go('list', '555', {}, null); assert(eph(r.replies[0]), 'no member (DM): denied');
+    fmgr.settings.discord = { ...saved6, allowedUserIds: ['111'], adminRoleIds: [] }; r = await go('list', '555', {}, roleMember(new Map([['900', {}]]))); assert(eph(r.replies[0]), 'no admin roles configured: a role grants nothing');
+    fmgr.settings.discord = saved6;
+    H = mk();   // fresh rate limiter (the matrix above used up user 555 / 111)
+
+    // per-server restriction (wgsm.json discordAllowedUserIds)
+    r = await go('start', '111', { serverid: '2' }); assert(eph(r.replies[0]) && /not authorised to control this server/.test(txt(r.replies[0])) && calls6.length === 0, 'per-server list excludes user 111'); eq(lastLog().detail.result, 'denied: server restricted'); eq(lastLog().detail.serverId, '2');
+    r = await go('start', '222', { serverid: '2' }); assert(r.deferred && r.edits.length === 1 && /Server started/.test(txt(r.edits[0])) && !r.edits[0].flags, 'listed user may start the restricted server'); eq(calls6, [['start', '2']]); calls6.length = 0; delete st6.running[2];
+    r = await go('start', '555', { serverid: '2' }, roleMember(new Map([['900', {}]]))); assert(r.deferred, 'admin role overrides the per-server list'); calls6.length = 0; delete st6.running[2];
+    H = mk();
+
+    // commands
+    r = await go('check', '111'); const ck = r.replies[0].embeds[0]; assert(ck.fields.some((f) => f.name === 'Version' && f.value === '1.2.3') && ck.fields.some((f) => f.name === 'Uptime' && f.value === '3h 0m') && ck.fields.some((f) => f.name === 'Servers' && f.value === '1 running / 3 total') && ck.fields.some((f) => f.name === 'CPU' && f.value === '12%') && ck.fields.some((f) => f.name === 'RAM' && /8\.0 GB \/ 16\.0 GB/.test(f.value)), '/check: ' + txt(ck));
+    r = await go('start', '111', { serverid: '404' }); assert(eph(r.replies[0]) && /No server with id/.test(txt(r.replies[0])), 'unknown server id'); assert(/^refused/.test(lastLog().detail.result));
+    r = await go('start', '111', { serverid: '1' }); assert(eph(r.replies[0]) && /already running/.test(txt(r.replies[0])) && calls6.length === 0, 'start: already running');
+    r = await go('stop', '111', { serverid: '1' }); assert(r.deferred && /Server stopped/.test(txt(r.edits[0])) && !r.replies.length, '/stop defers, then edits with an embed'); eq(calls6, [['stop', '1']]); eq([lastLog().serverId, lastLog().detail.result], ['1', 'ok']);
+    r = await go('stop', '111', { serverid: '1' }); assert(eph(r.replies[0]) && /not running/.test(txt(r.replies[0])), 'stop: not running'); calls6.length = 0;
+    H = mk();
+    r = await go('restart', '111', { serverid: '1' }); assert(eph(r.replies[0]) && /not running/.test(txt(r.replies[0])), 'restart needs a running server'); st6.running[1] = true;
+    H = mk();
+    r = await go('restart', '111', { serverid: '1' }); assert(r.deferred && /Server restarted/.test(txt(r.edits[0])), '/restart'); eq(calls6, [['restart', '1']]); calls6.length = 0;
+    r = await go('update', '111', { serverid: '1' }); eq(calls6, [['update', '1', false]], 'update without validate'); assert(/Server updated/.test(txt(r.edits[0])) && /started again/.test(txt(r.edits[0]))); calls6.length = 0;
+    r = await go('update', '111', { serverid: '1', validate: true }); eq(calls6, [['update', '1', true]], 'update with validate:true'); assert(/validated and updated/.test(txt(r.edits[0]))); calls6.length = 0;
+    H = mk();
+    r = await go('backup', '111', { serverid: '1' }); assert(/Backup created/.test(txt(r.edits[0])) && /backup-2026\.zip/.test(txt(r.edits[0]))); eq(calls6, [['backup', '1']]); calls6.length = 0;
+    for (const c of ['start', 'stop', 'restart', 'update']) { r = await go(c, '111', { serverid: '3' }); assert(eph(r.replies[0]) && /busy \(Updating\)/.test(txt(r.replies[0])) && !r.deferred, c + ': busy server is refused'); }
+    H = mk(); r = await go('backup', '111', { serverid: '3' }); assert(eph(r.replies[0]) && /busy/.test(txt(r.replies[0])), 'backup: busy server is refused'); eq(calls6, [], 'busy: nothing ran');
+    // a failing operation: the public placeholder is removed and the error follows privately, without the token
+    st6.fail = 'spawn failed (token ' + TOKEN + ') at C:\\x'; st6.running[1] = false; r = await go('start', '111', { serverid: '1' }); st6.fail = null; st6.running[1] = true;
+    assert(r.deferred && r.deleted === 1 && r.follow.length === 1 && eph(r.follow[0]) && /The command failed/.test(txt(r.follow[0])), 'failed operation: ephemeral error after the deferred reply'); assert(!txt(r.follow[0]).includes(TOKEN) && !JSON.stringify(logs6).includes(TOKEN), 'the token never reaches Discord or the log'); assert(/^error/.test(lastLog().detail.result) && lastLog().level === 'error');
+    H = mk();
+    r = await go('nope', '111'); assert(eph(r.replies[0]) && /Unknown command/.test(txt(r.replies[0])));
+    // allowed_mentions: names can never ping
+    r = await go('list', '111'); eq(r.replies[0].allowedMentions, { parse: [] }, 'mentions disabled');
+    r = await go('stats', '111'); const sb = r.replies[0].embeds[0]; assert(/12%/.test(txt(sb)) && /Alpha/.test(sb.description) && /CPU 3%/.test(sb.description) && /19\.9 TPS/.test(sb.description) && /3\/20/.test(sb.description) && !/Beta/.test(sb.description) && /C:/.test(txt(sb)), '/stats: system + running servers only: ' + txt(sb));
+    const c0 = coll.state; coll.state = () => ({ snapshot: null }); r = await go('stats', '111'); assert(/No metrics/.test(txt(r.replies[0])), '/stats before the first sample'); coll.state = c0;
+
+    // /send is gated by allowRawCommands
+    H = mk(); r = await go('send', '111', { serverid: '1', command: 'say hi' }); assert(eph(r.replies[0]) && /switched off/.test(txt(r.replies[0])) && calls6.length === 0, '/send off by default'); assert(/^refused/.test(lastLog().detail.result));
+    fmgr.settings.discord = { ...saved6, allowRawCommands: true };
+    r = await go('send', '111', { serverid: '1', command: 'say hunter2' }); eq(calls6, [['send', '1', 'say hunter2']], '/send writes to the console when enabled'); assert(eph(r.replies[0]) && !txt(r.replies[0]).includes('hunter2') && /11-character/.test(txt(r.replies[0])), 'reply is ephemeral and does not echo the command'); assert(!JSON.stringify(lastLog()).includes('hunter2') && lastLog().detail.length === 11, 'the log has the length, not the text'); calls6.length = 0;
+    r = await go('send', '111', { serverid: '1', command: 'x'.repeat(501) }); assert(/too long/.test(txt(r.replies[0])) && !calls6.length, 'length cap 500'); r = await go('send', '111', { serverid: '1', command: 'x'.repeat(500) }); eq(calls6.length, 1, '500 is allowed'); calls6.length = 0;
+    H = mk();
+    r = await go('send', '111', { serverid: '1', command: 'say a\nstop' }); assert(/single line/.test(txt(r.replies[0])) && !calls6.length, 'no multi-line injection');
+    r = await go('send', '111', { serverid: '1', command: '   ' }); assert(/empty/.test(txt(r.replies[0]))); st6.running[1] = false; r = await go('send', '111', { serverid: '1', command: 'say' }); assert(/not running/.test(txt(r.replies[0]))); st6.running[1] = true;
+    r = await go('send', '999', { serverid: '1', command: 'say' }); assert(/not authorised/.test(txt(r.replies[0])) && !calls6.length, 'denied user cannot /send even when enabled'); fmgr.settings.discord = saved6;
+
+    // autocomplete
+    let ai = fi('start', '111', { focused: { name: 'serverid', value: 'bet' } }); await H.autocomplete(ai); eq(ai.choices, [], 'user 111 is not on the per-server list of server 2: it is hidden');
+    ai = fi('start', '222', { focused: { name: 'serverid', value: 'bet' } }); await H.autocomplete(ai); eq(ai.choices, [{ name: '2 \u2014 Beta Server', value: '2' }], 'autocomplete: "id \u2014 name" matched by name');
+    ai = fi('start', '222', { focused: { name: 'serverid', value: '' } }); await H.autocomplete(ai); eq(ai.choices.map((c) => c.value), ['1', '2', '3'], 'autocomplete: everything for an empty query (222 may see server 2)');
+    ai = fi('start', '111', { focused: { name: 'serverid', value: '' } }); await H.autocomplete(ai); eq(ai.choices.map((c) => c.value), ['1', '3'], 'autocomplete hides servers restricted to other users');
+    ai = fi('start', '111', { focused: { name: 'serverid', value: '3' } }); await H.autocomplete(ai); eq(ai.choices.map((c) => c.value), ['3'], 'matched by id');
+    ai = fi('start', '999', { focused: { name: 'serverid', value: '' } }); await H.autocomplete(ai); eq(ai.choices, [], 'unauthorised users get no server names');
+    ai = fi('send', '111', { focused: { name: 'command', value: 'x' } }); await H.autocomplete(ai); eq(ai.choices, [], 'other options do not autocomplete');
+    for (let k = 4; k <= 40; k++) fcfg[k] = { id: String(k), name: 'Bulk ' + k }; ai = fi('start', '111', { focused: { name: 'serverid', value: 'bulk' } }); await H.autocomplete(ai); eq(ai.choices.length, 25, 'at most 25 choices'); assert(ai.choices.every((c) => c.name.length <= 100)); for (let k = 4; k <= 40; k++) delete fcfg[k];
+
+    // rate limit: 5 commands / 10 s per user
+    H = mk(); logs6.length = 0; const rr = []; for (let k = 0; k < 8; k++) rr.push(await go('list', '111'));
+    eq(rr.map((x) => (eph(x.replies[0]) ? 'limited' : 'ok')), ['ok', 'ok', 'ok', 'ok', 'ok', 'limited', 'limited', 'limited'], 'sixth command within 10 s is refused'); assert(/Slow down/.test(txt(rr[5].replies[0])));
+    eq(logs6.filter((e) => e.detail.result === 'rate limited').length, 1, 'rate limiting is logged once per burst, not for every spam'); r = await go('list', '222'); assert(!eph(r.replies[0]), 'limit is per user');
+    t6 += 10001; r = await go('list', '111'); assert(!eph(r.replies[0]), 'window slides'); H = mk();
+
+    // event log entries + bus event
+    const seen6 = []; fmgr.events.on('discord:command', (e) => seen6.push(e)); logs6.length = 0; await go('list', '111'); await go('stop', '999', { serverid: '1' });
+    eq(logs6.map((e) => [e.event, e.detail.command, e.detail.userId, e.detail.result]), [['discord:command', 'list', '111', 'ok'], ['discord:command', 'stop', '999', 'denied: not authorised']], 'one NGSM log entry per attempt'); eq(seen6.length, 2, 'discord:command is emitted on the bus');
+    // with the real event log
+    const el6 = new (require('../src/main/services/eventLog').EventLog)(m, P, m.settings, dir); el6.start(); const real = DC.createHandlers({ mgr: Object.assign(Object.create(fmgr), { eventLog: el6, events: m.events }), getSettings: () => fmgr.settings, now: () => Date.now() });
+    const ri = fi('list', '111'); await real.handle(ri); const qr = el6.query({ event: 'discord:command' }); assert(qr.length === 1 && qr[0].detail.userTag === 'u111#0' && qr[0].message.includes('/list'), 'real EventLog.query finds the entry'); el6.stop();
+
+    // token redaction helpers
+    assert(!DC.redact('login failed for ' + TOKEN + ' / Authorization: Bot ' + TOKEN).includes('MTIzNDU2'), 'redact removes tokens'); assert(!DC.redact('x abc.def.ghi', 'abc.def.ghi').includes('abc.def.ghi'), 'redact removes the exact configured value even when it is not token-shaped');
+    assert(DC.tokenFormatOk(TOKEN) && !DC.tokenFormatOk('nope') && !DC.tokenFormatOk('') && !DC.tokenFormatOk(null), 'token format check');
+
+    // settings: sanitising + masking over the IPC table
+    const sd = S6.sanitize({ discord: { botEnabled: 'yes', botToken: '  Bot ' + TOKEN + ' ' } }).discord; eq([sd.botEnabled, sd.botToken], [false, TOKEN], 'botEnabled must be a real true; "Bot " prefix and spaces stripped'); eq(S6.sanitize({ discord: { botEnabled: true } }).discord.botEnabled, true); eq(S6.DEFAULTS.discord.botEnabled, false, 'bot is off by default'); eq(S6.DEFAULTS.discord.allowRawCommands, false);
+    eq(S6.sanitizeServerDiscord({ discordAllowedUserIds: ['123', 'x', 123, '123'] }).discordAllowedUserIds, ['123'], 'per-server allow list sanitised'); eq(Object.keys(S6.sanitizeServerDiscord({ discordMessage: 'a' })), ['discordMessage'], 'only present keys');
+    const botCalls = []; const fbot = { apply: async () => { botCalls.push('apply'); }, restart: async () => ({ state: 'off' }), status: () => ({ state: 'off', user: '', error: '', guilds: 0 }) };
+    const ap6 = buildApi6({ mgr: m, collector: { state: () => ({}) }, publicGames: () => [], shell: {}, dialog: {}, app: { setLoginItemSettings() {} }, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {}, discordBot: fbot });
+    m.settings = S6.read(dir); m.saveSettings({ discord: { botToken: TOKEN, applicationId: '123456789012345678' } });
+    let pub = ap6.settings(); assert(pub.discord.botToken === undefined && pub.discord.botTokenSet === true && !JSON.stringify(pub).includes(TOKEN) && pub.discord.applicationId === '123456789012345678', 'settings IPC masks the token: botTokenSet flag only');
+    pub = ap6.saveSettings({ discord: { botToken: '', allowedUserIds: ['111111111111111111'] } }); assert(m.settings.discord.botToken === TOKEN && pub.discord.botTokenSet === true && !JSON.stringify(pub).includes(TOKEN), 'blank token keeps the saved one; the result is masked'); assert(botCalls.length === 1, 'saving settings asks the bot to apply them');
+    pub = ap6.saveSettings({ discord: { botTokenSet: false, webhookUrl: '' } }); assert(m.settings.discord.botToken === TOKEN, 'client-sent botTokenSet is ignored and sibling keys are kept');
+    pub = ap6.saveSettings({ discord: { botToken: 'Z'.repeat(40) + '.abcd.' + 'Y'.repeat(30) } }); assert(m.settings.discord.botToken.startsWith('Z') && !JSON.stringify(pub).includes('ZZZZZ'), 'a new token replaces the old one');
+    pub = ap6.saveSettings({ discord: { clearBotToken: true } }); assert(m.settings.discord.botToken === '' && pub.discord.botTokenSet === false && !('clearBotToken' in m.settings.discord), 'clearBotToken removes it');
+    eq(ap6.discordBotTest(TOKEN), { ok: true }); assert(ap6.discordBotTest('bad').ok === false && ap6.discordBotTest().ok === false && /No bot token/.test(ap6.discordBotTest().error), 'discordBotTest checks the format only'); eq(ap6.discordBotStatus().state, 'off'); eq(ap6.discordBotCommands().length, 9, 'command preview for the UI');
+    m.saveSettings({ discord: { botToken: '', applicationId: '' } });
+    assert.throws(() => buildApi6({ mgr: m, collector: {}, publicGames: () => [], shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '', beforeRelaunch() {} }).discordBotStatus(), /Service not available/);
+
+    // client wiring against a fake discord.js (never connects)
+    class FakeClient extends EventEmitter {
+      constructor(o) { super(); this.opts = o; FakeClient.all.push(this); this.user = { tag: 'NodeGSM#0001' }; this.guilds = { cache: { size: 2 } }; this.destroyed = false; this.reg = null;
+        this.application = { id: '777', commands: { set: async (p, g) => { if (FakeClient.regFail) throw new Error('Missing Access ' + TOKEN); this.reg = { p, g }; } } }; }
+      async login(tok) { this.tok = tok; if (FakeClient.loginFail) throw new Error('An invalid token was provided: ' + tok); setImmediate(() => this.emit('clientReady')); return tok; }
+      async destroy() { this.destroyed = true; }
+    }
+    FakeClient.all = [];
+    const FD = { Client: FakeClient, GatewayIntentBits: { Guilds: 1 }, Events: { ClientReady: 'clientReady', ShardDisconnect: 'shardDisconnect', ShardResume: 'shardResume', InteractionCreate: 'interactionCreate' }, SlashCommandBuilder: D6.SlashCommandBuilder };
+    let loads = 0; const stl = []; const bmgr = Object.assign(Object.create(fmgr), { settings: { discord: { ...S6.DEFAULTS.discord, allowedUserIds: ['111'] } } });
+    const bot = new DiscordBot(bmgr, P, bmgr.settings, dir, { loadDiscord: () => { loads++; return FD; } }); bot.onStatus = (s) => stl.push(s.state); bot.collector = coll;
+    await bot.start(); eq(bot.status().state, 'off', 'disabled: stays off'); eq([loads, FakeClient.all.length], [0, 0], 'discord.js is not even loaded while the bot is off');
+    bmgr.settings.discord = { ...bmgr.settings.discord, botEnabled: true, botToken: '' }; await bot.apply(); assert(bot.status().state === 'error' && /No bot token/.test(bot.status().error) && loads === 0, 'enabled without a token: error, no client');
+    bmgr.settings.discord = { ...bmgr.settings.discord, botToken: 'garbage' }; await bot.apply(); assert(bot.status().state === 'error' && /does not look valid/.test(bot.status().error), 'malformed token: error without a network call');
+    bmgr.settings.discord = { ...bmgr.settings.discord, botToken: TOKEN, applicationId: '777', guildId: '888' }; await bot.apply(); await sleep(30);
+    const cl6 = FakeClient.all[0]; eq([bot.status().state, bot.status().user, bot.status().guilds, bot.status().registered], ['online', 'NodeGSM#0001', 2, true], 'login -> online'); eq(cl6.opts.intents, [1], 'Guilds intent only'); eq([cl6.tok, cl6.reg.g, cl6.reg.p.length], [TOKEN, '888', 9], 'guild commands registered with the built payload'); assert(stl.includes('connecting') && stl[stl.length - 1] === 'online', 'status pushed to the UI: ' + stl);
+    assert(!JSON.stringify(bot.status()).includes(TOKEN), 'status never contains the token');
+    await bot.apply(); eq(FakeClient.all.length, 1, 'unchanged settings do not reconnect'); bmgr.settings.discord.allowedUserIds = ['1']; await bot.apply(); eq(FakeClient.all.length, 1, 'changing the allowlist needs no reconnect (read live)');
+    bmgr.settings.discord = { ...bmgr.settings.discord, guildId: '' }; await bot.apply(); await sleep(30); eq([FakeClient.all.length, cl6.destroyed, FakeClient.all[1].reg.g], [2, true, undefined], 'guild change: reconnect, old client destroyed, global registration');
+    // interactions reach the handlers
+    const cl7 = FakeClient.all[1]; bmgr.settings.discord.allowedUserIds = ['111']; const ii = fi('list', '111'); ii.isAutocomplete = () => false; ii.isChatInputCommand = () => true; cl7.emit('interactionCreate', ii); await sleep(20); assert(ii.replies.length === 1 && !eph(ii.replies[0]), 'chat input interaction handled');
+    const ia = fi('start', '111', { focused: { name: 'serverid', value: 'alp' } }); ia.isAutocomplete = () => true; ia.isChatInputCommand = () => false; cl7.emit('interactionCreate', ia); await sleep(20); eq(ia.choices.map((c) => c.value), ['1'], 'autocomplete interaction handled');
+    // login / registration failures are reported without the token
+    FakeClient.loginFail = true; await bot.restart(); assert(bot.status().state === 'error' && /invalid token/.test(bot.status().error) && !bot.status().error.includes(TOKEN) && !JSON.stringify(stl).includes(TOKEN), 'login failure: error state, token redacted'); FakeClient.loginFail = false;
+    FakeClient.regFail = true; await bot.restart(); await sleep(30); assert(bot.status().state === 'online' && bot.status().registered === false && /Registering the slash commands failed/.test(bot.status().error) && !bot.status().error.includes(TOKEN), 'registration failure is visible'); FakeClient.regFail = false;
+    await bot.restart(); await sleep(30); eq([bot.status().state, bot.status().registered, bot.status().error], ['online', true, ''], 'restart recovers');
+    bmgr.settings.discord = { ...bmgr.settings.discord, botEnabled: false }; const beforeOff = FakeClient.all.at(-1); await bot.apply(); eq(bot.status().state, 'off', 'switching the bot off disconnects'); assert(beforeOff.destroyed, 'client destroyed');
+    bmgr.settings.discord = { ...bmgr.settings.discord, botEnabled: true }; await bot.apply(); await sleep(30); const lastC = FakeClient.all.at(-1); await bot.stop(); assert(lastC.destroyed && bot.status().state === 'off', 'stop() (before-quit) destroys the client'); await bot.apply(); eq(bot.status().state, 'off', 'apply after stop does nothing');
+    assert(new DiscordBot(bmgr, P, bmgr.settings, dir).status().state === 'off', 'construction does not load discord.js');
+
+    // renderer / package wiring
+    const html6 = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
+    for (const id of ['dcBotOn', 'dcBotToken', 'dcBotApp', 'dcBotGuild', 'dcBotUsers', 'dcBotRoles', 'dcBotRaw', 'dcBotBadge', 'dcBotCopy', 'dcBotSave', 'dcBotReconnect', 'dcBotCmds', 'dcBotWarn']) assert(html6.includes('id="' + id + '"'), 'element #' + id);
+    assert(/type="password" id="dcBotToken"/.test(html6), 'token field is a password field'); assert(!/<script>[^<]/.test(html6), 'no inline scripts (CSP)');
+    const dv6 = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'discordView.js'), 'utf8'); assert(/applications\.commands%20bot&permissions=0/.test(dv6) && /discordBotRestart/.test(dv6) && !/\.botToken/.test(dv6.replace(/d\.botToken|patch\.botToken/g, '')), 'invite link built locally; the view never reads a token back');
+    const pj6 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')); assert(/^\^?14\./.test(pj6.dependencies['discord.js']), 'discord.js 14.x is a runtime dependency');
+  }
+
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);

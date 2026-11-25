@@ -81,7 +81,7 @@ plugins/_template/   copy this to start a new plugin
 plugins/registry.json generated list of all plugins (npm run registry)
 src/main/            Electron main process (server manager, plugin loader, install runner, log tailer)
 src/main/api.js      the IPC/API table (name -> function); main.js mounts it on ipcMain
-src/main/services/   event-driven services (event log, Discord webhook + bot, backups, clusters, auto-clear, consoles); constructed in main.js, subscribe to mgr.events
+src/main/services/   event-driven services (event log, Discord webhook alerts, Discord bot (discordBot.js = discord.js wiring, discordCommands.js = pure command handlers tested with fake interactions), backups, clusters, auto-clear, consoles); constructed in main.js, subscribe to mgr.events
 src/main/configEdit.js  structured config parse / edit (pure functions); src/main/rcon.js  Source RCON client
 src/renderer/        UI (plain JS/CSS): app.js (servers, detail tabs, games browser, settings), dashboard.js (table + metrics + view switching), tick.js (shared tick helpers, also required by the main process), shell.js (nav, panels, footer), discordView.js (Discord view + embed editor), logsView.js (Logs screen), backupsView.js (server Backups tab + Backups screen), links.js (footer URLs - placeholders), theme-boot.js (theme + layout before first paint)
 scripts/             validate-plugins.js, build-registry.js, build-catalog.js (plugin catalog), build-site.js

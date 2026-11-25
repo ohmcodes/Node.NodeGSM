@@ -41,7 +41,7 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 | `cluster.js` (+ `clusterMerge.js`) | **done** - clusters, cluster update, config sync, clear folders |
 | `autoClear.js` | **done** - per-server rules, seeding from the plugin, scheduler tick, preview / run |
 | `consoles.js` (+ `../rcon.js`, `../configEdit.js`) | **done** - injected consoles (log tail, RCON), structured config helpers |
-| `discordBot.js` | skeleton |
+| `discordBot.js` + `discordCommands.js` | **done** (not tested against real Discord) - slash-command bot: discord.js client wiring + pure command handlers |
 
 ### Event log (`eventLog.js`)
 - `log({ level, event, serverId, serverName, message, detail })` - fills `ts`, validates `level` (`info|warn|error`), caps message (1000 chars) and detail (4000 chars), appends to today's file and emits `ngsm:log`. Never throws.
@@ -55,6 +55,12 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 - `enqueue(url, body)` -> `{ ok, status, error? }`; a single queue with `delayMs` between sends; 429 waits `retry_after` (max 30 s), 5xx retried, max 3 retries; unreachable hosts return `{ ok:false, status:0 }`.
 - Production accepts only `isDiscordWebhook()` URLs. Tests pass `{ allowAnyUrl: true, agent }` to talk to a local HTTP server.
 - `info()` feeds the Discord view; `preview()` and `test()` back the IPC calls.
+
+### Discord bot (`discordBot.js`, `discordCommands.js`)
+- `discordCommands.js` has no discord.js import. `COMMANDS` / `registrationJson()` are plain JSON in Discord's API shape (option types 3 string, 5 boolean; names lowercase <= 32, descriptions <= 100). `createHandlers({ mgr, getSettings, getCollector, version, now, bootTime })` returns `{ handle(interaction), autocomplete(interaction) }`; an interaction only needs `commandName`, `user{id,tag}`, `member.roles`, `options.getString / getBoolean / getFocused`, `reply / deferReply / editReply / followUp / deleteReply`, `respond`. Tests use fakes.
+- Order inside `handle`: rate limit (per user id, 5 / 10 s) -> `authorize()` (allowed user id or admin role; default deny) -> per-server `discordAllowedUserIds` -> the action. Pre-validation refusals (unknown id, busy, wrong state, `/send` off) are ephemeral replies before any defer; after a defer an error deletes the placeholder and follows up ephemerally. Each attempt calls `mgr.eventLog.log({ event: 'discord:command', detail: { userId, userTag, command, serverId, result } })` and emits `discord:command` on `mgr.events`.
+- `discordBot.js` owns the client: lazy `require('discord.js')` (injectable `loadDiscord` for tests), Guilds intent, `apply()` compares a signature of `botEnabled | token | applicationId | guildId` and only then reconnects; registration uses `buildCommands()` (SlashCommandBuilder from the same definitions) with `application.commands.set(payload, guildId?)`; `status()` / `onStatus` feed IPC `discordBotStatus` and the pushed `discordBot` event; `stop()` destroys the client. `main.js` sets `bot.collector` (for `/stats`) and `bot.onStatus`.
+- The token lives in `settings.discord.botToken` (plain text). `api.js` masks it: `settings` / `saveSettings` return `discord.botTokenSet` only; a blank token in a patch keeps the saved one, `clearBotToken: true` clears it.
 
 ### Backups (`backup.js`, `zip.js`)
 - `new BackupService(mgr, plugins, settings, dataDir, zipOpts?)` registers itself as `mgr._bk`; `mgr.bk()` returns it (creating one if `main.js` did not). `ServerManager.backup / backupList / restore / deleteBackup` delegate to it.
@@ -97,8 +103,8 @@ Pure functions: `parse(format, text) -> { ok, reason?, entries[{ id, path, key, 
 ## Data files (`<data>` = `%APPDATA%\NodeGSM`, or the legacy `%APPDATA%\node-wgsm2026\WGSM`)
 | Path | Content |
 |---|---|
-| `settings.json` | app settings (sanitised on read and write by `settings.js`): theme, `ui`, `headerStats`, `discord{ webhookUrl, events, templates, ...}`, `logging{ retentionDays }` |
-| `servers/<id>/configs/wgsm.json` | per-server config incl. `discordWebhook`, `discordAlert`, `discordEvents`, old alert flags, `backupKeep`, `autoClear` (rules), `autoClearSeeded` |
+| `settings.json` | app settings (sanitised on read and write by `settings.js`): theme, `ui`, `headerStats`, `discord{ webhookUrl, botEnabled, botToken (plain text!), applicationId, guildId, allowedUserIds, adminRoleIds, allowRawCommands, events, templates }`, `logging{ retentionDays }` |
+| `servers/<id>/configs/wgsm.json` | per-server config incl. `discordWebhook`, `discordAlert`, `discordEvents`, `discordAllowedUserIds` (bot: restrict who may control this server), old alert flags, `backupKeep`, `autoClear` (rules), `autoClearSeeded` |
 | `logs/ngsm-YYYY-MM-DD.log` | NGSM event log, JSONL |
 | `logs/crash.log`, `logs/crash-history.json` | app crash handling |
 | `clusters.json` | clusters (members, parent, per-cluster rules) - see [TECH-data-formats.md](TECH-data-formats.md) |
