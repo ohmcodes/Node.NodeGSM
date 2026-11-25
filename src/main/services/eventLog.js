@@ -19,8 +19,8 @@ const EVENT_MAP = {
   'server:crashed': { level: 'error', msg: (p) => `Server stopped suddenly (crash)${p.detail.code != null ? `, exit code ${p.detail.code}` : ''}` },
   'server:restarted': { level: 'info', msg: (p) => `Server restarted (${p.detail.reason || 'manual'})` },
   'server:updated': { level: 'info', msg: (p) => `Server updated${p.detail.from ? ` ${p.detail.from} -> ${p.detail.to}` : ''}${p.detail.validate ? ' (validate)' : ''}` },
-  'server:backup': { level: 'info', msg: (p) => `Backup created: ${p.detail.file || ''}` },
-  'server:restore': { level: 'warn', msg: (p) => `Backup restored: ${p.detail.file || ''}` },
+  'server:backup': { level: 'info', msg: (p) => `Backup created: ${p.detail.file || ''}${p.detail.mode ? ` (${p.detail.mode === 'neatpick' ? 'neat pick' : p.detail.mode})` : ''}` },
+  'server:restore': { level: 'warn', msg: (p) => `Backup restored: ${p.detail.file || ''}${p.detail.asNew ? ' (as a new server)' : ''}` },
   'server:command': { level: 'info', msg: (p) => `Console command: ${p.detail.command}`, skip: (p) => p.detail.silent },
   'server:config': { level: 'info', msg: (p) => `Config file edited: ${p.detail.path || p.detail.config}` },
 };
@@ -53,6 +53,7 @@ class EventLog {
   start() {
     if (this.started) return;
     this.started = true;
+    this.mgr.eventLog = this;   // other services (backup, cluster ...) write their entries through mgr.eventLog.log()
     for (const [type, def] of Object.entries(EVENT_MAP)) {
       const h = (p) => { try { if (!def.skip || !def.skip(p)) this.log({ level: def.level, event: type, serverId: p.id, serverName: p.name, message: def.msg(p), detail: p.detail }); } catch { /* never break the bus */ } };
       this.mgr.events.on(type, h); this.handlers.push([type, h]);
@@ -67,6 +68,7 @@ class EventLog {
 
   /** Unsubscribe and stop timers. */
   stop() {
+    if (this.mgr.eventLog === this) this.mgr.eventLog = null;
     this.started = false;
     for (const [t, h] of this.handlers) this.mgr.events.removeListener(t, h);
     this.handlers = [];

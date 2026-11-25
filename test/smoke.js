@@ -431,6 +431,192 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   fs.rmSync(ldir, { recursive: true, force: true });
   }
 
+  { // Phase 3 block (own scope): backups
+  // ---- Phase 3: helpers (paths, exclude patterns, crc, zip writer/reader) ----
+  const { BackupService, safeRel, inside, compileExclude } = require('../src/main/services/backup');
+  const zipmod = require('../src/main/services/zip');
+  const { EventLog: ELog } = require('../src/main/services/eventLog');
+  for (const bad of ['../x', 'a/../../x', '/abs', 'C:/x', 'C:\\x', '..\\x', '', '   ', 'a\0b', 'a/b:stream', '.', './']) assert.throws(() => safeRel(bad), /Invalid path/, 'safeRel rejects ' + JSON.stringify(bad));
+  eq([safeRel('a\\b/./c//d'), safeRel('./saves/'), safeRel('x')], ['a/b/c/d', 'saves', 'x'], 'safeRel normalises');
+  const root = path.resolve(dir, 'conf'); assert.throws(() => inside(root, '../conf2/x'), /escapes/, 'inside() blocks a sibling that shares the prefix'); assert(inside(root, 'a/b').startsWith(root + path.sep), 'inside() accepts children');
+  const ex = compileExclude(['*.tmp', 'cache', 'Saved/Logs', '**/x.log', '']);
+  assert(ex('a/b/c.tmp', 'c.tmp') && ex('cache', 'cache') && ex('deep/cache', 'cache') && ex('Saved/Logs', 'Logs') && ex('SAVED/logs', 'logs') && ex('a/b/x.log', 'x.log'), 'exclude patterns match');
+  assert(!ex('Other/Saved/Logs', 'Logs') && !ex('a/c.tmpx', 'c.tmpx') && !ex('cachex', 'cachex'), 'anchored patterns only match from the root; names match exactly');
+  assert.strictEqual(zipmod.crc32(Buffer.from('123456789')), 0xCBF43926, 'crc32 check value');
+  { const zl = require('zlib'); const orig = zl.crc32; zl.crc32 = undefined; try { assert.strictEqual(zipmod.crc32(Buffer.from('123456789')), 0xCBF43926, 'table crc32 fallback'); assert.strictEqual(zipmod.crc32(Buffer.from('6789'), zipmod.crc32(Buffer.from('12345'))), 0xCBF43926, 'crc32 continues'); } finally { zl.crc32 = orig; } }
+
+  // zip64 forced on tiny files: our reader reads it back; a flipped byte is detected
+  const zsrc = path.join(dir, 'z64src'); fs.mkdirSync(zsrc); const rnd = require('crypto').randomBytes(200 * 1024);
+  fs.writeFileSync(path.join(zsrc, 'rnd.bin'), rnd); fs.writeFileSync(path.join(zsrc, 'empty.txt'), ''); fs.writeFileSync(path.join(zsrc, 'uni\u00e9.txt'), 'utf8 name');
+  for (const opts of [{ forceZip64: true }, {}]) {
+    const zf = path.join(dir, 'z64.zip'); const zw = new zipmod.ZipWriter(zf, opts);
+    for (const n of ['rnd.bin', 'empty.txt', 'uni\u00e9.txt']) await zw.addFile(n, path.join(zsrc, n), fs.statSync(path.join(zsrc, n)));
+    await zw.addDir('d/e', Date.now()); await zw.addBuffer('b.txt', Buffer.from('buffer'), Date.now()); await zw.finish();
+    const zr = await zipmod.openZip(zf); eq(zr.entries.map((e) => e.name), ['rnd.bin', 'empty.txt', 'uni\u00e9.txt', 'd/e/', 'b.txt'], 'entries listed ' + JSON.stringify(opts));
+    const out = path.join(dir, 'z64out'); fs.mkdirSync(out, { recursive: true });
+    for (const e of zr.entries.filter((x) => !x.dir)) await zipmod.extractEntry(zr, e, path.join(out, e.name));
+    assert(fs.readFileSync(path.join(out, 'rnd.bin')).equals(rnd) && fs.readFileSync(path.join(out, 'uni\u00e9.txt'), 'utf8') === 'utf8 name' && fs.readFileSync(path.join(out, 'empty.txt')).length === 0, 'zip roundtrip ' + JSON.stringify(opts));
+    if (!opts.forceZip64) { const az = new AdmZip(zf); assert(az.getEntry('rnd.bin').getData().equals(rnd) && az.getEntries().length === 5, 'AdmZip reads our zip (standard layout)'); }
+    await zr.close(); fs.rmSync(out, { recursive: true, force: true });
+  }
+  { const zf = path.join(dir, 'z64.zip'); const zb = fs.readFileSync(zf); zb[200] ^= 0xff; fs.writeFileSync(zf, zb);
+    const zr = await zipmod.openZip(zf); await assert.rejects(zipmod.extractEntry(zr, zr.entries[0], path.join(dir, 'corrupt.out')), /./, 'corrupt data is detected');
+    assert(!fs.existsSync(path.join(dir, 'corrupt.out')) && !fs.existsSync(path.join(dir, 'corrupt.out.nodegsm-part')), 'no partial file left'); await zr.close(); }
+
+  // ---- Phase 3: a fake plugin game that installs locally (no network) ----
+  const fgDir = path.join(dir, 'bkfake-plugin'); fs.mkdirSync(fgDir);
+  const fgame = P.toGame({ id: 'bkfake', name: 'Backup Fake', install: { steps: [{ type: 'write', path: 'game.exe', content: 'EXE' }, { type: 'write', path: 'data/base.txt', content: 'base' }] }, run: { exe: 'game.exe', args: [] },
+    defaults: { port: '30000', queryPort: '30001', map: 'm', maxPlayers: '4' }, backup: { presets: [{ id: 'saves', name: 'Saves', paths: ['saves'] }, { id: 'cfg', name: 'Cfg', paths: ['cfg/server.ini'] }], exclude: ['*.tmp', 'cache'] } }, fgDir, 'user');
+  P.GAMES.push(fgame);
+  const bk = new BackupService(m, P, m.settings, dir); assert(m.bk() === bk, 'mgr.bk() returns the registered service');
+  const belog = new ELog(m, P, m.settings, dir); belog.start();
+  const bevs = []; for (const n of ['backup', 'restore']) m.events.on('server:' + n, (p) => bevs.push([n, p]));
+  const put = (id, rel, data) => { const f = path.join(m.filesDir(id), rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, data); return f; };
+  const rd = (id, rel) => fs.readFileSync(path.join(m.filesDir(id), rel), 'utf8');
+  const big = require('crypto').randomBytes(3 * 1024 * 1024);
+  const b1 = m.create('bkfake', 'BK One').id; await m.install(b1);
+  m.saveConfig(b1, { param: '-custom "a b"', backupKeep: 0 });
+  const W1 = 'W1'.repeat(40000);
+  put(b1, 'saves/world1.dat', W1); put(b1, 'saves/sub/a.txt', 'A'); put(b1, 'cfg/server.ini', 'ini'); put(b1, 'cfg/other.ini', 'other'); put(b1, 'cache/x.bin', 'cache'); put(b1, 'logs/a.tmp', 'tmp'); put(b1, 'data/big.bin', big); fs.mkdirSync(path.join(m.filesDir(b1), 'emptydir'), { recursive: true });
+  const zipPath = (id, f) => path.join(m.backupsDir, id, f);
+  const names = (id, f) => new AdmZip(zipPath(id, f)).getEntries().map((e) => e.entryName).sort();
+  const files = (id, f) => names(id, f).filter((x) => !x.endsWith('/'));
+  const manifestOf = (id, f) => JSON.parse(fs.readFileSync(zipPath(id, f).replace(/\.zip$/, '.json'), 'utf8'));
+  const noPartial = (id) => !fs.readdirSync(path.join(m.backupsDir, id)).some((f) => f.endsWith('.partial'));
+
+  // full backup: manifest, contents, exclusions, event
+  const fullF = await m.backup(b1); assert(/^backup-.*\.zip$/.test(fullF), 'backup() resolves to the file name');
+  const fm = manifestOf(b1, fullF);
+  eq([fm.version, fm.mode, fm.game, fm.serverName, fm.serverId, fm.includesServerSettings, fm.paths, fm.gameVersion], [1, 'full', 'bkfake', 'BK One', b1, true, [], null], 'full manifest');
+  assert(fm.sizeBytes === fs.statSync(zipPath(b1, fullF)).size && fm.fileCount === 7 && fm.uncompressedBytes > big.length && !isNaN(Date.parse(fm.createdAt)) && fm.exclude.includes('*.tmp') && fm.exclude.includes('cache'), 'manifest sizes, counts, effective exclude list');
+  eq(files(b1, fullF), ['__nodegsm/wgsm.json', 'cfg/other.ini', 'cfg/server.ini', 'data/base.txt', 'data/big.bin', 'game.exe', 'saves/sub/a.txt', 'saves/world1.dat'], 'full zip contents (plugin excludes applied)');
+  assert(names(b1, fullF).includes('emptydir/'), 'empty directories are kept');
+  assert(new AdmZip(zipPath(b1, fullF)).getEntry('data/big.bin').getData().equals(big), 'streamed zip is readable by AdmZip, data intact');
+  assert(bevs.some(([n, p]) => n === 'backup' && p.id === b1 && p.detail.file === fullF && p.detail.mode === 'full' && p.detail.fileCount === 7), 'server:backup event with mode and file count');
+  assert(belog.query({ event: 'server:backup', serverId: b1 })[0].message.includes(fullF), 'event log has the backup entry'); assert(noPartial(b1), 'no partial file after success');
+
+  // full restore roundtrip
+  put(b1, 'saves/world1.dat', 'CHANGED'); fs.rmSync(path.join(m.filesDir(b1), 'data/base.txt'));
+  bevs.length = 0; await m.restore(b1, fullF);
+  assert(rd(b1, 'saves/world1.dat') === W1 && rd(b1, 'data/base.txt') === 'base' && fs.readFileSync(path.join(m.filesDir(b1), 'data/big.bin')).equals(big), 'full restore brings files back');
+  assert(rd(b1, 'cache/x.bin') === 'cache' && !fs.existsSync(path.join(m.filesDir(b1), '__nodegsm')), 'files outside the backup stay; the metadata folder is never extracted');
+  assert(bevs.some(([n, p]) => n === 'restore' && p.detail.file === fullF && p.detail.mode === 'full'), 'server:restore event');
+  assert(belog.query({ event: 'server:restore', serverId: b1 }).length === 1, 'event log has the restore entry'); assert(m.view(b1).pending === null, 'busy flag cleared after restore');
+
+  // neat pick: presets + custom paths + exclude + settings flag
+  put(b1, 'data/base.txt', 'base-modified');
+  const npF = await m.backup(b1, { mode: 'neatpick', presets: ['saves', 'cfg'], paths: ['data/base.txt', 'data\\base.txt'], exclude: ['*.dat'] });
+  const nm = manifestOf(b1, npF);
+  eq(files(b1, npF), ['cfg/server.ini', 'data/base.txt', 'saves/sub/a.txt'], 'neat pick contents (preset dir, preset file, custom file; user exclude applied; no wgsm.json by default)');
+  eq([nm.mode, nm.paths, nm.presets, nm.includesServerSettings, nm.exclude.includes('*.dat')], ['neatpick', ['saves', 'cfg/server.ini', 'data/base.txt'], ['saves', 'cfg'], false, true], 'neat pick manifest');
+  const npS = await m.backup(b1, { mode: 'neatpick', presets: ['cfg'], includeServerSettings: true });
+  assert(names(b1, npS).includes('__nodegsm/wgsm.json') && manifestOf(b1, npS).includesServerSettings === true, 'includeServerSettings adds the server settings');
+  const stOnly = await m.backup(b1, { mode: 'neatpick', paths: ['does-not-exist'], includeServerSettings: true });
+  eq([manifestOf(b1, stOnly).fileCount, manifestOf(b1, stOnly).missing], [0, ['does-not-exist']], 'a backup of only the settings is allowed; missing paths are reported');
+  const pv = await bk.preview(b1, { mode: 'neatpick', presets: ['saves'] }); eq([pv.fileCount, pv.totalBytes], [2, W1.length + 1], 'preview: file count and bytes');
+  assert((await bk.preview(b1, { mode: 'full' })).fileCount === 7 && (await bk.preview(b1, {})).mode === 'full', 'preview full / default mode');
+  eq(bk.info(b1).presets.map((p) => p.id), ['saves', 'cfg'], 'info() exposes the plugin presets'); eq(bk.info(b1).exclude, ['*.tmp', 'cache']);
+
+  // validation + path confinement on backup
+  for (const bad of ['../x', 'a/../../x', '/etc', 'C:\\Windows', '..\\..\\x']) await assert.rejects(m.backup(b1, { mode: 'neatpick', paths: [bad] }), /Invalid path/, 'neat pick rejects ' + bad);
+  await assert.rejects(m.backup(b1, { mode: 'neatpick', presets: ['nope'] }), /Unknown backup preset/); await assert.rejects(m.backup(b1, { mode: 'weird' }), /Unknown backup mode/);
+  await assert.rejects(m.backup(b1, { mode: 'neatpick' }), /at least one/, 'empty neat pick refused'); await assert.rejects(m.backup(b1, { mode: 'neatpick', paths: ['nothing-here'] }), /Nothing to back up/, 'nothing matched');
+  assert(noPartial(b1), 'failed backups leave no partial file');
+  const outside = path.join(dir, 'outside-secret'); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'secret.txt'), 'SECRET');
+  let linked = false; try { fs.symlinkSync(outside, path.join(m.filesDir(b1), 'saves', 'link'), 'junction'); linked = true; } catch { /* no permission to create links here */ }
+  if (linked) {
+    const lf = await m.backup(b1); assert(!names(b1, lf).some((x) => /secret|link/.test(x)) && manifestOf(b1, lf).skipped >= 1, 'symlinks / junctions are never followed (skipped and counted)');
+    await assert.rejects(m.backup(b1, { mode: 'neatpick', paths: ['saves/link/secret.txt'] }), /Nothing to back up/, 'a path that goes through a link is not read');
+    fs.rmSync(path.join(m.filesDir(b1), 'saves', 'link'), { recursive: true, force: true }); assert(fs.existsSync(path.join(outside, 'secret.txt')), 'removing the link did not touch the target');
+  }
+
+  // zip-slip: every malicious name is rejected before anything is written
+  const evilZip = async (id, name, entryName) => { const f = zipPath(id, name); const zw = new zipmod.ZipWriter(f); await zw.addBuffer('ok.txt', Buffer.from('ok'), Date.now()); await zw.addBuffer(entryName, Buffer.from('EVIL'), Date.now()); await zw.finish(); };
+  const evilNames = ['../evil.txt', 'a/../../evil.txt', '/abs-evil.txt', 'C:/evil.txt', '..\\evil.txt', 'sub/..\\..\\evil.txt'];
+  for (const [i, en] of evilNames.entries()) { await evilZip(b1, `backup-evil${i}.zip`, en); await assert.rejects(m.restore(b1, `backup-evil${i}.zip`), /Invalid path/, 'zip-slip rejected: ' + en); }
+  assert(!fs.existsSync(path.join(m.filesDir(b1), '..', 'evil.txt')) && !fs.existsSync(path.join(m.filesDir(b1), 'ok.txt')) && !fs.existsSync(path.join(path.parse(dir).root, 'evil.txt')), 'a rejected backup extracts nothing, not even the harmless entries');
+  const idsBefore = m.ids().length;
+  await assert.rejects(bk.restoreAsNew({ folder: b1, file: 'backup-evil0.zip' }, { game: 'bkfake' }), /Invalid path/, 'restore-as-new checks entries too'); eq(m.ids().length, idsBefore, 'and creates no server');
+  for (const f of fs.readdirSync(path.join(m.backupsDir, b1)).filter((x) => x.startsWith('backup-evil'))) fs.rmSync(zipPath(b1, f));
+  assert.strictEqual(bk.filePath('1', '../../x.zip'), path.join(m.backupsDir, '1', 'x.zip'), 'file names are confined to the backup folder (basename)'); assert.throws(() => bk.filePath('../x', 'a.zip'), /Invalid backup folder/); assert.throws(() => bk.filePath('1', 'a.txt'), /Invalid backup file/);
+  await assert.rejects(m.restore(b1, 'backup-missing.zip'), /Backup not found/);
+
+  // legacy backup without a sidecar manifest (made by AdmZip like the old code did)
+  const lz = new AdmZip(); lz.addFile('legacy/old.txt', Buffer.from('OLD')); lz.addFile('saves/world1.dat', Buffer.from('LEGACY')); lz.writeZip(zipPath(b1, 'backup-legacy.zip'));
+  const legacy = m.backupList(b1).find((x) => x.file === 'backup-legacy.zip'); assert(legacy && legacy.legacy === true && legacy.mode === 'full' && legacy.manifest === null && legacy.size > 0 && legacy.time > 0, 'legacy backup listed as mode full');
+  await m.restore(b1, 'backup-legacy.zip'); assert(rd(b1, 'legacy/old.txt') === 'OLD' && rd(b1, 'saves/world1.dat') === 'LEGACY', 'legacy backup restores (AdmZip-made zip read by the streaming reader)');
+  await assert.rejects(bk.restoreAsNew({ folder: b1, file: 'backup-legacy.zip' }), /without a manifest/, 'restore-as-new needs a game for a legacy backup');
+  const lg = await bk.restoreAsNew({ folder: b1, file: 'backup-legacy.zip' }, { game: 'bkfake', name: 'From legacy' });
+  assert(rd(lg.id, 'legacy/old.txt') === 'OLD' && m.getConfig(lg.id).name === 'From legacy' && lg.settingsRestored === false, 'legacy restore-as-new with an explicit game'); await m.remove(lg.id, true);
+  put(b1, 'saves/world1.dat', W1); fs.rmSync(path.join(m.filesDir(b1), 'legacy'), { recursive: true, force: true });
+
+  // retention
+  for (const f of m.backupList(b1)) m.deleteBackup(b1, f.file);
+  eq(m.backupList(b1), [], 'deleteBackup removes everything'); assert(!fs.readdirSync(path.join(m.backupsDir, b1)).some((f) => f.endsWith('.json')), 'deleteBackup also removes the sidecar manifest');
+  eq([1, '3', 0, -5, 'x', 5000, 2.9].map((v) => m.saveConfig(b1, { backupKeep: v }).backupKeep), [1, 3, 0, 0, 0, 0, 2], 'backupKeep is sanitised (0 .. 1000)');
+  m.saveConfig(b1, { backupKeep: 2 });
+  const made = []; for (let i = 0; i < 4; i++) { made.push(await m.backup(b1, { mode: 'neatpick', presets: ['cfg'] })); await sleep(5); }
+  eq(m.backupList(b1).map((x) => x.file), [made[3], made[2]], 'retention keeps the newest N');
+  assert(fs.readdirSync(path.join(m.backupsDir, b1)).filter((f) => f.endsWith('.json')).length === 2 && belog.query({ event: 'backup:pruned' }).length === 2, 'old sidecars removed, prune is logged');
+  m.saveConfig(b1, { backupKeep: 0 }); await m.backup(b1, { mode: 'neatpick', presets: ['cfg'] }); await m.backup(b1, { mode: 'neatpick', presets: ['cfg'] }); assert(m.backupList(b1).length === 4, '0 = unlimited');
+  for (const f of m.backupList(b1)) m.deleteBackup(b1, f.file);
+
+  // bulk backup keeps working (full by default)
+  eq((await m.bulk('backup', [b1])).map((r) => r.ok), [true], 'bulk backup'); const bb = m.backupList(b1); assert(bb.length === 1 && bb[0].mode === 'full' && bb[0].manifest.includesServerSettings, 'bulk backup is a full backup');
+  const full2 = bb[0].file;
+
+  // restore as new (full): new id, settings applied, port conflict resolved, event
+  const origPort = m.getConfig(b1).port; m.saveConfig(b1, { param: '-after-backup' });
+  bevs.length = 0; const rn = await bk.restoreAsNew({ folder: b1, file: full2 }, { name: 'Clone' });
+  assert(rn.id !== b1 && rn.name === 'Clone' && rn.mode === 'full' && rn.settingsRestored === true && rn.portAdjusted === true, 'restore-as-new result: ' + JSON.stringify(rn));
+  const cc = m.getConfig(rn.id); assert(cc.game === 'bkfake' && cc.name === 'Clone' && cc.param === '-custom "a b"' && cc.port !== origPort && cc.installDir === '', 'clone: settings from the backup (param), name from the request, port moved to a free one: ' + cc.port);
+  assert(new Set([m.getConfig(b1).port, m.getConfig(b1).queryPort, cc.port, cc.queryPort]).size === 4, 'no port is used twice');
+  assert(rd(rn.id, 'saves/world1.dat') === W1 && fs.readFileSync(path.join(m.filesDir(rn.id), 'data/big.bin')).equals(big) && rd(rn.id, 'game.exe') === 'EXE', 'clone has the files');
+  assert(bevs.some(([n, p]) => n === 'restore' && p.id === rn.id && p.detail.asNew === true && p.detail.from === b1), 'server:restore event for the new server'); assert(m.view(rn.id).status === 'Stopped', 'new server is stopped');
+  assert(/as a new server/.test(belog.query({ event: 'server:restore', serverId: rn.id })[0].message), 'logged');
+  const rn2 = await bk.restoreAsNew(full2, { restoreSettings: false }); eq([rn2.settingsRestored, m.getConfig(rn2.id).name, m.getConfig(rn2.id).param], [false, 'BK One (restored)', m.getConfig(rn2.id).param], 'bare file name is found in any folder; default name');
+  assert(m.getConfig(rn2.id).param !== '-custom "a b"', 'settings skipped on request'); await m.remove(rn2.id, true);
+
+  // neat pick: refused on a server that is not installed, applied once installed; wrong game refused
+  const npKeep = await m.backup(b1, { mode: 'neatpick', presets: ['saves'], paths: ['data/base.txt'] });
+  const un = m.create('bkfake', 'Not installed').id; fs.mkdirSync(path.join(m.backupsDir, un), { recursive: true });
+  for (const ext of ['.zip', '.json']) fs.copyFileSync(zipPath(b1, npKeep.replace('.zip', ext)), zipPath(un, npKeep.replace('.zip', ext)));
+  await assert.rejects(m.restore(un, npKeep), /install the game first/i, 'neat pick restore needs an installed server');
+  assert(!fs.existsSync(path.join(m.filesDir(un), 'saves')) && m.view(un).pending === null, 'nothing was written, server not left busy');
+  await m.install(un); const rr = await m.restore(un, npKeep); eq([rr.mode, rd(un, 'saves/sub/a.txt'), rd(un, 'data/base.txt')], ['neatpick', 'A', 'base-modified'], 'neat pick restore after install');
+  fs.copyFileSync(zipPath(b1, npKeep), path.join(m.backupsDir, un, 'backup-other.zip')); fs.writeFileSync(path.join(m.backupsDir, un, 'backup-other.json'), JSON.stringify({ ...manifestOf(b1, npKeep), game: 'csgo' }));
+  await assert.rejects(m.restore(un, 'backup-other.zip'), /belongs to a "csgo" server/, 'a backup of another game is refused'); await m.remove(un, true);
+
+  // restore as new (neat pick): create + install + apply
+  const rnp = await bk.restoreAsNew({ folder: b1, file: npKeep }, { name: 'NP clone' });
+  eq([rnp.mode, rnp.settingsRestored, m.getConfig(rnp.id).name, rd(rnp.id, 'game.exe'), rd(rnp.id, 'saves/sub/a.txt'), rd(rnp.id, 'data/base.txt')], ['neatpick', false, 'NP clone', 'EXE', 'A', 'base-modified'], 'neat pick restore-as-new: game installed, then backup applied over it');
+
+  // plugin missing / broken install: clear error, no server left behind
+  fs.copyFileSync(zipPath(b1, npKeep), zipPath(b1, 'backup-noplugin.zip')); fs.writeFileSync(zipPath(b1, 'backup-noplugin.json'), JSON.stringify({ ...manifestOf(b1, npKeep), game: 'no-such-game' }));
+  const nIds = m.ids().length; await assert.rejects(bk.restoreAsNew({ folder: b1, file: 'backup-noplugin.zip' }), /plugin for "no-such-game" is not installed/, 'missing plugin -> clear error'); eq(m.ids().length, nIds, 'no server created');
+  fgame.steps = [{ type: 'write', path: 'nothing.txt', content: 'x' }];
+  await assert.rejects(bk.restoreAsNew({ folder: b1, file: npKeep }), /Install incomplete/, 'a failing install is reported'); eq(m.ids().length, nIds, 'and the half-created server is removed');
+  fgame.steps = [{ type: 'write', path: 'game.exe', content: 'EXE' }, { type: 'write', path: 'data/base.txt', content: 'base' }];
+
+  // all-backups listing (+ deleted servers) and the IPC table
+  await m.backup(rnp.id); const rnpId = rnp.id;
+  const all = bk.listAll(); assert(all.length >= 3 && all.every((r) => r.folder && r.file && typeof r.size === 'number' && r.mode && 'deleted' in r), 'listAll rows');
+  const mine = all.filter((r) => r.serverId === b1 && r.game === 'bkfake'); assert(mine.length >= 2 && mine.every((r) => r.serverName === 'BK One' && r.gameName === 'Backup Fake' && r.deleted === false && r.pluginMissing === false), 'rows carry the server and game name');
+  assert(all.find((r) => r.file === 'backup-noplugin.zip').pluginMissing === true, 'rows flag a missing plugin');
+  assert(all.every((r, i) => !i || all[i - 1].time >= r.time), 'newest first');
+  await m.remove(rnpId, true);
+  const delRows = bk.listAll().filter((r) => r.deleted && r.serverName === 'NP clone'); assert(delRows.length === 1 && delRows[0].deleted === true && delRows[0].serverName === 'NP clone' && /deleted-\d+$/.test(delRows[0].folder), 'backups of a deleted server stay listed, marked deleted, name from the manifest');
+  const fromDeleted = await bk.restoreAsNew({ folder: delRows[0].folder, file: delRows[0].file }, { name: 'Back from the dead' }); eq([m.getConfig(fromDeleted.id).name, rd(fromDeleted.id, 'game.exe')], ['Back from the dead', 'EXE'], 'restore-as-new works from a deleted server');
+  const apx = buildApi({ mgr: m, collector: { state: () => ({}) }, publicGames: () => [], shell: { showItemInFolder: (p) => { apx.shown = p; }, openPath: (p) => { apx.opened = p; } }, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {} });
+  assert(apx.backups().length === bk.listAll().length && apx.backups(b1).every((r) => r.serverId === b1) && apx.backups('').length === bk.listAll().length, 'api.backups(): all, api.backups(id): one server');
+  for (const k of ['backup', 'backupInfo', 'backupPreview', 'restore', 'restoreNew', 'deleteBackup', 'backupDownload', 'backupOpenFolder']) assert.strictEqual(typeof apx[k], 'function', 'api.' + k);
+  eq((await apx.backupPreview(b1, { mode: 'full' })).mode, 'full'); apx.backupDownload(b1, full2); assert(apx.shown === zipPath(b1, full2), 'backupDownload reveals the zip'); apx.backupOpenFolder(delRows[0].folder); assert(apx.opened === path.join(m.backupsDir, delRows[0].folder), 'backupOpenFolder');
+  assert.throws(() => apx.backupDownload('../x', 'a.zip'), /Invalid/, 'api confines folder names');
+  const apiRn = await apx.restoreNew(b1, full2, { name: 'Via API' }); assert(apiRn.server && apiRn.server.name === 'Via API' && apiRn.id === apiRn.server.id, 'api.restoreNew returns the new server view');
+  for (const id of [fromDeleted.id, apiRn.id, rn.id]) await m.remove(id, true);
+  belog.stop(); await m.remove(b1, true); P.GAMES.splice(P.GAMES.indexOf(fgame), 1);
+  }
+
   // ---- Phase 1: app shell (settings round trip, footer links, static HTML checks) ----
   m.saveSettings({ ui: { rightCollapsed: true, bottomCollapsed: true } }); m.saveSettings({ headerStats: { disk: true, tick: true } });
   const sh = S.read(dir);
@@ -441,8 +627,8 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   const RD = path.join(__dirname, '..', 'src', 'renderer'); const html = fs.readFileSync(path.join(RD, 'index.html'), 'utf8');
   assert(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(html) && !/\son\w+\s*=/i.test(html), 'index.html has no inline scripts / handlers (CSP)');
   for (const f of [...html.matchAll(/<script src="([^"]+)"/g)].map((x) => x[1])) assert(fs.existsSync(path.join(RD, f)), 'script exists: ' + f);
-  for (const v of ['servers', 'table', 'dashboard', 'plugins', 'settings', 'discord', 'logs']) assert(html.includes('data-view="' + v + '"'), 'nav entry for view ' + v);
-  for (const id of ['leftPanel', 'rightPanel', 'bottomPanel', 'metrics', 'setStats', 'tgLeft', 'tgRight', 'tgBottom', 'tgNav', 'vPlugins', 'vSettings', 'vDiscord', 'vLogs', 'dcWebhook', 'dcTest', 'dcEvents', 'dcEditor', 'dcPreview', 'lgTable']) assert(html.includes('id="' + id + '"'), 'element #' + id);
+  for (const v of ['servers', 'table', 'dashboard', 'plugins', 'settings', 'discord', 'logs', 'backups']) assert(html.includes('data-view="' + v + '"'), 'nav entry for view ' + v);
+  for (const id of ['leftPanel', 'rightPanel', 'bottomPanel', 'metrics', 'setStats', 'tgLeft', 'tgRight', 'tgBottom', 'tgNav', 'vPlugins', 'vSettings', 'vDiscord', 'vLogs', 'dcWebhook', 'dcTest', 'dcEvents', 'dcEditor', 'dcPreview', 'lgTable', 'vBackups', 'bvTable', 'bvServer', 'dlgBkNew', 'bnForm']) assert(html.includes('id="' + id + '"'), 'element #' + id);
   for (const k of ['website', 'discord', 'patreon', 'paypal', 'buymeacoffee']) assert(html.includes('data-link="' + k + '"'), 'footer link ' + k);
   const boot = fs.readFileSync(path.join(RD, 'theme-boot.js'), 'utf8');
   assert(/nodegsm\.ui/.test(boot) && /leftCollapsed/.test(boot), 'theme-boot applies the panel layout before first paint');

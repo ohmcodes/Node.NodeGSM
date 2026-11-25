@@ -55,5 +55,28 @@
       "name": "ShooterGame.log",
       "path": "ShooterGame/Saved/Logs/ShooterGame.log"
     }
-  ]
+  ],
+  "backup": {
+    "presets": [
+      {
+        "id": "saves",
+        "name": "World saves (SavedArks)",
+        "paths": [
+          "ShooterGame/Saved/SavedArks"
+        ]
+      },
+      {
+        "id": "settings",
+        "name": "Settings",
+        "paths": [
+          "ShooterGame/Saved/Config"
+        ]
+      }
+    ],
+    "exclude": [
+      "ShooterGame/Saved/Logs",
+      "ShooterGame/Saved/Crashes",
+      "*.tmp"
+    ]
+  }
 }

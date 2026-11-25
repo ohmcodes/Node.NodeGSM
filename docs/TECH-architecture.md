@@ -33,7 +33,8 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 |---|---|
 | `eventLog.js` | **done** - subscribes to `server:*` and console lines, writes JSONL, query / export / clear / retention |
 | `discord.js` | **done** - webhook alerts: templates, toggles, queue, 429 handling |
-| `discordBot.js`, `backup.js`, `cluster.js`, `autoClear.js` | skeletons |
+| `backup.js` (+ `zip.js`) | **done** - full / neat-pick backups, restore, restore as new, retention, all-backups listing |
+| `discordBot.js`, `cluster.js`, `autoClear.js` | skeletons |
 
 ### Event log (`eventLog.js`)
 - `log({ level, event, serverId, serverName, message, detail })` - fills `ts`, validates `level` (`info|warn|error`), caps message (1000 chars) and detail (4000 chars), appends to today's file and emits `ngsm:log`. Never throws.
@@ -48,14 +49,23 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 - Production accepts only `isDiscordWebhook()` URLs. Tests pass `{ allowAnyUrl: true, agent }` to talk to a local HTTP server.
 - `info()` feeds the Discord view; `preview()` and `test()` back the IPC calls.
 
+### Backups (`backup.js`, `zip.js`)
+- `new BackupService(mgr, plugins, settings, dataDir, zipOpts?)` registers itself as `mgr._bk`; `mgr.bk()` returns it (creating one if `main.js` did not). `ServerManager.backup / backupList / restore / deleteBackup` delegate to it.
+- `create(id, { mode, presets[], paths[], exclude[], includeServerSettings })`: `collect()` walks the files (excludes applied, symlinks skipped, paths confined with `safeRel()` + `inside()` + realpath checks), `ZipWriter` streams each file into `<zip>.partial`, rename, manifest `<zip>.json`, `server:backup` event, then `prune()` (retention `backupKeep`). While it runs `rt.busy = 'Backing up'`.
+- `restore(id, file, opts)`: manifest checks (game, installed for neat pick), `plan()` validates **every** entry name (zip-slip) before anything is written, entry-by-entry extraction through a temp file with CRC check, optional `applySettings()`, `server:restore`.
+- `restoreAsNew(ref, opts)`: validate entry names, `mgr.create`, (neat pick: `mgr.install`), extract, `applySettings` (taken ports move to the next free one), `server:restore` with `asNew`; any failure removes the half-created server.
+- `list(folder)` / `listAll()` merge zips with manifests (`legacy: true` when there is none; `deleted: true` for `<id>.deleted-<ms>` folders or ids without a server). Folder and file names are validated (`^\d+(\.deleted-\d+)?$`, `*.zip`).
+- `zip.js`: `ZipWriter` (`addFile` streams, `addBuffer`, `addDir`, `finish`; data descriptors; zip64 for entries >= 2 GB, archives > 4 GB or > 65535 entries; `forceZip64` for tests) and `openZip` / `extractEntry` (central directory incl. zip64, stored + deflate, CRC and size checks). Manifest and zip layout: [TECH-data-formats.md](TECH-data-formats.md).
+- The event log registers itself as `mgr.eventLog`, so services can call `mgr.eventLog.log(entry)`.
+
 ## Data files (`<data>` = `%APPDATA%\NodeGSM`, or the legacy `%APPDATA%\node-wgsm2026\WGSM`)
 | Path | Content |
 |---|---|
 | `settings.json` | app settings (sanitised on read and write by `settings.js`): theme, `ui`, `headerStats`, `discord{ webhookUrl, events, templates, ...}`, `logging{ retentionDays }` |
-| `servers/<id>/configs/wgsm.json` | per-server config incl. `discordWebhook`, `discordAlert`, `discordEvents`, old alert flags |
+| `servers/<id>/configs/wgsm.json` | per-server config incl. `discordWebhook`, `discordAlert`, `discordEvents`, old alert flags, `backupKeep` |
 | `logs/ngsm-YYYY-MM-DD.log` | NGSM event log, JSONL |
 | `logs/crash.log`, `logs/crash-history.json` | app crash handling |
-| `backups/<id>/*.zip` | backups |
+| `backups/<id>/backup-*.zip` + `backup-*.json` | backups and their manifests (`<id>.deleted-<ms>` for deleted servers) - see [TECH-data-formats.md](TECH-data-formats.md) |
 
 ### Log line
 ```json
@@ -64,3 +74,5 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 
 ## IPC added in this release
 `eventLogQuery(filters)`, `eventLogExport(filters)` (text), `eventLogClear()`, `discordInfo()`, `discordTest(kind, template?)`, `discordPreview(template, sampleVars, event)`.
+
+Backups: `backups()` (all) / `backups(folder)`, `backup(id, opts)`, `backupInfo(id)`, `backupPreview(id, opts)`, `restore(id, file, opts)`, `restoreNew(folder, file, opts)`, `deleteBackup(id, file)`, `backupDownload(folder, file)`, `backupOpenFolder(folder)`.

@@ -28,6 +28,7 @@
         <button class="nav-item sub" data-view="servers" title="Sidebar list with details"><span class="ico">&#9776;</span><span class="lbl">List</span></button>
         <button class="nav-item sub" data-view="table" title="Horizontal table, multi-select"><span class="ico">&#9638;</span><span class="lbl">Table</span></button>
         <button class="nav-item sub" data-view="logs" title="NodeGSM event log"><span class="ico">&#9776;</span><span class="lbl">Logs</span></button>
+        <button class="nav-item sub" data-view="backups" title="Backups of all servers"><span class="ico">&#9729;</span><span class="lbl">Backups</span></button>
       </div>
     </div>
     <button class="nav-item" data-view="dashboard" title="System Metrics"><span class="ico">&#9684;</span><span class="lbl">System Metrics</span></button>
@@ -149,6 +150,17 @@
     <div class="tablewrap"><table id="lgTable"></table></div>
     <div id="lgEmpty" class="muted pad" hidden>No log entries match.</div>
   </section>
+  <section id="vBackups">
+    <div class="toolbar lg-bar">
+      <select id="bvServer" class="inline" title="Server"></select>
+      <select id="bvMode" class="inline" title="Mode"><option value="">All modes</option><option value="full">Full</option><option value="neatpick">Neat pick</option></select>
+      <input id="bvText" class="inline" placeholder="Filter text..." style="max-width:220px">
+      <span class="spacer"></span><span class="muted small" id="bvCount"></span>
+      <button type="button" id="bvRefresh">Refresh</button>
+    </div>
+    <div class="tablewrap"><table id="bvTable"></table></div>
+    <div id="bvEmpty" class="muted pad" hidden>No backups match. Create one in a server's <b>Backups</b> tab or with the Backup button in the Table view.</div>
+  </section>
   </div>
   <aside id="rightPanel">
     <div class="list-title">Details</div>
@@ -191,6 +203,17 @@
   </form>
 </dialog>
 
+<dialog id="dlgBkNew">
+  <form method="dialog" id="bnForm">
+    <h3>Restore as new server</h3>
+    <label>Name of the new server <input id="bnName" autocomplete="off"></label>
+    <label id="bnGameRow" hidden>Game of this old backup <select id="bnGame"></select></label>
+    <label class="check" id="bnSettingsRow"><input type="checkbox" id="bnSettings" checked> Restore the server settings from the backup (a port that is already in use moves to the next free one)</label>
+    <p class="muted small" id="bnNote"></p>
+    <div class="row end"><button type="button" id="bnCancel">Cancel</button><button type="submit" class="primary">Create server</button></div>
+  </form>
+</dialog>
+
 <div id="toast"></div>
 <script src="links.js"></script>
 <script src="app.js"></script>
@@ -198,5 +221,6 @@
 <script src="shell.js"></script>
 <script src="discordView.js"></script>
 <script src="logsView.js"></script>
+<script src="backupsView.js"></script>
 </body>
 </html>

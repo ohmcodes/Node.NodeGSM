@@ -50,5 +50,28 @@
       "path": "Pal/Saved/Logs/*.log",
       "description": "Newest log file is followed automatically"
     }
-  ]
+  ],
+  "backup": {
+    "presets": [
+      {
+        "id": "saves",
+        "name": "World saves",
+        "paths": [
+          "Pal/Saved/SaveGames"
+        ]
+      },
+      {
+        "id": "settings",
+        "name": "Settings",
+        "paths": [
+          "Pal/Saved/Config"
+        ]
+      }
+    ],
+    "exclude": [
+      "Pal/Saved/Logs",
+      "Pal/Saved/Crashes",
+      "*.tmp"
+    ]
+  }
 }

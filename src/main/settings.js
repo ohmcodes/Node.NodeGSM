@@ -93,6 +93,13 @@ function sanitizeServerDiscord(patch) {
   return out;
 }
 
+/** Per-server backup fields of wgsm.json (retention). Returns only the keys present in the patch. */
+function sanitizeServerBackup(patch) {
+  const out = {};
+  if (patch && typeof patch === 'object' && 'backupKeep' in patch) { const n = Math.floor(Number(patch.backupKeep)); out.backupKeep = n >= 0 && n <= 1000 ? n : 0; }
+  return out;
+}
+
 function sanitizeDiscord(v) {
   v = v && typeof v === 'object' ? v : {};
   return {
@@ -130,4 +137,4 @@ function read(dataDir) {
 /** 'system' -> dark/light depending on Windows */
 const resolveTheme = (theme, systemDark) => (theme === 'system' ? (systemDark ? 'dark' : 'light') : theme === 'light' ? 'light' : 'dark');
 
-module.exports = { DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord };
+module.exports = { DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord, sanitizeServerBackup };

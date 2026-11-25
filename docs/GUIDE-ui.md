@@ -1,7 +1,7 @@
 # NodeGSM - the app layout
 
 ## Navigation (left)
-- **Home** - expands to **List** (server list + details with tabs), **Table** (WindowsGSM-style table with multi-select and bulk actions) and **Logs** (the NodeGSM event log, see [GUIDE-logging.md](GUIDE-logging.md)).
+- **Home** - expands to **List** (server list + details with tabs), **Table** (WindowsGSM-style table with multi-select and bulk actions) **Logs** (the NodeGSM event log, see [GUIDE-logging.md](GUIDE-logging.md)) and **Backups** (all backups of all servers, see [GUIDE-backups.md](GUIDE-backups.md)).
 - **System Metrics** - the dashboard (system CPU / memory / disk, server counts, history chart).
 - **Games / Plugins** - the game browser: search, README, install plugins from ZIP or folder, **Add server**.
 - **Settings** - theme, accent, animation, header info bar, table columns, startup and performance.

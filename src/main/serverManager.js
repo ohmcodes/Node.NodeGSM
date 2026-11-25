@@ -4,7 +4,6 @@ const path = require('path');
 const os = require('os');
 const { spawn, spawnSync, execFile } = require('child_process');
 const { EventEmitter } = require('events');
-const AdmZip = require('adm-zip');
 const cronParser = require('cron-parser');
 const { GAMES, byId } = require('./plugins');
 const { SteamCMD } = require('./steamcmd');
@@ -21,6 +20,7 @@ const DEFAULTS = {
   discordAlert: false, discordWebhook: '', discordMessage: '', discordEvents: {}, // discordEvents: per-server on/off override of the global event toggles
   restartCrontab: false, crontabFormat: '0 6 * * *',
   autoStartAlert: true, autoRestartAlert: true, autoUpdateAlert: true, restartCrontabAlert: true, crashAlert: true,
+  backupKeep: 0, // keep the newest N backups (0 = unlimited)
   cpuPriority: 'Normal', cpuAffinity: '', installDir: '', // installDir: custom location for imported servers
 };
 
@@ -85,7 +85,7 @@ class ServerManager extends EventEmitter {
   }
   saveConfig(id, patch) {
     const cur = this.getConfig(id) || { ...DEFAULTS };
-    const next = { ...cur, ...patch, ...require('./settings').sanitizeServerDiscord(patch) };
+    const next = { ...cur, ...patch, ...require('./settings').sanitizeServerDiscord(patch), ...require('./settings').sanitizeServerBackup(patch) };
     delete next.id;
     fs.mkdirSync(path.dirname(this.cfgFile(id)), { recursive: true });
     fs.writeFileSync(this.cfgFile(id), JSON.stringify(next, null, 2));
@@ -417,46 +417,15 @@ class ServerManager extends EventEmitter {
     if (wasRunning) await this.start(id);
   }
 
-  // ---------- backup / restore ----------
-  backupList(id) {
-    const d = path.join(this.backupsDir, String(id));
-    try {
-      return fs.readdirSync(d).filter((f) => f.endsWith('.zip')).map((f) => {
-        const s = fs.statSync(path.join(d, f));
-        return { file: f, size: s.size, time: s.mtimeMs };
-      }).sort((a, b) => b.time - a.time);
-    } catch { return []; }
-  }
-  async backup(id) {
-    id = String(id);
-    const d = path.join(this.backupsDir, id);
-    fs.mkdirSync(d, { recursive: true });
-    const src = this.filesDir(id);
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const file = path.join(d, `backup-${stamp}.zip`);
-    this.log(id, 'Backing up server files ...');
-    const rt = this.rt(id);
-    const prev = rt.busy; rt.busy = 'Backing up'; this.emit('status', this.view(id));
-    try {
-      const zip = new AdmZip();
-      zip.addLocalFolder(src);
-      await new Promise((res, rej) => zip.writeZip(file, (e) => (e ? rej(e) : res())));
-    } finally { rt.busy = prev; this.emit('status', this.view(id)); }
-    this.log(id, `Backup created: ${path.basename(file)}`);
-    this.emitEvent('server:backup', id, { file: path.basename(file) });
-    return path.basename(file);
-  }
-  async restore(id, file) {
-    id = String(id);
-    const f = path.join(this.backupsDir, id, path.basename(file));
-    if (!fs.existsSync(f)) throw new Error('Backup not found');
-    if (this.isRunning(id)) await this.stop(id);
-    this.log(id, `Restoring ${path.basename(file)} ...`);
-    new AdmZip(f).extractAllTo(this.filesDir(id), true);
-    this.log(id, 'Restore finished.');
-    this.emitEvent('server:restore', id, { file: path.basename(file) });
-  }
-  deleteBackup(id, file) { fs.rmSync(path.join(this.backupsDir, String(id), path.basename(file)), { force: true }); }
+  // ---------- backup / restore (implemented by services/backup.js) ----------
+  /** The backup service (created on first use when main.js did not construct one). */
+  bk() { return this._bk || new (require('./services/backup').BackupService)(this, require('./plugins'), this.settings, this.dir); }
+  /** Backups of one server (newest first): { file, size, time, mode, legacy, manifest, ... } */
+  backupList(id) { return this.bk().list(String(id)); }
+  /** opts: { mode: 'full'|'neatpick', presets[], paths[], exclude[], includeServerSettings }; resolves to the zip file name. */
+  backup(id, opts) { return this.bk().create(id, opts); }
+  restore(id, file, opts) { return this.bk().restore(id, file, opts); }
+  deleteBackup(id, file) { this.bk().remove(String(id), file); }
 
   // Discord alerts are sent by services/discord.js from the server:* events (see this.events).
 

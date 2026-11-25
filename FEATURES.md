@@ -22,7 +22,7 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | `plugins/registry.json` for the website (`npm run registry`) | ✅ | id, metadata, ports, configs, logs and relative media paths |
 | Game browser in the app (search, README, screenshots, defaults, configs/logs) | ✅ | **Games** button → **Add server** |
 | PR guide, PR template, game-request issue template, CI | ✅ | `CONTRIBUTING.md`, `.github/` |
-| Optional plugin fields: `cluster`, `configs[].protect`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` | ✅ | Validated (relative paths only, regexes must compile), in the schema, template, `toGame()` and `registry.json`; the features that read them are ⏳ below |
+| Optional plugin fields: `cluster`, `configs[].protect`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` | ✅ | Validated (relative paths only, regexes must compile), in the schema, template, `toGame()` and `registry.json`; `backup` is used by the backup features below, the others are ⏳ |
 | Converter for WindowsGSM C# plugins | ⏳ | Manual mapping table in PLUGINS.md for now |
 | Online plugin repository / one-click install from the website | ⏳ | |
 
@@ -55,7 +55,7 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Live console + command input | ✅ | Not for Source/GoldSource (`stdin: false`) |
 | Auto restart on crash, auto start with app | ✅ | |
 | Update check, manual update, auto update (every 30 min), update on start | ✅ | Steam build id, or plugin `latest`/`local` |
-| Backup on start, backup / restore (zip) | ✅ | |
+| Backup on start, backup / restore (zip) | ✅ | Now streamed (memory use does not depend on server size) and with a manifest; see the backup rows below |
 | Restart crontab | ✅ | Standard 5-field cron |
 | CPU priority and affinity | ✅ | |
 | Server query (A2S, UT3, FiveM): player counts, Starting vs Started | ✅ | |
@@ -74,7 +74,12 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Per-event toggles (global) and per-server overrides (Default / On / Off); the old per-server flags (Start, Auto restart, Auto update, Crontab restart, Crash) keep working | ✅ | Per-server overrides in the server's **Automation** tab |
 | Webhook URL safety: only `https://discord.com` / `discordapp.com` `/api/webhooks/...` accepted; mentions disabled in messages | ✅ | Validated in `settings.js` and again at send time |
 | Discord bot slash commands (`/start`, `/stop`, `/backup` ...) | ⏳ | Settings `discord.botToken/guildId/allowedUserIds/adminRoleIds/allowRawCommands`, `services/discordBot.js` skeleton |
-| Neat-pick backups, restore-as-new, backups screen | ⏳ | Plugin `backup` field and `services/backup.js` skeleton |
+| **Backups: Full or Neat pick** (plugin presets + a tick-box tree of folders/files + exclude patterns, optional server settings), size estimate | 🧪 | **Backups** tab of a server; `services/backup.js`; streaming zip (`services/zip.js`, zip64), manifest `<backup>.json`; tested headless with fake servers, not yet on a real multi-GB server |
+| Backup retention (keep the newest N per server, `backupKeep`) | ✅ | 0 = unlimited |
+| Restore (Full: extract over; Neat pick: only when the game is installed) with zip-slip / symlink protection | ✅ | Server is stopped first; optional restore of the saved server settings |
+| **Restore as new server** (Full: create + extract; Neat pick: create + install + apply; settings with port-conflict resolution) | 🧪 | Needs the game plugin; old backups without a manifest need the game chosen; Neat pick install needs internet |
+| **Backups** screen (Home > Backups): all servers, deleted servers marked, filters, Restore / Restore as new / Open folder / Delete | ✅ | |
+| Plugin `backup.presets` / `backup.exclude` shipped for Minecraft Java, CS:GO, Rust, Palworld, ARK: SE | ✅ | Paths are best-effort (not checked against live servers) |
 | Files auto-clear rules | ⏳ | Plugin `files.autoClear` and `services/autoClear.js` skeleton |
 
 ## App
@@ -108,6 +113,20 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 
 ## Changelog
 Newest first. Add an entry for every change.
+
+### 2026-11-24 - Backups: full/neat pick, restore, restore as new, backup list
+- **`services/backup.js`** (`BackupService`, also reachable as `mgr.bk()`): modes `full` (whole server folder) and `neatpick` (plugin `backup.presets` ids + chosen relative folders/files, optionally the server's `wgsm.json`). Exclude patterns = plugin `backup.exclude` + user patterns (`*`, `**`, `?`; no `/` = match by name anywhere, with `/` = from the server root). `ServerManager.backup / backupList / restore / deleteBackup` now delegate to it (same names; bulk backup, backup-on-start and old backups keep working).
+- **Streaming zip** (`services/zip.js`, no new dependency): files are read, deflated and written chunk by chunk, zip64 when needed, written to `*.partial` and renamed when complete; the reader extracts entry by entry with CRC and size checks. AdmZip is no longer used for backups.
+- **Manifest** `backup-<ISO>.json` next to every zip (`version, mode, game, serverName, serverId, createdAt, paths, presets, exclude, sizeBytes, uncompressedBytes, fileCount, gameVersion, includesServerSettings, skipped?, missing?`); backups without one are treated as `full`. Format in [docs/TECH-data-formats.md](docs/TECH-data-formats.md).
+- **Safety:** all selection paths are normalised (no `..`, absolute paths, drive letters or `:`), symlinks / junctions are never followed, and every zip entry name is validated before anything is extracted (zip-slip), including through links already in the server folder. Locked files are skipped and counted.
+- **Retention:** new per-server setting `backupKeep` (0 = unlimited, max 1000) in `wgsm.json`, sanitised in `settings.js`; old backups and manifests are deleted after each new backup (`backup:pruned` log entry).
+- **Restore:** Full extracts over the files (server stopped first); Neat pick requires an installed server ("install the game first, then restore"); a backup of another game is refused; `restoreSettings` optionally re-applies the saved `wgsm.json`. **Restore as new server** (`restoreAsNew`) creates a new server from the manifest's game (Full: extract; Neat pick: run the install, then apply), applies the saved settings except `id / game / installDir`, moves a taken port to the next free one, removes the new server again on failure and reports a missing plugin clearly. Old backups without a manifest need `game`.
+- **Events:** `server:backup` detail now has `mode, sizeBytes, fileCount, skipped`; `server:restore` has `mode, fileCount` and, for restore-as-new, `asNew, from`. Extra NGSM log entries `backup:pruned / backup:skipped / backup:failed / backup:restore-failed` (the event log registers itself as `mgr.eventLog`).
+- **IPC:** `backups()` = all backups of all servers (server name, game, `deleted`, `legacy`, manifest), `backups(folder)`, `backup(id, opts)`, `backupInfo(id)` (presets, plugin excludes, retention), `backupPreview(id, opts)`, `restore(id, file, opts)`, `restoreNew(folder, file, opts)`, `deleteBackup`, `backupDownload(folder, file)` (reveals the zip), `backupOpenFolder(folder)`.
+- **UI:** server **Backups** tab with the Full / Neat pick chooser (presets, tick-box tree, exclude patterns, settings tick, size estimate, retention, list with actions) and the new **Home > Backups** screen with filters; "Restore as new server" dialog. Both themes. The tab is no longer re-rendered on status updates (it would reset the selection).
+- **Plugins:** `backup.presets` / `backup.exclude` added to `mc`, `csgo`, `rust`, `palworld`, `arkse` (`registry.json` regenerated).
+- **Tests:** helpers (paths, excludes, crc32, zip64 + corruption), full roundtrip, neat pick with presets / exclude / settings, preview, path confinement, symlink skip, zip-slip (6 variants, nothing written, no server created), legacy backup, retention, bulk backup, restore-as-new (full, neat pick with install, legacy, missing plugin, failing install, from a deleted server), neat pick refused when not installed, wrong game refused, events and log entries, all-backups listing, IPC.
+- Docs: [docs/GUIDE-backups.md](docs/GUIDE-backups.md), [docs/TECH-data-formats.md](docs/TECH-data-formats.md), [docs/TECH-architecture.md](docs/TECH-architecture.md).
 
 ### 2026-11-24 - NGSM event log, Discord alerts and embed editor
 - **Event log** (`src/main/services/eventLog.js`): subscribes to `mgr.events` (started, stopped, crashed = "stopped suddenly", restarted, updated, backup, restore, console command, config edit) and exposes `log(entry)` for other services. Entries `{ ts, level, event, serverId, serverName, message, detail }` are appended to `<data>/logs/ngsm-YYYY-MM-DD.log` (JSONL, one file per day), pruned on start and daily by `settings.logging.retentionDays`. `query({ serverId, level, event, text, since, limit })`, `export()` (text or JSONL) and `clear()`.

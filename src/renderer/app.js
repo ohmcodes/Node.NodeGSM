@@ -177,20 +177,7 @@ function tabAutomation(b, s) {
   });
 }
 
-async function tabBackups(b, s) {
-  const list = (await run('backups', s.id)) || [];
-  b.innerHTML = `<div class="row"><button id="bkNow" class="primary">Backup now</button></div>
-    <table style="margin-top:12px"><tr><th>File</th><th>Size</th><th>Date</th><th></th></tr>
-    ${list.map((f) => `<tr><td>${esc(f.file)}</td><td>${(f.size / 1048576).toFixed(1)} MB</td><td>${new Date(f.time).toLocaleString()}</td>
-      <td><button data-r="${esc(f.file)}">Restore</button> <button class="danger" data-d="${esc(f.file)}">Delete</button></td></tr>`).join('')}
-    </table>${list.length ? '' : '<p class="muted">No backups yet.</p>'}`;
-  $('#bkNow').onclick = async () => { toast('Backing up...'); await run('backup', s.id); toast('Backup complete'); renderDetail(); };
-  b.querySelectorAll('[data-r]').forEach((x) => (x.onclick = async () => {
-    if (!confirm('Restore this backup? Current files will be overwritten (server will be stopped).')) return;
-    await run('restore', s.id, x.dataset.r); toast('Restored');
-  }));
-  b.querySelectorAll('[data-d]').forEach((x) => (x.onclick = async () => { await run('deleteBackup', s.id, x.dataset.d); renderDetail(); }));
-}
+// tabBackups() lives in backupsView.js
 
 async function tabFiles(b, s) {
   let cwd = '';
@@ -477,7 +464,7 @@ api.on('status', (v) => {
   if (typeof renderSidePanels === 'function') renderSidePanels(v.id);
   if (v.id === state.sel) {
     // avoid wiping unsaved form edits: only re-render header-ish when not on a form tab
-    if (['console', 'backups'].includes(state.tab)) { const keep = state.consoleBuf; renderDetail(); state.consoleBuf = keep; }
+    if (state.tab === 'console') { const keep = state.consoleBuf; renderDetail(); state.consoleBuf = keep; }
     else patchHeader(v);
   }
 });

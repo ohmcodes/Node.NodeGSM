@@ -177,10 +177,10 @@ html[data-nav-collapsed="1"] #nav .lbl,html[data-nav-collapsed="1"] #nav .chev{d
 html[data-nav-collapsed="1"] .nav-sub{padding-left:0}
 html[data-nav-collapsed="1"] .nav-item{padding:8px 0;justify-content:center}
 /* which view shows which section / panel */
-body:not([data-view=servers]) #detail,body:not([data-view=plugins]) #vPlugins,body:not([data-view=settings]) #vSettings,body:not([data-view=discord]) #vDiscord,body:not([data-view=logs]) #vLogs{display:none}
+body:not([data-view=servers]) #detail,body:not([data-view=plugins]) #vPlugins,body:not([data-view=settings]) #vSettings,body:not([data-view=discord]) #vDiscord,body:not([data-view=logs]) #vLogs,body:not([data-view=backups]) #vBackups{display:none}
 body:not([data-view=servers]) #leftPanel{display:none}
 body[data-view=plugins] #rightPanel,body[data-view=plugins] #bottomPanel,body[data-view=settings] #rightPanel,body[data-view=settings] #bottomPanel,
-body[data-view=discord] #rightPanel,body[data-view=discord] #bottomPanel,body[data-view=logs] #rightPanel,body[data-view=logs] #bottomPanel{display:none}
+body[data-view=discord] #rightPanel,body[data-view=discord] #bottomPanel,body[data-view=logs] #rightPanel,body[data-view=logs] #bottomPanel,body[data-view=backups] #rightPanel,body[data-view=backups] #bottomPanel{display:none}
 html[data-left-collapsed="1"] #leftPanel,html[data-right-collapsed="1"] #rightPanel,html[data-bottom-collapsed="1"] #bottomPanel{display:none!important}
 #rightPanel{width:250px;flex:none;background:var(--panel);border-left:1px solid var(--line);overflow:auto}
 #bottomPanel{flex:none;max-height:38vh;overflow:auto;background:var(--panel);border-top:1px solid var(--line)}
@@ -192,7 +192,7 @@ html[data-left-collapsed="1"] #leftPanel,html[data-right-collapsed="1"] #rightPa
 .rp{padding:0 14px 12px}.rp-head{display:flex;gap:10px;align-items:center;padding:4px 0 10px}.rp-head img{width:36px;height:36px;border-radius:6px;background:var(--icon-bg)}
 .kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--line);font-size:13px}
 .kv .k{color:var(--muted)}.kv .v{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-#vPlugins,#vSettings,#vDiscord,#vLogs{flex:1;min-width:0;min-height:0;overflow:auto}
+#vPlugins,#vSettings,#vDiscord,#vLogs,#vBackups{flex:1;min-width:0;min-height:0;overflow:auto}
 #vPlugins .gb{height:100%}
 #vSettings{padding:14px 22px}#vSettings .settings{max-width:720px}
 #vDiscord{padding:18px 22px}#vDiscord h2{margin:0 0 8px}
@@ -234,3 +234,19 @@ footer a,.linkbtn{color:var(--muted);text-decoration:none;cursor:pointer}footer 
 .lvl.warn{background:var(--lwarn);color:#fff}.lvl.error{background:var(--bad);color:#fff}
 #lgTable tr.lv-error td{background:color-mix(in srgb,var(--bad) 8%,transparent)}
 #vDiscord .row>button,.lg-bar button{white-space:nowrap}.dc-form .check{flex-direction:row;align-items:center;white-space:nowrap}
+
+/* ---- Backups ---- */
+#vBackups{display:flex;flex-direction:column;padding:0}
+#vBackups .tablewrap{flex:1;overflow:auto}#bvTable{font-size:13px}#bvTable th{position:sticky;top:0;background:var(--panel);z-index:1}
+.bk-bar button,#vBackups .lg-bar button{white-space:nowrap}
+.bk-cont{overflow-wrap:anywhere;max-width:340px}.bk-act{white-space:nowrap}.bk-act button{padding:3px 8px;font-size:12px}
+.mbadge{font-size:11px;border-radius:4px;padding:1px 7px;background:var(--badge);white-space:nowrap}.mbadge.neatpick{background:var(--accent);color:#fff}
+.badge.bk-del{background:var(--lwarn);color:#fff;margin-left:4px}
+.bk-tree{border:1px solid var(--line);border-radius:6px;max-height:260px;overflow:auto;padding:4px 2px}
+.bk-tree .tn{display:flex;align-items:center;gap:2px;padding-top:1px;padding-bottom:1px}.bk-tree .tn:hover{background:var(--panel2)}
+.bk-tree .tc{width:16px;flex:none;text-align:center;cursor:pointer;color:var(--muted);user-select:none}.bk-tree .tc.blank{cursor:default}
+.bk-tree label.check{font-size:13px;padding:1px 4px;flex:1;min-width:0}
+#bkList table{margin-top:0}#bkList th{font-size:12px;color:var(--muted)}
+#bnForm .check{align-items:flex-start}
+.nw{white-space:nowrap}
+#dlgBkNew [hidden]{display:none!important}

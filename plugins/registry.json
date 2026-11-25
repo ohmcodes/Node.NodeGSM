@@ -126,6 +126,29 @@
         "readme": "plugins/arkse/README.md",
         "screenshots": []
       },
+      "backup": {
+        "presets": [
+          {
+            "id": "saves",
+            "name": "World saves (SavedArks)",
+            "paths": [
+              "ShooterGame/Saved/SavedArks"
+            ]
+          },
+          {
+            "id": "settings",
+            "name": "Settings",
+            "paths": [
+              "ShooterGame/Saved/Config"
+            ]
+          }
+        ],
+        "exclude": [
+          "ShooterGame/Saved/Logs",
+          "ShooterGame/Saved/Crashes",
+          "*.tmp"
+        ]
+      },
       "folder": "plugins/arkse"
     },
     {
@@ -527,6 +550,37 @@
         "banner": null,
         "readme": "plugins/csgo/README.md",
         "screenshots": []
+      },
+      "backup": {
+        "presets": [
+          {
+            "id": "configs",
+            "name": "Server configs",
+            "paths": [
+              "csgo/cfg"
+            ]
+          },
+          {
+            "id": "addons",
+            "name": "Addons (SourceMod / Metamod)",
+            "paths": [
+              "csgo/addons"
+            ]
+          },
+          {
+            "id": "custom",
+            "name": "Custom content",
+            "paths": [
+              "csgo/custom",
+              "csgo/maps"
+            ]
+          }
+        ],
+        "exclude": [
+          "csgo/logs",
+          "*.log",
+          "*.tmp"
+        ]
       },
       "folder": "plugins/csgo"
     },
@@ -1574,6 +1628,45 @@
         "readme": "plugins/mc/README.md",
         "screenshots": []
       },
+      "backup": {
+        "presets": [
+          {
+            "id": "world",
+            "name": "World saves",
+            "paths": [
+              "world",
+              "world_nether",
+              "world_the_end"
+            ]
+          },
+          {
+            "id": "settings",
+            "name": "Settings and player lists",
+            "paths": [
+              "server.properties",
+              "ops.json",
+              "whitelist.json",
+              "banned-players.json",
+              "banned-ips.json",
+              "usercache.json"
+            ]
+          },
+          {
+            "id": "plugins",
+            "name": "Plugins and mods",
+            "paths": [
+              "plugins",
+              "mods",
+              "config"
+            ]
+          }
+        ],
+        "exclude": [
+          "logs",
+          "crash-reports",
+          "*.tmp"
+        ]
+      },
       "folder": "plugins/mc"
     },
     {
@@ -1904,6 +1997,29 @@
         "readme": "plugins/palworld/README.md",
         "screenshots": []
       },
+      "backup": {
+        "presets": [
+          {
+            "id": "saves",
+            "name": "World saves",
+            "paths": [
+              "Pal/Saved/SaveGames"
+            ]
+          },
+          {
+            "id": "settings",
+            "name": "Settings",
+            "paths": [
+              "Pal/Saved/Config"
+            ]
+          }
+        ],
+        "exclude": [
+          "Pal/Saved/Logs",
+          "Pal/Saved/Crashes",
+          "*.tmp"
+        ]
+      },
       "folder": "plugins/palworld"
     },
     {
@@ -2146,6 +2262,27 @@
         "banner": null,
         "readme": "plugins/rust/README.md",
         "screenshots": []
+      },
+      "backup": {
+        "presets": [
+          {
+            "id": "server-data",
+            "name": "Server data (map, saves, player data, cfg)",
+            "paths": [
+              "server"
+            ]
+          },
+          {
+            "id": "oxide",
+            "name": "Oxide / uMod plugins and data",
+            "paths": [
+              "oxide"
+            ]
+          }
+        ],
+        "exclude": [
+          "*.tmp"
+        ]
       },
       "folder": "plugins/rust"
     },

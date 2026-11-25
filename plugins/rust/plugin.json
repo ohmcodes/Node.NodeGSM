@@ -43,5 +43,26 @@
     "maxPlayers": "50",
     "additional": ""
   },
-  "query": "a2s"
+  "query": "a2s",
+  "backup": {
+    "presets": [
+      {
+        "id": "server-data",
+        "name": "Server data (map, saves, player data, cfg)",
+        "paths": [
+          "server"
+        ]
+      },
+      {
+        "id": "oxide",
+        "name": "Oxide / uMod plugins and data",
+        "paths": [
+          "oxide"
+        ]
+      }
+    ],
+    "exclude": [
+      "*.tmp"
+    ]
+  }
 }

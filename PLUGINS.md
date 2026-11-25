@@ -167,7 +167,7 @@ Every server already gets **CPU, memory (whole process tree), threads, uptime, P
 NodeGSM cannot read FPS from a game by itself - the game has to print it. Check what your server prints (or which console command reports it) and describe it here. Only add metrics you have verified.
 
 ### Optional fields for clusters, backups, events, logging, consoles, update and auto-clear
-All of these are optional. They are validated and carried onto the game object now (and exported in `registry.json` when present); the features that use them are being built (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
+All of these are optional. They are validated and carried onto the game object (and exported in `registry.json` when present). `backup`, `events` and `logging` are used by the app today; the others are being built (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
 ```json
 "cluster": {
   "protectedConfigKeys": ["Port", "RCONPort"],
@@ -197,14 +197,27 @@ All of these are optional. They are validated and carried onto the game object n
 | `cluster.clearFolders[]` | `{ path, pattern, olderThanDays }` folders cleaned by the cluster "clear folders" action |
 | `cluster.preserve[]` | paths never overwritten by a cluster update (saves, per-server data) |
 | `configs[].protect[]` | keys/lines of that config kept during cluster config sync (lines marked `# NGSM:ignore` are kept too) |
-| `backup.presets[]` | `{ id, name, paths[] }` named "neat-pick" selections for backups |
-| `backup.exclude[]` | paths / wildcard patterns left out of every backup |
+| `backup.presets[]` | `{ id, name, paths[] }` named "neat-pick" selections shown as tick-boxes in the server's **Backups** tab; `paths` are files or folders relative to the server files folder (missing ones are skipped) |
+| `backup.exclude[]` | patterns left out of **every** backup (full and neat pick): no `/` = any file or folder with that name, with `/` = a path from the server root; `*`, `**`, `?` wildcards, case-insensitive |
 | `events[]` | `{ id, label, default }` extra game-specific events. They show up in the Discord view as `game:<id>` (label shown as "<Game>: <label>", `default` = initial toggle). They fire when a `logging.patterns` entry with the same `id` matches |
 | `logging.logFiles[]` | log files (wildcards allowed) scanned by the NGSM event log |
 | `logging.patterns[]` | `{ id, regex, level }` (`info` / `warn` / `error`); a matching **console line** becomes an event log entry (case-insensitive, at most once per pattern per server per 10 s); `regex` must compile. If the pattern `id` equals an `events[].id`, the entry is the event `game:<id>` and can be sent to Discord |
 | `consoles[]` | `{ id, name, type, source }` extra consoles; `type` is `process`, `log` (`source` = id of a declared log) or `rcon` |
 | `update.validateArgs` | per-installer text used for "Validate", e.g. `{ "steamcmd": "validate" }` |
 | `files.autoClear[]` | `{ path, pattern, olderThanDays, intervalMin, default }` rules that delete old files periodically (`olderThanDays` >= 0, `intervalMin` >= 1) |
+
+#### Example: backup presets (Minecraft Java, `plugins/mc/plugin.json`)
+```json
+"backup": {
+  "presets": [
+    { "id": "world", "name": "World saves", "paths": ["world", "world_nether", "world_the_end"] },
+    { "id": "settings", "name": "Settings and player lists", "paths": ["server.properties", "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json", "usercache.json"] },
+    { "id": "plugins", "name": "Plugins and mods", "paths": ["plugins", "mods", "config"] }
+  ],
+  "exclude": ["logs", "crash-reports", "*.tmp"]
+}
+```
+Also shipped: `csgo` (configs, addons, custom content), `rust` (server data, Oxide), `palworld` and `arkse` (saves, settings). Tips: put the folders players care about (saves, configs) in presets and keep `exclude` for logs, crash dumps and caches. Presets only name paths - absolute paths and `..` are rejected. See [docs/GUIDE-backups.md](docs/GUIDE-backups.md).
 
 ## plugin.js (optional)
 Use it only when JSON cannot do the job (for example resolving the latest download URL). It runs with **full Node.js access** - only install plugins you trust; repository plugins get a security review.

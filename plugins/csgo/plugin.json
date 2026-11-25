@@ -63,5 +63,36 @@
       "path": "csgo/logs/*.log",
       "description": "Written when \"log on\" is set in server.cfg"
     }
-  ]
+  ],
+  "backup": {
+    "presets": [
+      {
+        "id": "configs",
+        "name": "Server configs",
+        "paths": [
+          "csgo/cfg"
+        ]
+      },
+      {
+        "id": "addons",
+        "name": "Addons (SourceMod / Metamod)",
+        "paths": [
+          "csgo/addons"
+        ]
+      },
+      {
+        "id": "custom",
+        "name": "Custom content",
+        "paths": [
+          "csgo/custom",
+          "csgo/maps"
+        ]
+      }
+    ],
+    "exclude": [
+      "csgo/logs",
+      "*.log",
+      "*.tmp"
+    ]
+  }
 }

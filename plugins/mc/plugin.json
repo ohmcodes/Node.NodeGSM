@@ -70,5 +70,44 @@
       "name": "latest.log",
       "path": "logs/latest.log"
     }
-  ]
+  ],
+  "backup": {
+    "presets": [
+      {
+        "id": "world",
+        "name": "World saves",
+        "paths": [
+          "world",
+          "world_nether",
+          "world_the_end"
+        ]
+      },
+      {
+        "id": "settings",
+        "name": "Settings and player lists",
+        "paths": [
+          "server.properties",
+          "ops.json",
+          "whitelist.json",
+          "banned-players.json",
+          "banned-ips.json",
+          "usercache.json"
+        ]
+      },
+      {
+        "id": "plugins",
+        "name": "Plugins and mods",
+        "paths": [
+          "plugins",
+          "mods",
+          "config"
+        ]
+      }
+    ],
+    "exclude": [
+      "logs",
+      "crash-reports",
+      "*.tmp"
+    ]
+  }
 }
