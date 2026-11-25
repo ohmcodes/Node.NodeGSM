@@ -9,20 +9,39 @@
 </head>
 <body>
 <header>
+  <button id="tgNav" class="tg" title="Show / hide the navigation">&#9776;</button>
   <div class="brand">Node<b>GSM</b></div>
   <div class="spacer"></div>
-  <span id="metrics" class="muted"></span>
-  <div class="seg" id="viewSeg"><button data-v="servers" title="Sidebar list with details">List</button><button data-v="table" title="Horizontal table, multi-select">Table</button><button data-v="dashboard" title="Metrics">Dashboard</button></div>
+  <div id="metrics" class="stats muted"></div>
+  <span class="tgs">
+    <button id="tgLeft" class="tg" title="Show / hide the server list">&#9703;</button>
+    <button id="tgRight" class="tg" title="Show / hide the details panel">&#9704;</button>
+    <button id="tgBottom" class="tg" title="Show / hide the quick settings panel">&#9644;</button>
+  </span>
   <button id="btnAdd" class="primary">+ Add Server</button>
-  <button id="btnPlugins">Games</button>
-  <button id="btnSettings">Settings</button>
 </header>
 <main>
-  <aside>
+  <nav id="nav">
+    <div class="nav-group" id="navHome">
+      <button class="nav-item" data-nav="home" title="Home"><span class="ico">&#8962;</span><span class="lbl">Home</span><span class="chev">&#9662;</span></button>
+      <div class="nav-sub">
+        <button class="nav-item sub" data-view="servers" title="Sidebar list with details"><span class="ico">&#9776;</span><span class="lbl">List</span></button>
+        <button class="nav-item sub" data-view="table" title="Horizontal table, multi-select"><span class="ico">&#9638;</span><span class="lbl">Table</span></button>
+      </div>
+    </div>
+    <button class="nav-item" data-view="dashboard" title="System Metrics"><span class="ico">&#9684;</span><span class="lbl">System Metrics</span></button>
+    <button class="nav-item" data-view="plugins" title="Games / Plugins"><span class="ico">&#9638;</span><span class="lbl">Games / Plugins</span></button>
+    <button class="nav-item" data-view="settings" title="Settings"><span class="ico">&#9881;</span><span class="lbl">Settings</span></button>
+    <button class="nav-item" data-view="discord" title="Discord"><span class="ico">&#9673;</span><span class="lbl">Discord</span></button>
+  </nav>
+  <div id="workspace">
+  <div id="mainrow">
+  <aside id="leftPanel">
     <div class="list-title">Servers</div>
     <ul id="serverList"></ul>
     <div id="emptyHint" class="muted pad">No servers yet. Click <b>+ Add Server</b> to install one.</div>
   </aside>
+  <div id="center">
   <section id="tableView">
     <div class="toolbar">
       <button id="tbStart" class="b-start" title="Start selected">Start</button>
@@ -56,7 +75,76 @@
     </div>
   </section>
   <section id="detail"><div class="muted pad center">Select a server</div></section>
+  <section id="vPlugins">
+<div class="gb">
+    <div class="gb-left">
+      <input id="gbSearch" placeholder="Search games, tags...">
+      <div id="gbCount" class="muted small"></div>
+      <div id="gbList"></div>
+    </div>
+    <div class="gb-right">
+      <div class="row wrap">
+        <button type="button" id="plZip" class="primary">Install plugin (ZIP)</button><button type="button" id="plFolder">Install plugin (folder)</button>
+        <button type="button" id="plReload">Reload</button><button type="button" id="plOpen">Plugins folder</button>
+        
+      </div>
+      <div id="gbErr"></div>
+      <div id="gbDetail"><p class="muted">Select a game to see its description, config files, logs, screenshots and README. Every game is a plugin - you can add or edit them (see PLUGINS.md / CONTRIBUTING.md).</p></div>
+    </div>
+  </div>
+</section>
+  <section id="vSettings">
+<div class="settings">
+    <h2>NodeGSM Settings</h2>
+    <h4>Appearance</h4>
+    <div class="srow"><span>Theme</span>
+      <div class="seg" id="setTheme"><button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="system">Windows</button></div></div>
+    <div class="srow col"><span>Accent colour</span><div id="setAccent" class="swatches"></div></div>
+    <label class="srow"><span>UI animation</span><input type="checkbox" class="switch" id="setAnim"></label>
+    <h4>Header info bar</h4>
+    <p class="muted small" style="margin:0">Choose what the bar at the top shows. Tick stays "-" until servers report a tick rate.</p>
+    <div id="setStats" class="colgrid"></div>
+    <h4>Server table columns</h4>
+    <p class="muted small" style="margin:0">Used by the <b>Table</b> and <b>Dashboard</b> views. Columns from game plugins (FPS, tick rate ...) show up when your games declare them.</p>
+    <div id="setCols" class="colgrid"></div>
+    <div class="row"><button type="button" id="setColsReset">Reset to default</button></div>
+    <h4>Performance</h4>
+    <label class="srow"><span>Hardware acceleration<small>Turn off if the window flickers or the GPU misbehaves. Applies after a restart.</small></span><input type="checkbox" class="switch" id="setHw"></label>
+    <div class="srow" id="hwNote" hidden><span class="muted">Restart NodeGSM to apply the hardware acceleration change. Running servers are stopped first.</span><button type="button" id="setRestart" class="primary">Restart now</button></div>
+    <h4>Startup</h4>
+    <label class="srow"><span>Start NodeGSM on Windows login<small>Servers flagged Auto Start will launch.</small></span><input type="checkbox" class="switch" id="setLogin"></label>
+    <label class="srow"><span>Minimize to tray on close</span><input type="checkbox" class="switch" id="setTray"></label>
+    <label class="srow"><span>Auto restart NodeGSM on crash<small>Relaunches at most 3 times in 10 minutes. Crashes are logged to logs/crash.log.</small></span><input type="checkbox" class="switch" id="setCrash"></label>
+    <p class="muted small">Changes are saved immediately. NodeGSM sends no statistics or telemetry.</p>
+  </div>
+</section>
+  <section id="vDiscord">
+    <h2>Discord</h2>
+    <p class="muted">Configured in a later phase.</p>
+    <p class="muted small">Webhook alerts, embeds and the slash-command bot will be set up here. Per-server webhook alerts keep working from each server's Automation tab.</p>
+  </section>
+  </div>
+  <aside id="rightPanel">
+    <div class="list-title">Details</div>
+    <div id="rpBody" class="pad muted">Select a server</div>
+  </aside>
+  </div>
+  <div id="bottomPanel">
+    <div class="bp-head"><span class="list-title">Quick settings</span><span id="bpName" class="muted small"></span></div>
+    <div id="bpBody" class="muted pad">Select a server</div>
+  </div>
+  </div>
 </main>
+<footer>
+  <span class="muted small">NodeGSM</span>
+  <span class="spacer"></span>
+  <a href="#" data-link="website">Website</a>
+  <a href="#" data-link="discord">Discord</a>
+  <div class="donate"><button type="button" id="ftDonate" class="linkbtn">Donate &#9652;</button>
+    <div id="ftDonateMenu" class="menu" hidden>
+      <a href="#" data-link="patreon">Patreon</a><a href="#" data-link="paypal">PayPal</a><a href="#" data-link="buymeacoffee">Buy Me a Coffee</a>
+    </div></div>
+</footer>
 
 <dialog id="dlgAdd">
   <form method="dialog" id="addForm">
@@ -77,48 +165,10 @@
   </form>
 </dialog>
 
-<dialog id="dlgSettings">
-  <div class="settings">
-    <h3>NodeGSM Settings</h3>
-    <h4>Appearance</h4>
-    <div class="srow"><span>Theme</span>
-      <div class="seg" id="setTheme"><button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="system">Windows</button></div></div>
-    <div class="srow col"><span>Accent colour</span><div id="setAccent" class="swatches"></div></div>
-    <label class="srow"><span>UI animation</span><input type="checkbox" class="switch" id="setAnim"></label>
-    <h4>Server table columns</h4>
-    <p class="muted small" style="margin:0">Used by the <b>Table</b> and <b>Dashboard</b> views. Columns from game plugins (FPS, tick rate ...) show up when your games declare them.</p>
-    <div id="setCols" class="colgrid"></div>
-    <div class="row"><button type="button" id="setColsReset">Reset to default</button></div>
-    <h4>Performance</h4>
-    <label class="srow"><span>Hardware acceleration<small>Turn off if the window flickers or the GPU misbehaves. Applies after a restart.</small></span><input type="checkbox" class="switch" id="setHw"></label>
-    <div class="srow" id="hwNote" hidden><span class="muted">Restart NodeGSM to apply the hardware acceleration change. Running servers are stopped first.</span><button type="button" id="setRestart" class="primary">Restart now</button></div>
-    <h4>Startup</h4>
-    <label class="srow"><span>Start NodeGSM on Windows login<small>Servers flagged Auto Start will launch.</small></span><input type="checkbox" class="switch" id="setLogin"></label>
-    <label class="srow"><span>Minimize to tray on close</span><input type="checkbox" class="switch" id="setTray"></label>
-    <label class="srow"><span>Auto restart NodeGSM on crash<small>Relaunches at most 3 times in 10 minutes. Crashes are logged to logs/crash.log.</small></span><input type="checkbox" class="switch" id="setCrash"></label>
-    <div class="row end"><span class="muted small" style="flex:1">Changes are saved immediately. NodeGSM sends no statistics or telemetry.</span><button type="button" id="setCancel" class="primary">Close</button></div>
-  </div>
-</dialog>
-<dialog id="dlgPlugins" class="wide">
-  <div class="gb">
-    <div class="gb-left">
-      <input id="gbSearch" placeholder="Search games, tags...">
-      <div id="gbCount" class="muted small"></div>
-      <div id="gbList"></div>
-    </div>
-    <div class="gb-right">
-      <div class="row wrap">
-        <button type="button" id="plZip" class="primary">Install plugin (ZIP)</button><button type="button" id="plFolder">Install plugin (folder)</button>
-        <button type="button" id="plReload">Reload</button><button type="button" id="plOpen">Plugins folder</button>
-        <span class="spacer"></span><button type="button" id="plClose">Close</button>
-      </div>
-      <div id="gbErr"></div>
-      <div id="gbDetail"><p class="muted">Select a game to see its description, config files, logs, screenshots and README. Every game is a plugin - you can add or edit them (see PLUGINS.md / CONTRIBUTING.md).</p></div>
-    </div>
-  </div>
-</dialog>
 <div id="toast"></div>
+<script src="links.js"></script>
 <script src="app.js"></script>
 <script src="dashboard.js"></script>
+<script src="shell.js"></script>
 </body>
 </html>

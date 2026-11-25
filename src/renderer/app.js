@@ -38,6 +38,7 @@ async function select(id) {
   state.consoleBuf = (await run('console', id)) || [];
   renderList();
   renderDetail();
+  if (typeof renderSidePanels === 'function') renderSidePanels(id, true);
 }
 
 // ---------- detail ----------
@@ -391,7 +392,7 @@ async function showDetail(id) {
     <h4>Live logs (${d.logs.length})</h4>${list(d.logs, (c) => `<li><b>${esc(c.name)}</b> <code>${esc(c.path)}</code></li>`)}
     ${d.screenshots.length ? `<h4>Screenshots</h4><div class="shots">${d.screenshots.map((x) => `<img src="${x}" alt="">`).join('')}</div>` : ''}
     <h4>README</h4><div class="md">${d.readme ? md(d.readme) : '<p class="muted">No README.</p>'}</div>`;
-  $('#gbAdd').onclick = () => { $('#dlgPlugins').close(); openAdd(id); };
+  $('#gbAdd').onclick = () => openAdd(id);
   $('#gbDetail').querySelectorAll('.shots img').forEach((im) => (im.onclick = () => im.classList.toggle('zoom')));
 }
 async function afterPluginChange(msg) {
@@ -399,9 +400,7 @@ async function afterPluginChange(msg) {
   await renderBrowser();
   if (msg) toast(msg);
 }
-$('#btnPlugins').onclick = async () => { await renderBrowser(); $('#dlgPlugins').showModal(); };
 $('#gbSearch').oninput = renderBrowser;
-$('#plClose').onclick = () => $('#dlgPlugins').close();
 $('#plZip').onclick = async () => { const id = await run('pluginsInstallZip'); if (id) await afterPluginChange(`Plugin "${id}" installed`); };
 $('#plFolder').onclick = async () => { const id = await run('pluginsInstallFolder'); if (id) await afterPluginChange(`Plugin "${id}" installed`); };
 $('#plReload').onclick = async () => { await run('pluginsReload'); await afterPluginChange('Plugins reloaded'); };
@@ -420,6 +419,7 @@ function applyAppearance(s) {
   r.dataset.theme = theme;
   r.dataset.anim = s.animations === false ? 'off' : 'on';
   if (/^#[0-9a-f]{6}$/i.test(s.accent || '')) r.style.setProperty('--accent', s.accent);
+  if (typeof applyShell === 'function') applyShell(s);
   try { localStorage.setItem('nodegsm.appearance', JSON.stringify({ theme: s.theme, accent: s.accent, animations: s.animations })); } catch { /* private mode */ }
 }
 sysLight.addEventListener('change', () => { if (appSettings.theme === 'system') applyAppearance(appSettings); });
@@ -437,6 +437,7 @@ function paintSettings(s) {
   $('#setAccent').querySelectorAll('.swatch').forEach((b) => (b.onclick = async () => paintSettings(await saveSetting({ accent: b.dataset.h }) || s)));
   $('#setAccentCustom').onchange = async (e) => paintSettings(await saveSetting({ accent: e.target.value }) || s);
   $('#setAnim').checked = s.animations !== false; $('#setHw').checked = s.hardwareAcceleration !== false;
+  paintHeaderStatChecks(s);
   $('#setLogin').checked = !!s.startOnLogin; $('#setTray').checked = !!s.minimizeToTray; $('#setCrash').checked = !!s.autoRestartApp;
 }
 document.querySelectorAll('#setTheme button').forEach((b) => (b.onclick = async () => { const s = await saveSetting({ theme: b.dataset.v }); if (s) paintSettings(s); }));
@@ -446,20 +447,21 @@ $('#setLogin').onchange = (e) => saveSetting({ startOnLogin: e.target.checked })
 $('#setTray').onchange = (e) => saveSetting({ minimizeToTray: e.target.checked });
 $('#setCrash').onchange = (e) => saveSetting({ autoRestartApp: e.target.checked });
 $('#setRestart').onclick = () => { if (confirm('Restart NodeGSM now? Running servers will be stopped first.')) run('relaunch'); };
-$('#btnSettings').onclick = async () => {
+/** Settings view: refresh every control from the saved settings (called when the view opens). */
+async function openSettingsView() {
   const s = (await run('settings')) || appSettings;
   $('#hwNote').hidden = true;
   paintSettings(s);
   renderColChecks($('#setCols'));
-  $('#dlgSettings').showModal();
-};
-$('#setCancel').onclick = () => $('#dlgSettings').close();
+}
 
 // ---------- events ----------
 api.on('status', (v) => {
   state.servers.set(v.id, v);
   renderList();
   renderTables();
+  renderHeaderStats();
+  if (typeof renderSidePanels === 'function') renderSidePanels(v.id);
   if (v.id === state.sel) {
     // avoid wiping unsaved form edits: only re-render header-ish when not on a form tab
     if (['console', 'backups'].includes(state.tab)) { const keep = state.consoleBuf; renderDetail(); state.consoleBuf = keep; }
@@ -495,14 +497,41 @@ api.on('logLines', ({ id, logId, reset, file, lines }) => {
 api.on('removed', (id) => {
   state.servers.delete(id);
   if (state.sel === id) state.sel = null;
-  renderList(); renderDetail(); renderTables();
+  renderList(); renderDetail(); renderTables(); renderHeaderStats();
+  if (typeof renderSidePanels === 'function') renderSidePanels();
 });
 
+const STAT_LABELS = [['cpu', 'CPU'], ['ram', 'RAM'], ['disk', 'Disk'], ['servers', 'Servers (running/total)'], ['players', 'Players'], ['tick', 'Tick']];
+function paintHeaderStatChecks(s) {
+  const hs = { ...(appSettings.headerStats || {}), ...(s.headerStats || {}) };
+  $('#setStats').innerHTML = STAT_LABELS.map(([k, n]) => `<label class="check"><input type="checkbox" data-stat="${k}" ${hs[k] ? 'checked' : ''}> ${n}</label>`).join('');
+  $('#setStats').querySelectorAll('input[data-stat]').forEach((i) => (i.onchange = async () => {
+    await saveSetting({ headerStats: { ...(appSettings.headerStats || {}), [i.dataset.stat]: i.checked } });
+    renderHeaderStats();
+  }));
+}
+
+/** Header info bar: what shows is chosen by settings.headerStats. Values come from the main-process metrics + live server state. */
+function renderHeaderStats() {
+  const hs = appSettings.headerStats || {}; const m = state.sys; const sys = dash.snap && dash.snap.system;
+  const items = [];
+  if (hs.cpu) items.push(['CPU', sys ? `${sys.cpuPercent.toFixed(0)}%` : m ? `${m.cpuCount} cores` : '-']);
+  if (hs.ram) {
+    if (sys) items.push(['RAM', `${((sys.memUsed / sys.memTotal) * 100).toFixed(0)}% of ${(sys.memTotal / 2 ** 30).toFixed(0)} GB`]);
+    else if (m) items.push(['RAM', `${((1 - m.mem.free / m.mem.total) * 100).toFixed(0)}% of ${(m.mem.total / 2 ** 30).toFixed(0)} GB`]);
+    else items.push(['RAM', '-']);
+  }
+  if (hs.disk) items.push(['Disk', sys && sys.disk ? `${((sys.disk.used / sys.disk.total) * 100).toFixed(0)}% (${sys.disk.drive})` : '-']);
+  const all = [...state.servers.values()];
+  if (hs.servers) items.push(['Servers', `${all.filter((v) => v.status === 'Started').length}/${all.length}`]);
+  if (hs.players) items.push(['Players', String(all.reduce((n, v) => n + (v.players || 0), 0))]);
+  if (hs.tick) items.push(['Tick', '-']);   // filled in once servers report a tick rate (planned)
+  $('#metrics').innerHTML = items.map(([k, v]) => `<span class="stat"><span class="k">${k}</span> ${esc(v)}</span>`).join('');
+}
 async function refreshMetrics() {
   const m = await api.call('metrics').catch(() => null);
-  if (!m) return;
-  const used = (1 - m.mem.free / m.mem.total) * 100;
-  $('#metrics').textContent = `${m.cpuCount} CPUs · RAM ${used.toFixed(0)}% of ${(m.mem.total / 2 ** 30).toFixed(0)} GB · ${state.servers.size} servers`;
+  if (m) state.sys = m;
+  renderHeaderStats();
 }
 
 async function init() {
@@ -511,6 +540,7 @@ async function init() {
   state.games = (await run('games')) || [];
   for (const s of (await run('list')) || []) state.servers.set(s.id, s);
   renderList();
+  viewHooks.plugins = renderBrowser; viewHooks.settings = openSettingsView;
   refreshMetrics(); setInterval(refreshMetrics, 5000);
   await setView((st && st.view) || 'servers');
   if (state.servers.size) select([...state.servers.keys()][0]);

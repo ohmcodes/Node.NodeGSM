@@ -14,7 +14,7 @@ button.danger{border-color:var(--bad);color:var(--bad)}
 input,select,textarea{background:var(--input);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;width:100%}
 input[type=checkbox]{width:auto}
 main{flex:1;display:flex;min-height:0}
-aside{width:290px;background:var(--panel);border-right:1px solid var(--line);overflow:auto}
+#leftPanel{width:290px;flex:none;background:var(--panel);border-right:1px solid var(--line);overflow:auto}
 .list-title{padding:10px 14px;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:1px}
 #serverList{list-style:none;margin:0;padding:0}
 #serverList li{display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer;border-left:3px solid transparent}
@@ -79,7 +79,6 @@ dialog.wide{width:min(1180px,96vw);height:min(760px,92vh);padding:0}
 .md ul,.gb-right ul{padding-left:20px;margin:6px 0}
 
 /* ---- settings dialog ---- */
-dialog:has(.settings){width:560px}
 .settings{display:flex;flex-direction:column;gap:6px;padding:4px}
 .settings h3{margin:0 0 4px}
 .srow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid var(--line);color:var(--text);font-size:14px;flex-direction:row}
@@ -106,12 +105,10 @@ input.switch:checked{background:var(--accent)}input.switch:checked::after{left:2
 
 .badge.official{background:var(--ok);color:#fff}.badge.unofficial{background:var(--badge);color:var(--text)}
 .docgroup{margin:4px 0 8px}.docgroup ul{margin:4px 0 0}
-.settings .row.end{position:sticky;bottom:0;background:var(--panel);padding-top:10px}
 
 /* ---- dashboard ---- */
 body:not([data-view=dashboard]) #dashboard{display:none}
 body:not([data-view=table]) #tableView{display:none}
-body[data-view=dashboard] aside,body[data-view=dashboard] #detail,body[data-view=table] aside,body[data-view=table] #detail{display:none}
 #dashboard{flex:1;overflow:auto;padding:14px 18px;min-width:0}
 .dsec{color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:1px;margin:6px 0 8px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:12px}
@@ -156,3 +153,52 @@ select.inline{width:auto}
 .colgrid h5,.colpanel h5{grid-column:1/-1;margin:8px 0 2px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px}
 .colgrid label.check,.colpanel label.check{padding:2px 0;font-size:13px}
 .seg button.on{background:var(--accent);color:#fff}
+
+/* ---- app shell: nav, panels, footer ---- */
+body>main{overflow:hidden}
+#workspace{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+#mainrow{flex:1;display:flex;min-height:0;min-width:0}
+#center{flex:1;display:flex;min-width:0;min-height:0}
+header .spacer{min-width:8px}
+.tg{padding:4px 9px;line-height:1;font-size:15px}.tg.on{border-color:var(--accent);color:var(--accent)}
+.tgs{display:flex;gap:4px}
+.stats{display:flex;gap:14px;font-size:13px;flex-wrap:wrap;justify-content:flex-end}.stat .k{color:var(--accent);font-weight:600;margin-right:3px}
+#nav{width:200px;flex:none;background:var(--panel);border-right:1px solid var(--line);padding:8px 6px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:6px;white-space:nowrap}
+.nav-item:hover:not(:disabled){background:var(--panel2)}
+.nav-item.on{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
+.nav-item .ico{width:20px;text-align:center;flex:none;font-size:15px}.nav-item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis}
+.nav-item .chev{font-size:11px;color:var(--muted)}
+#navHome:not(.open) .chev{transform:rotate(-90deg)}
+.nav-sub{display:none;flex-direction:column;gap:2px;padding-left:16px}#navHome.open .nav-sub{display:flex}
+.nav-item.sub{padding:6px 10px}
+html[data-nav-collapsed="1"] #nav{width:48px}
+html[data-nav-collapsed="1"] #nav .lbl,html[data-nav-collapsed="1"] #nav .chev{display:none}
+html[data-nav-collapsed="1"] .nav-sub{padding-left:0}
+html[data-nav-collapsed="1"] .nav-item{padding:8px 0;justify-content:center}
+/* which view shows which section / panel */
+body:not([data-view=servers]) #detail,body:not([data-view=plugins]) #vPlugins,body:not([data-view=settings]) #vSettings,body:not([data-view=discord]) #vDiscord{display:none}
+body:not([data-view=servers]) #leftPanel{display:none}
+body[data-view=plugins] #rightPanel,body[data-view=plugins] #bottomPanel,body[data-view=settings] #rightPanel,body[data-view=settings] #bottomPanel,
+body[data-view=discord] #rightPanel,body[data-view=discord] #bottomPanel{display:none}
+html[data-left-collapsed="1"] #leftPanel,html[data-right-collapsed="1"] #rightPanel,html[data-bottom-collapsed="1"] #bottomPanel{display:none!important}
+#rightPanel{width:250px;flex:none;background:var(--panel);border-left:1px solid var(--line);overflow:auto}
+#bottomPanel{flex:none;max-height:38vh;overflow:auto;background:var(--panel);border-top:1px solid var(--line)}
+.bp-head{display:flex;align-items:baseline;gap:10px;padding:0 4px}
+#bpBody{padding:0 14px 12px}#bpBody.pad{padding:0 14px 12px}
+.bp-grid{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px}
+.bp-grid .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+@media (max-width:900px){.bp-grid{grid-template-columns:1fr}}
+.rp{padding:0 14px 12px}.rp-head{display:flex;gap:10px;align-items:center;padding:4px 0 10px}.rp-head img{width:36px;height:36px;border-radius:6px;background:var(--icon-bg)}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--line);font-size:13px}
+.kv .k{color:var(--muted)}.kv .v{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#vPlugins,#vSettings,#vDiscord{flex:1;min-width:0;min-height:0;overflow:auto}
+#vPlugins .gb{height:100%}
+#vSettings{padding:14px 22px}#vSettings .settings{max-width:720px}
+#vDiscord{padding:18px 22px}#vDiscord h2{margin:0 0 8px}
+footer{display:flex;align-items:center;gap:16px;padding:5px 16px;background:var(--panel);border-top:1px solid var(--line);font-size:12px}
+footer a,.linkbtn{color:var(--muted);text-decoration:none;cursor:pointer}footer a:hover,.linkbtn:hover{color:var(--accent)}
+.linkbtn{background:none;border:0;padding:0;font-size:12px}
+.donate{position:relative}.menu{position:absolute;right:0;bottom:24px;z-index:10;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:0 8px 24px #0006;display:flex;flex-direction:column}
+.menu[hidden]{display:none}.menu a{padding:6px 10px;border-radius:5px;font-size:13px}.menu a:hover{background:var(--panel2)}
+:root[data-anim=on] .nav-item .chev{transition:transform .15s}

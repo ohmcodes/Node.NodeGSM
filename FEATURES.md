@@ -90,13 +90,27 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | Auto restart NodeGSM on crash | ✅ | Relaunches at most 3x per 10 min (no crash loops); crashes logged to `logs/crash.log`; renderer crashes reload the window |
 | Telemetry / "send statistics" | - | Deliberately none |
 | System metrics in header | ✅ | |
-| Collapsible panels, left navigation, header stat checkboxes (`ui`, `headerStats` settings) | ⏳ | Settings keys are in and validated; the UI comes with the new shell |
+| Left navigation: Home (List, Table), System Metrics, Games / Plugins, Settings, Discord | ✅ | Replaces the header view switch; Games and Settings are full views now (no longer dialogs); the nav itself collapses to an icon rail |
+| Collapsible server-list, details and quick-settings panels (`ui` setting) | ✅ | Toggle buttons in the header; state saved in settings and mirrored to localStorage so `theme-boot.js` applies it before first paint; collapsing maximises the main area |
+| Details panel (status, PID, address, players, map, uptime, CPU, memory) and quick-settings bottom panel (name, port, map, max players, start parameters, Save) | ✅ | Follow the selected server; unsaved quick-settings edits are not overwritten by status updates |
+| Header info bar: CPU, RAM, Disk, Servers (running/total), Players, Tick (`headerStats` setting) | ✅ | Chosen with checkboxes in Settings; Tick shows "-" until servers report a tick rate (planned) |
+| Footer links: Website, Discord, Donate (Patreon, PayPal, Buy Me a Coffee) | 🧪 | All URLs live in `src/renderer/links.js` and are PLACEHOLDERS to replace |
+| Discord view | ⏳ | Placeholder page; webhook / bot configuration comes in a later phase |
 | Windows installer + portable exe (electron-builder) | ✅ | `npm run dist`; unsigned, default icon; bundles `plugins/` |
 | External links open in the default browser; in-app navigation blocked | ✅ | |
 | Legacy data folder kept after rename | ✅ | `%APPDATA%\node-wgsm2026\WGSM` if present, else `%APPDATA%\NodeGSM` |
 
 ## Changelog
 Newest first. Add an entry for every change.
+
+### 2026-11-24 - New app shell: collapsible nav, panels, header stats, footer
+- **Left navigation** (Home > List / Table, System Metrics, Games / Plugins, Settings, Discord) replaces the header view switch. `body[data-view]` now takes `servers | table | dashboard | plugins | settings | discord`; only the first three are remembered in `settings.view`.
+- **Games browser and Settings** moved from dialogs to full views (same render code and handlers). **Add Server** stays a dialog. The Discord view is a placeholder.
+- **Panels:** collapsible server list (left), details (right) and quick settings (bottom) with toggle buttons in the header and a collapsible nav. State is saved in `settings.ui` and mirrored to `localStorage` (`nodegsm.ui`) so `theme-boot.js` applies it before first paint. New file `src/renderer/shell.js`.
+- **Header info bar** driven by `settings.headerStats` (CPU, RAM, Disk, Servers, Players, Tick); checkboxes in Settings. Tick shows "-" for now.
+- **Footer** with Website / Discord / Donate links; URLs are placeholders in `src/renderer/links.js`, opened through `openExternal` (http/https only).
+- **Tests:** ui/headerStats round trip, `links.js` constants are http(s), `index.html` has no inline scripts and contains the nav, panels and footer elements, `theme-boot.js` applies the layout.
+- Guide: [docs/GUIDE-ui.md](docs/GUIDE-ui.md).
 
 ### 2026-11-24 - Foundation for clusters, Discord and backups
 - **`src/main/api.js`:** the IPC `handle()` table moved out of `main.js` into `buildApi(ctx)` (`{ name: fn }`); `main.js` mounts it on `ipcMain` with the same channel names and `{ ok, data }` / `{ ok: false, error }` wrapping. No behaviour change; a web transport can mount the same table later.

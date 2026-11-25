@@ -276,6 +276,22 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const svc = new (require('../src/main/services/' + f)[C])(m, P, m.settings, dir); svc.start(); svc.stop();
   }
 
+  // ---- Phase 1: app shell (settings round trip, footer links, static HTML checks) ----
+  m.saveSettings({ ui: { rightCollapsed: true, bottomCollapsed: true } }); m.saveSettings({ headerStats: { disk: true, tick: true } });
+  const sh = S.read(dir);
+  eq(sh.ui, { leftCollapsed: true, rightCollapsed: true, bottomCollapsed: true, navCollapsed: false }, 'ui collapse state round-trips through settings.json');
+  eq(sh.headerStats, { cpu: true, ram: true, disk: true, servers: true, players: false, tick: true }, 'headerStats round-trips');
+  const LINKS = require('../src/renderer/links.js');
+  for (const k of ['website', 'discord', 'patreon', 'paypal', 'buymeacoffee']) assert(typeof LINKS[k] === 'string' && /^https?:\/\/[^\s]+$/.test(LINKS[k]), 'links.js ' + k + ' is an http(s) URL');
+  const RD = path.join(__dirname, '..', 'src', 'renderer'); const html = fs.readFileSync(path.join(RD, 'index.html'), 'utf8');
+  assert(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(html) && !/\son\w+\s*=/i.test(html), 'index.html has no inline scripts / handlers (CSP)');
+  for (const f of [...html.matchAll(/<script src="([^"]+)"/g)].map((x) => x[1])) assert(fs.existsSync(path.join(RD, f)), 'script exists: ' + f);
+  for (const v of ['servers', 'table', 'dashboard', 'plugins', 'settings', 'discord']) assert(html.includes('data-view="' + v + '"'), 'nav entry for view ' + v);
+  for (const id of ['leftPanel', 'rightPanel', 'bottomPanel', 'metrics', 'setStats', 'tgLeft', 'tgRight', 'tgBottom', 'tgNav', 'vPlugins', 'vSettings', 'vDiscord']) assert(html.includes('id="' + id + '"'), 'element #' + id);
+  for (const k of ['website', 'discord', 'patreon', 'paypal', 'buymeacoffee']) assert(html.includes('data-link="' + k + '"'), 'footer link ' + k);
+  const boot = fs.readFileSync(path.join(RD, 'theme-boot.js'), 'utf8');
+  assert(/nodegsm\.ui/.test(boot) && /leftCollapsed/.test(boot), 'theme-boot applies the panel layout before first paint');
+
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);

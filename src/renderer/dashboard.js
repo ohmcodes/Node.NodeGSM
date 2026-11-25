@@ -224,16 +224,19 @@ function renderTables() {
 }
 
 // ---------- view switching ----------
+const HOME_VIEWS = ['servers', 'table', 'dashboard'];   // remembered in settings.view
+const ALL_VIEWS = [...HOME_VIEWS, 'plugins', 'settings', 'discord'];
+const viewHooks = {};                                    // view -> function run when it opens (filled by app.js / shell.js)
 async function setView(v) {
-  if (!['servers', 'table', 'dashboard'].includes(v)) v = 'servers';
+  if (!ALL_VIEWS.includes(v)) v = 'servers';
   document.body.dataset.view = v;
-  document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
-  appSettings.view = v; run('saveSettings', { view: v });
+  if (typeof syncNav === 'function') syncNav(v);
+  if (HOME_VIEWS.includes(v)) { appSettings.view = v; run('saveSettings', { view: v }); }
   renderAllPickers();
   if (v === 'dashboard') { $('#dStopped').checked = !!appSettings.dashboardShowStopped; $('#dChart').value = appSettings.dashboardChart || 'players'; }
   renderTables();
+  if (viewHooks[v]) viewHooks[v]();
 }
-document.querySelectorAll('#viewSeg button').forEach((b) => (b.onclick = () => setView(b.dataset.v)));
 $('#dCols').onclick = (e) => { e.stopPropagation(); $('#dColPanel').hidden = !$('#dColPanel').hidden; };
 document.addEventListener('click', (e) => { if (!e.target.closest('.colpick')) { $('#dColPanel').hidden = true; $('#tbColPanel').hidden = true; } });
 $('#dStopped').onchange = async (e) => { await saveSetting({ dashboardShowStopped: e.target.checked }); renderDashTable(); };
@@ -243,6 +246,8 @@ window.addEventListener('resize', () => { if (document.body.dataset.view === 'da
 
 api.on('metrics', ({ snapshot, point }) => {
   dash.snap = snapshot; dash.history.push(point); if (dash.history.length > 360) dash.history.shift();
+  renderHeaderStats();
+  if (typeof renderSidePanels === 'function') renderSidePanels();
   const v = document.body.dataset.view;
   if (v === 'dashboard') { renderDash(); if ($('#dColPanel').hidden) renderColChecks($('#dColPanel')); }
   else if (v === 'table') { renderTable(); if ($('#tbColPanel').hidden) renderColChecks($('#tbColPanel')); }

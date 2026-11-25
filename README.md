@@ -25,12 +25,14 @@ Builds are unsigned and use the default Electron icon. To use a custom icon, ena
 - Backup/restore, Discord webhook alerts, CPU priority/affinity, firewall helper, file editor
 - Player counts via A2S/UT3/FiveM queries; start on login and tray support
 - **Views:** *List* (sidebar + details), *Table* (WindowsGSM-style horizontal table with **multi-select and bulk Start / Stop / Restart / Kill / Update / Backup**), *Dashboard* (system CPU / memory / disk, server counts, active players, history chart, running-server table). You choose the columns (CPU, memory, players, uptime, map, ports ... and plugin metrics like FPS) in Settings
+- **App shell:** left navigation (Home > List/Table, System Metrics, Games / Plugins, Settings, Discord), collapsible server-list / details / quick-settings panels (state remembered, no flash on start), a configurable header info bar (CPU, RAM, Disk, Servers, Players, Tick) and footer links - see [docs/GUIDE-ui.md](docs/GUIDE-ui.md)
 - **Settings:** Dark / Light / follow-Windows theme, accent colour palette (+ custom), UI animation, hardware acceleration, minimize to tray, auto restart on crash - no telemetry
 
 ## Docs
 | | |
 |---|---|
 | [FEATURES.md](FEATURES.md) | full feature list with status, and the changelog |
+| [docs/GUIDE-ui.md](docs/GUIDE-ui.md) | user guide for the app layout: navigation, panels, header bar, footer |
 | [PLUGINS.md](PLUGINS.md) | the `plugin.json` format, install steps, configs, logs, `plugin.js`, converting WindowsGSM plugins |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | **how to open a pull request to add or fix a game** |
 | [plugins/registry.json](plugins/registry.json) | machine-readable list of all games (for the website) |
