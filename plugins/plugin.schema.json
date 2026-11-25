@@ -131,27 +131,27 @@
       "type": "object",
       "description": "Optional. Neat-pick backup presets and exclusions.",
       "properties": {
-        "presets": { "type": "array", "items": { "type": "object", "required": ["id", "name", "paths"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "paths": { "type": "array", "items": { "$ref": "#/definitions/relPath" } } } } },
+        "presets": { "type": "array", "items": { "type": "object", "required": ["id", "name", "paths"], "properties": { "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }, "name": { "type": "string" }, "paths": { "type": "array", "items": { "$ref": "#/definitions/relPath" } } } } },
         "exclude": { "type": "array", "items": { "$ref": "#/definitions/relPath" }, "description": "Paths / wildcard patterns left out of backups." }
       }
     },
     "events": {
       "type": "array",
       "description": "Optional. Extra game-specific events that can be logged / sent to Discord.",
-      "items": { "type": "object", "required": ["id", "label"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "default": { "type": "boolean" } } }
+      "items": { "type": "object", "required": ["id", "label"], "properties": { "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }, "label": { "type": "string" }, "default": { "type": "boolean" } } }
     },
     "logging": {
       "type": "object",
       "description": "Optional. What the NGSM event log should read from the game.",
       "properties": {
-        "logFiles": { "type": "array", "items": { "$ref": "#/definitions/relPath" }, "description": "Log files (relative paths, wildcards allowed) to scan." },
-        "patterns": { "type": "array", "items": { "type": "object", "required": ["id", "regex"], "properties": { "id": { "type": "string" }, "regex": { "type": "string", "description": "JavaScript regex matched against each line." }, "level": { "enum": ["info", "warn", "error"] } } } }
+        "logFiles": { "type": "array", "items": { "$ref": "#/definitions/relPath" }, "description": "Log files (relative paths, wildcards allowed) the game writes. Declared only - scanning log files is not implemented yet." },
+        "patterns": { "type": "array", "items": { "type": "object", "required": ["id", "regex"], "properties": { "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }, "regex": { "type": "string", "description": "JavaScript regex matched against each line." }, "level": { "enum": ["info", "warn", "error"] } } } }
       }
     },
     "consoles": {
       "type": "array",
       "description": "Optional. Extra consoles shown in the Console tab.",
-      "items": { "type": "object", "required": ["id", "name", "type"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "type": { "enum": ["process", "log", "rcon"] }, "source": { "type": "string", "description": "type log: id of a declared log. type rcon: rcon:<port>:<password>, each part a literal or a {placeholder} ({port}, {configId:key}, {key}); see PLUGINS.md." } } }
+      "items": { "type": "object", "required": ["id", "name", "type"], "properties": { "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "description": "Unique in consoles[]; main is reserved for the game console." }, "name": { "type": "string" }, "type": { "enum": ["process", "log", "rcon"] }, "source": { "type": "string", "description": "type log: id of a declared log. type rcon: rcon:<port>:<password>, each part a literal or a {placeholder} ({port}, {configId:key}, {key}); see PLUGINS.md." } } }
     },
     "update": {
       "type": "object",

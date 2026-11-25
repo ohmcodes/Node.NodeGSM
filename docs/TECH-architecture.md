@@ -116,6 +116,8 @@ Pure functions: `parse(format, text) -> { ok, reason?, entries[{ id, path, key, 
 ```
 
 ## IPC added in this release
+The complete channel list (all 81, with arguments, results and push events) is in [TECH-api.md](TECH-api.md); the summary below only lists what was added with the services.
+
 `eventLogQuery(filters)`, `eventLogExport(filters)` (text), `eventLogClear()`, `discordInfo()`, `discordTest(kind, template?)`, `discordPreview(template, sampleVars, event)`.
 
 Backups: `backups()` (all) / `backups(folder)`, `backup(id, opts)`, `backupInfo(id)`, `backupPreview(id, opts)`, `restore(id, file, opts)`, `restoreNew(folder, file, opts)`, `deleteBackup(id, file)`, `backupDownload(folder, file)`, `backupOpenFolder(folder)`.

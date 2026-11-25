@@ -202,7 +202,7 @@ Bundled examples (check what your game version prints before copying):
 Other Source games (tf2, css, gmod ...) can use the same `stats` pattern as csgo; they currently show Latency only.
 
 ### Optional fields for clusters, backups, events, logging, consoles, update and auto-clear
-All of these are optional. They are validated and carried onto the game object (and exported in `registry.json` when present). All of them are used by the app (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
+All of these are optional. They are validated (`src/main/plugins.js`), described in [`plugin.schema.json`](plugins/plugin.schema.json) and carried onto the game object (and exported in `registry.json` when present). All of them are used by the app (see [FEATURES.md](FEATURES.md)) except `logging.logFiles`. Ids inside these lists (`events`, `backup.presets`, `logging.patterns`, `consoles`) use letters, digits, `_` and `-` and must be unique within their list. **Every path must be relative to the server files folder, without `..`, never absolute.**
 ```json
 "cluster": {
   "protectedConfigKeys": ["Port", "RCONPort"],
@@ -235,7 +235,7 @@ All of these are optional. They are validated and carried onto the game object (
 | `backup.presets[]` | `{ id, name, paths[] }` named "neat-pick" selections shown as tick-boxes in the server's **Backups** tab; `paths` are files or folders relative to the server files folder (missing ones are skipped) |
 | `backup.exclude[]` | patterns left out of **every** backup (full and neat pick): no `/` = any file or folder with that name, with `/` = a path from the server root; `*`, `**`, `?` wildcards, case-insensitive |
 | `events[]` | `{ id, label, default }` extra game-specific events. They show up in the Discord view as `game:<id>` (label shown as "<Game>: <label>", `default` = initial toggle). They fire when a `logging.patterns` entry with the same `id` matches |
-| `logging.logFiles[]` | log files (wildcards allowed) scanned by the NGSM event log |
+| `logging.logFiles[]` | log files (relative, wildcards allowed) the game writes. **Declared only: scanning log files is not implemented yet** (only console lines are matched by `patterns`); safe to declare now |
 | `logging.patterns[]` | `{ id, regex, level }` (`info` / `warn` / `error`); a matching **console line** becomes an event log entry (case-insensitive, at most once per pattern per server per 10 s); `regex` must compile. If the pattern `id` equals an `events[].id`, the entry is the event `game:<id>` and can be sent to Discord |
 | `consoles[]` | `{ id, name, type, source }` consoles of the **Console** tab; `type` is `process` (the game console, always present as `main`; an entry only renames it), `log` (`source` = id of a declared `logs[]` entry, read-only) or `rcon` (`source` = `rcon:<port>:<password>`, see below). A game without `consoles[]` shows only the game console. The id `main` is reserved |
 | `update.validateArgs` | per-installer text used by **Validate** (not by Update). Supported key: `steamcmd` - the words placed after `+app_update <id>` (default `validate`; plain words like `validate`, `-x1` only, `+commands` are refused and fall back to `validate`). For `plugin.js` installers the helpers get `helpers.validate` (true for Validate) and `helpers.validateArgs` (the whole object) so a script can do its own check |
@@ -288,6 +288,85 @@ Auto-clear deletes only files (never folders), never follows links, never leaves
 }
 ```
 Also shipped: `csgo` (configs, addons, custom content), `rust` (server data, Oxide), `palworld` and `arkse` (saves, settings). Tips: put the folders players care about (saves, configs) in presets and keep `exclude` for logs, crash dumps and caches. Presets only name paths - absolute paths and `..` are rejected. See [docs/GUIDE-backups.md](docs/GUIDE-backups.md).
+
+## Complete example (every optional field)
+All fields in one valid `plugin.json` (compare [`plugins/_template`](plugins/_template), which you copy to start). Leave out whatever the game does not need - everything except `id`, `name`, `install` and `run` is optional for local plugins. Where each field is explained: listing and `docs` above, `install` / `run` / `defaults` / `query` above, `configs` (+ `protect`), `logs`, `metrics` (incl. `kind: "tick"` and `rcon:` sources) above, and `cluster`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` in the optional-fields section.
+```json
+{
+  "$schema": "../plugin.schema.json",
+  "id": "mygame",
+  "name": "My Game Dedicated Server",
+  "description": "Dedicated server for My Game (Steam app 123456).",
+  "author": "you",
+  "version": "1.0.0",
+  "url": "https://store.steampowered.com/app/123456",
+  "tags": ["survival", "steamcmd"],
+  "color": "#4f8cff",
+  "media": { "icon": "icon.png", "readme": "README.md", "banner": "banner.png", "screenshots": ["screenshots/1.png"] },
+  "docs": [
+    { "title": "Official server guide", "url": "https://example.com/docs/server", "type": "official" },
+    { "title": "Community setup wiki", "url": "https://example.com/wiki/server", "type": "unofficial", "description": "Ports and settings explained" }
+  ],
+  "install": { "type": "steamcmd", "appId": "123456" },
+  "run": {
+    "exe": "Game/Binaries/Win64/GameServer.exe",
+    "args": ["{param}", "-port={port}", ["-queryport", "{queryPort}"], "-servername={name}"],
+    "stdin": true,
+    "stopCommand": "quit"
+  },
+  "defaults": { "port": "7777", "queryPort": "27015", "map": "World", "maxPlayers": "16", "additional": "-log", "portIncrement": 2 },
+  "query": "a2s",
+  "gslt": false,
+
+  "configs": [
+    { "id": "server-ini", "name": "server.ini", "path": "Saved/Config/server.ini", "format": "ini",
+      "description": "Main settings", "template": "templates/server.ini",
+      "protect": ["Port", "QueryPort", "rcon.*"] }
+  ],
+  "logs": [
+    { "id": "server-log", "name": "Server log", "path": "Saved/Logs/*.log", "description": "Newest file is followed" }
+  ],
+  "metrics": [
+    { "id": "tps", "name": "Server TPS", "unit": "TPS", "kind": "tick", "source": "rcon:tps",
+      "pattern": "TPS[:= ]+([0-9.]+)", "intervalSec": 15, "tickTarget": 20, "warnBelow": 18, "badBelow": 15 },
+    { "id": "entities", "name": "Entities", "source": "log:server-log", "pattern": "entities[:= ]+(\\d+)" }
+  ],
+
+  "cluster": {
+    "protectedConfigKeys": ["Port", "QueryPort", "rcon.*"],
+    "preserve": ["Saved/SaveGames", "Saved/admins.json"],
+    "clearFolders": [{ "path": "Saved/Logs", "pattern": "*.log", "olderThanDays": 7 }]
+  },
+  "backup": {
+    "presets": [
+      { "id": "saves", "name": "Save games only", "paths": ["Saved/SaveGames"] },
+      { "id": "settings", "name": "Settings", "paths": ["Saved/Config", "Saved/admins.json"] }
+    ],
+    "exclude": ["Saved/Logs", "Saved/Crashes", "*.tmp"]
+  },
+  "events": [{ "id": "player-join", "label": "Player joined", "default": false }],
+  "logging": {
+    "logFiles": ["Saved/Logs/*.log"],
+    "patterns": [
+      { "id": "player-join", "regex": "(\\S+) joined the game", "level": "info" },
+      { "id": "sudden-stop", "regex": "stopped suddenly", "level": "error" }
+    ]
+  },
+  "consoles": [
+    { "id": "game", "name": "Game console", "type": "process" },
+    { "id": "log", "name": "Server log", "type": "log", "source": "server-log" },
+    { "id": "rcon", "name": "RCON", "type": "rcon", "source": "rcon:{server-ini:RCONPort}:{server-ini:RCONPassword}" }
+  ],
+  "update": { "validateArgs": { "steamcmd": "validate" } },
+  "files": {
+    "autoClear": [
+      { "path": "Saved/Crashes", "pattern": "*", "olderThanDays": 14, "intervalMin": 1440, "default": true },
+      { "path": "Saved/Logs", "pattern": "*.log", "olderThanDays": 30, "intervalMin": 1440, "default": false, "recursive": false }
+    ]
+  }
+}
+```
+Checklist: every path relative to the server files folder and without `..`; every regex compiles (`npm run validate:plugins <id>` checks); `rcon:` sources look like `rcon:<port>:<password>`; `consoles[].source` of a `log` console is the id of a declared `logs[]` entry; a metric with `source: "rcon:<command>"` needs an `rcon` console (or `rconSource`); `files.autoClear[].default: true` only for files that are always safe to delete.
 
 ## plugin.js (optional)
 Use it only when JSON cannot do the job (for example resolving the latest download URL). It runs with **full Node.js access** - only install plugins you trust; repository plugins get a security review.

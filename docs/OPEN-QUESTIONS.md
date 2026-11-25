@@ -2,11 +2,25 @@
 
 Decisions deferred while implementing, to confirm with the project owner.
 
+## Needs your input first
+Short list of the things that block or change the most. Details are in the sections below.
+1. **Embed reference image** (Phase 2): send an example of the Discord embed look you want; the defaults are a neutral guess.
+2. **Bot token live test** (Phase 6): create a throw-away bot and run the commands once; nothing was ever run against real Discord (also: a real webhook **Send test**, Phase 2).
+3. **Footer URLs** (Phase 1): Website, Discord, Patreon, PayPal and Buy Me a Coffee are placeholders in `src/renderer/links.js`; the site's `website/config.js` needs the real repo / Discord / API URLs too.
+4. **Logo direction review** (Phase 8): the logo is a first pass (N from stacked server blocks + a network link). Approve it or describe what to change; `npm run icons` regenerates every file.
+5. **`/send` policy** (Phase 6): keep, restrict to admin roles, or remove? It gives allowed users full console access.
+6. **Token encryption** (Phase 6): the bot token and webhook URLs are plain text in `settings.json`; use Electron `safeStorage` (breaks when the data folder moves to another PC)?
+7. **Real-server pattern checks for tick / RCON** (Phases 5 and 7): the `mc`, `csgo` and `rust` patterns were written from documentation, not from live output; RCON was only tested against a local fake.
+8. **Cluster preserve defaults** (Phase 4): only `mc`, `arkse` and `rust` ship `cluster.preserve`; a cluster update of any other game copies everything except configs. Refuse / confirm when a plugin declares none?
+9. **Real backups and clusters** (Phases 3 and 4): try one multi-GB server, a neat-pick restore-as-new that downloads the game, and a real two-server cluster update (back up first).
+
+The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md).
+
 ## Phase 1 - app shell
 - Footer URLs (Website, Discord, Patreon, PayPal, Buy Me a Coffee) are placeholders in `src/renderer/links.js`.
 - Panel scope: the server-list panel shows only in the List view; the details and quick-settings panels also show in Table / System Metrics (following `state.sel`). In the Table view a single click does not change that selection (double-click does). Should Table selection drive them?
 - Only List / Table / System Metrics are remembered as the start view (`settings.view`); Games, Settings and Discord are not. Should the start view be extendable?
-- Tick header stat is a "-" placeholder until Phase 7.
+- Tick header stat is a "-" placeholder until Phase 7. *(Resolved in Phase 7: it shows the worst tick of the running servers, `n/a` when none has one.)*
 - Quick settings saves `name/port/map/maxPlayers/param` through the existing `save` IPC with no extra validation (same as the Settings tab).
 
 ## Phase 2 - logging and Discord
@@ -64,18 +78,6 @@ Decisions deferred while implementing, to confirm with the project owner.
 - Validate asks for a confirmation (it can overwrite edited game files, configs are normally kept). Auto update never validates.
 - The busy state text (`Validating`) was only checked through tests and the status events; the badge colour reuses the "Updating" style.
 
-## Phase 7 - server tick metric
-- **Real-world testing:** tick polling was tested with local fakes only (a fake RCON server, a fake A2S server, fake console processes). Please try a real Paper server (`rcon:tps`), a vanilla 1.20.3+ server (`rcon:tick query`), a csgo server (`rcon:stats` column layout) and Rust (`fps` console output) and correct the patterns if the real output differs.
-- Games with **no console / RCON access** (stdin-less hlds / srcds without RCON, Unreal / Unity servers that only log) cannot be polled; they get the Latency estimate only. Should a log-based tick (pattern on a periodic log line) be added per game, or a generic "stats" file reader?
-- Minecraft: `tps` exists on Paper / Spigot / Purpur only; vanilla < 1.20.3 has no tick command at all. Spark (`/spark tps`) or a mod would need its own pattern; should the mc plugin try `spark tps` as a third metric when Spark is installed?
-- The `stats` pattern for Source games reads the **FPS** column of the first numeric row; newer builds add `Svms +-ms ~tick` columns and the variance is not shown. Is a second metric (frame time / variance) wanted?
-- Header Tick with servers of different games mixes units (TPS and fps): it shows the *worst by colour*, then by value, with the unit. Should it be per game group, or average only for same-unit servers (`aggregateTick(rows, 'avg')` exists but there is no setting)?
-- Latency is the UDP / HTTP round trip from NodeGSM to the local query port (127.0.0.1), so it mostly reflects how busy the server's main loop is, not network latency. It is only measured every 15 s (the status poll). Is that acceptable, and should it also be offered as a column by default?
-- Colour defaults without thresholds come from `tickTarget` (90 % / 75 % higher is better; 1x / 2x lower is better); these are guesses. Plugin authors can set exact `warn*` / `bad*`.
-- Each RCON tick metric is a separate command per interval (mc ships two: `tps` and `tick query`, on Paper both answer). The unused one logs "unknown command" on the server console. Should a metric be disabled automatically after N consecutive failures?
-- RCON polls are not written to the NGSM log (to avoid a line every 15 s). Failures are only kept in memory (`pollErrors`); there is no UI for them yet - should a failing tick poll show a hint (for example "RCON not reachable") in the details panel?
-- `kind` is the only new `metrics[]` kind; the `registry.json` entry carries it, but the website catalog does not show it yet.
-
 ## Phase 6 - Discord bot
 - **Live testing needed:** nothing was run against real Discord. Please create a test application / bot (see [GUIDE-discord.md](GUIDE-discord.md)), add it to a throw-away server, and try `/check`, `/list`, `/start`, `/stop`, `/update`, `/backup`, `/stats` and the denial path. Unverified: the exact look of the embeds, autocomplete latency, command registration timing, and discord.js reconnect behaviour after a network drop.
 - Should `/send` exist at all? It is off by default behind a toggle and logged, but it gives every allowed user full console access. Options: remove it, restrict it to admin roles only, or add a per-server deny list of commands.
@@ -90,3 +92,27 @@ Decisions deferred while implementing, to confirm with the project owner.
 - The bot logs the `/send` length, not the text, but the normal `server:command` event (and therefore the NGSM log) still contains the text, as for commands typed in the app console.
 - The token format check is loose (three dot-separated parts); the real validation is the login attempt.
 - `discord.js` adds about 9 MB of dependencies (undici, @discordjs/*) to the installer even for users who never enable the bot. Acceptable, or should the bot become an optional download?
+
+## Phase 7 - server tick metric
+- **Real-world testing:** tick polling was tested with local fakes only (a fake RCON server, a fake A2S server, fake console processes). Please try a real Paper server (`rcon:tps`), a vanilla 1.20.3+ server (`rcon:tick query`), a csgo server (`rcon:stats` column layout) and Rust (`fps` console output) and correct the patterns if the real output differs.
+- Games with **no console / RCON access** (stdin-less hlds / srcds without RCON, Unreal / Unity servers that only log) cannot be polled; they get the Latency estimate only. Should a log-based tick (pattern on a periodic log line) be added per game, or a generic "stats" file reader?
+- Minecraft: `tps` exists on Paper / Spigot / Purpur only; vanilla < 1.20.3 has no tick command at all. Spark (`/spark tps`) or a mod would need its own pattern; should the mc plugin try `spark tps` as a third metric when Spark is installed?
+- The `stats` pattern for Source games reads the **FPS** column of the first numeric row; newer builds add `Svms +-ms ~tick` columns and the variance is not shown. Is a second metric (frame time / variance) wanted?
+- Header Tick with servers of different games mixes units (TPS and fps): it shows the *worst by colour*, then by value, with the unit. Should it be per game group, or average only for same-unit servers (`aggregateTick(rows, 'avg')` exists but there is no setting)?
+- Latency is the UDP / HTTP round trip from NodeGSM to the local query port (127.0.0.1), so it mostly reflects how busy the server's main loop is, not network latency. It is only measured every 15 s (the status poll). Is that acceptable, and should it also be offered as a column by default?
+- Colour defaults without thresholds come from `tickTarget` (90 % / 75 % higher is better; 1x / 2x lower is better); these are guesses. Plugin authors can set exact `warn*` / `bad*`.
+- Each RCON tick metric is a separate command per interval (mc ships two: `tps` and `tick query`, on Paper both answer). The unused one logs "unknown command" on the server console. Should a metric be disabled automatically after N consecutive failures?
+- RCON polls are not written to the NGSM log (to avoid a line every 15 s). Failures are only kept in memory (`pollErrors`); there is no UI for them yet - should a failing tick poll show a hint (for example "RCON not reachable") in the details panel?
+- `kind` is the only new `metrics[]` kind; the `registry.json` entry carries it, but the website catalog does not show it yet.
+
+## Phase 8 - logo (the web / Linux part of Phase 8 is not started)
+- **Logo direction is a first pass.** Concept: an "N" whose two stems are stacked server units and whose diagonal is a network link with a node at each end; accent colour = the app's default `--accent` (#4f8cff). Please review `assets/logo.svg`, `assets/logo-wordmark.svg` and `assets/icon.svg` (or the generated `assets/icon.png`) and say what to change (shape, colours, a different motif, a lettered "NGSM" mark).
+- The wordmark SVG uses text (Space Grotesk, falling back to Segoe UI / Arial) rather than outlined letters, so its look depends on the font that is installed. Convert it to outlines once the design is final?
+- The Windows .exe itself keeps the Electron icon: `build.win.signAndEditExecutable` is still `false` (needs Windows Developer Mode to extract electron-builder's helper tools). The icon is set in `build.win.icon`, so it is used as soon as signing/editing is enabled; the window, taskbar, tray and installer-less runs (`npm start`) already use the new icon. Enable it?
+- The 16 and 32 px images use solid stems (the gaps between the server blocks would blur). Check the tray icon at 100 % / 150 % / 200 % scaling on your display.
+- The in-app header mark is inline SVG coloured by the accent; the website logo is a fixed-blue PNG (mark only, transparent) and the favicon is the dark tile.
+
+## Phase 9 - docs, tests and release
+- Features not done and listed as ⏳ in FEATURES.md: scheduled (cron) backups, `logging.logFiles` scanning, Steam login, mod manager, WindowsGSM plugin converter, online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
+- Which of the unverified (🧪) features do you want promoted to ✅ after the manual run in [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md)?
+- The docs folder has no guide for the web / Linux version yet (`GUIDE-web-linux.md` arrives with that phase).

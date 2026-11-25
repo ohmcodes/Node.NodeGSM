@@ -24,7 +24,7 @@ Copy-Item -Recurse plugins\_template plugins\mygame
 
 3. **Edit `plugins/mygame/plugin.json`.** The comments in [PLUGINS.md](PLUGINS.md) explain every field. The minimum is `id`, `name`, `description`, `author`, `version`, `docs`, `install`, `run.exe`, `defaults`.
    **Add documentation links** (`docs`): official guides first, then unofficial ones (community wikis, forum guides, videos) - each with `title`, `url` and `type` (`official` / `unofficial`). Only add links you opened and checked.
-   Optional: `configs`, `logs`, and `metrics` (FPS / tick rate from the console, a log or an RCON command - only when you verified what the game prints; mark the server tick with `"kind": "tick"`, see [docs/GUIDE-metrics.md](docs/GUIDE-metrics.md)).
+   Optional: `configs`, `logs`, `metrics` (FPS / tick rate from the console, a log or an RCON command - only when you verified what the game prints; mark the server tick with `"kind": "tick"`, see [docs/GUIDE-metrics.md](docs/GUIDE-metrics.md)) and the info for clusters, backups, events, consoles and auto-clear (see "Optional plugin info" in the project layout below).
    Editors with JSON-schema support (VS Code does) autocomplete the fields because of the `$schema` line.
 4. **Add the media** next to it:
    - `icon.png` - square PNG, 64x64 up to 256x256 (**required**)
@@ -71,24 +71,51 @@ You can also fix a game **locally without a PR**: put the edited folder in the a
 - [ ] Install works from a clean state and the server starts (tested by the author or the reviewer)
 - [ ] Default ports and `query` type are right (query is `null` when the game has no supported query protocol)
 - [ ] Config files and logs open in the app
+- [ ] Optional info (if present): `backup.presets` / `exclude`, `cluster.preserve` / `protect`, `consoles` (RCON password source resolves), `metrics` tick patterns, `files.autoClear` (`default: true` only for always-safe files) - each verified against a real server and mentioned in the PR
 - [ ] `docs` has at least one working link; official and unofficial are labelled correctly
 - [ ] No binaries, secrets or unnecessary `plugin.js`
 
 ## Project layout (for code contributions)
 ```
-plugins/<id>/        game plugins (plugin.json, icon.png, README.md, [plugin.js], [screenshots/])
-plugins/_template/   copy this to start a new plugin
-plugins/registry.json generated list of all plugins (npm run registry)
-src/main/            Electron main process (server manager, plugin loader, install runner, log tailer)
-src/main/api.js      the IPC/API table (name -> function); main.js mounts it on ipcMain
-src/main/services/   event-driven services (event log, Discord webhook alerts, Discord bot (discordBot.js = discord.js wiring, discordCommands.js = pure command handlers tested with fake interactions), backups, clusters, auto-clear, consoles); constructed in main.js, subscribe to mgr.events
-src/main/configEdit.js  structured config parse / edit (pure functions); src/main/rcon.js  Source RCON client
-src/renderer/        UI (plain JS/CSS): app.js (servers, detail tabs, games browser, settings), dashboard.js (table + metrics + view switching), tick.js (shared tick helpers, also required by the main process), shell.js (nav, panels, footer), discordView.js (Discord view + embed editor), logsView.js (Logs screen), backupsView.js (server Backups tab + Backups screen), links.js (footer URLs - placeholders), theme-boot.js (theme + layout before first paint)
-scripts/             validate-plugins.js, build-registry.js, build-catalog.js (plugin catalog), build-site.js
-website/             the website + its community backend (npm run site, npm run site:serve; see website/README.md)
-test/                npm test
+plugins/<id>/          game plugins: plugin.json, icon.png, README.md, [plugin.js], [templates/], [screenshots/]
+plugins/_template/     copy this to start a new plugin
+plugins/plugin.schema.json   JSON Schema for plugin.json (editor auto-complete)
+plugins/registry.json  generated list of all plugins (npm run registry) - commit it with plugin changes
+assets/                logo.svg, logo-wordmark.svg, icon.svg (hand-written) and the generated icon.png / icon-16.png / icon-32.png
+build/icon.ico         generated Windows icon (electron-builder reads it; npm run icons)
+src/main/              Electron main process
+  main.js              window, tray, services, mounts api.js on ipcMain, forwards push events
+  api.js               the IPC/API table (name -> function); reference: docs/TECH-api.md
+  preload.js           exposes window.wgsm.call / on to the renderer
+  serverManager.js     servers: install, start / stop, update, query, scheduler, events bus (mgr.events)
+  plugins.js           plugin loader, validation, argument templates, toGame()
+  installRunner.js, steamcmd.js, logTail.js, query.js   install steps, SteamCMD, live log tailing, A2S / UT3 / FiveM queries
+  settings.js          app + per-server settings (sanitised on read and write)
+  metrics.js           system + per-server metrics, plugin metrics, tick / latency
+  configEdit.js        structured config parse / edit (pure functions)
+  rcon.js              Source / Minecraft RCON client (queued, loopback only)
+  crash.js             crash-restart policy
+  services/            event-driven services, constructed in main.js, subscribe to mgr.events:
+                       eventLog.js (NGSM log), discord.js (webhook alerts), discordBot.js (discord.js wiring) +
+                       discordCommands.js (pure command handlers, tested with fake interactions),
+                       backup.js + zip.js (streaming zip64), cluster.js + clusterMerge.js, autoClear.js, consoles.js
+src/renderer/          UI (plain JS / CSS, no framework, no inline scripts):
+  index.html, styles.css, theme-boot.js (theme + layout before first paint)
+  app.js (servers, detail tabs, games browser, settings), dashboard.js (table + metrics + views), shell.js (nav, panels, footer),
+  tick.js (shared tick helpers, also required by the main process), links.js (footer URLs - placeholders),
+  discordView.js, logsView.js, backupsView.js, clustersView.js, configsView.js, autoClearView.js, consolesView.js
+scripts/               validate-plugins.js, build-registry.js, build-catalog.js (plugin catalog), build-site.js, build-icons.js (logo -> PNG / ICO)
+website/               the website + its community backend (npm run site, npm run site:serve; see website/README.md)
+docs/                  user guides (GUIDE-*), technical docs (TECH-*), OPEN-QUESTIONS.md, TESTING-CHECKLIST.md - index in docs/README.md
+test/smoke.js          npm test (also runs the plugin validation)
 ```
-Plugins that want game events in the Logs screen / Discord declare `events` + `logging.patterns` (example in [PLUGINS.md](PLUGINS.md)); architecture notes live in [docs/TECH-architecture.md](docs/TECH-architecture.md).
-Plugins should declare `backup.presets` (saves, configs) and `backup.exclude` (logs, temp files) so players can make neat-pick backups - see [docs/GUIDE-backups.md](docs/GUIDE-backups.md). Declare `cluster.preserve` (saves and per-server data that a cluster update must not overwrite), `cluster.clearFolders` and `configs[].protect` (ports, passwords) so clusters can update and sync safely - see [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md). Declare `consoles` (RCON with `rcon:<port>:<password>` sources, log tails) and `files.autoClear` (only safe-to-delete files may be `default: true`) where the game supports them - see [docs/GUIDE-configs-files.md](docs/GUIDE-configs-files.md). Plugins may declare optional `cluster`, `backup`, `events`, `logging`, `consoles`, `update` and `files.autoClear` fields (see [PLUGINS.md](PLUGINS.md); paths must be relative, regexes must compile).
+**Optional plugin info.** Besides the required fields a plugin can declare (all optional, all validated, details and a complete example in [PLUGINS.md](PLUGINS.md)):
+- `events` + `logging.patterns` - game events in the Logs screen and Discord, e.g. "player joined" ([docs/GUIDE-logging.md](docs/GUIDE-logging.md), [docs/GUIDE-discord.md](docs/GUIDE-discord.md)).
+- `backup.presets` (saves, configs, mods) and `backup.exclude` (logs, temp files) for neat-pick backups ([docs/GUIDE-backups.md](docs/GUIDE-backups.md)).
+- `cluster.preserve` (saves and per-server data a cluster update must not overwrite), `cluster.clearFolders`, `cluster.protectedConfigKeys` and `configs[].protect` (ports, passwords) ([docs/GUIDE-clusters.md](docs/GUIDE-clusters.md)).
+- `consoles` (an `rcon:<port>:<password>` console, log tails) and `files.autoClear` (only always-safe-to-delete files may be `default: true`) ([docs/GUIDE-configs-files.md](docs/GUIDE-configs-files.md)).
+- `metrics` with `"kind": "tick"` (TPS / tick rate / FPS from the console, a log or an RCON command) ([docs/GUIDE-metrics.md](docs/GUIDE-metrics.md)).
+- `update.validateArgs` (what the Validate button passes to the installer).
+Only declare what you verified against a real server; say what you tested in the PR. Paths must be relative and regexes must compile.
 
-App-code changes: run `npm test`, and update [FEATURES.md](FEATURES.md) (changelog + tables) and the README/PLUGINS docs in the same PR.
+**App-code changes:** run `npm test`, and update [FEATURES.md](FEATURES.md) (changelog + tables), the README, PLUGINS.md and the affected docs in [docs/](docs/README.md) in the same PR. IPC changes: add the channel to [docs/TECH-api.md](docs/TECH-api.md) (a test fails when a channel is missing there). Logo / icons: edit the SVGs in `assets/` and the matching geometry in `scripts/build-icons.js`, run `npm run icons` and commit the generated files.

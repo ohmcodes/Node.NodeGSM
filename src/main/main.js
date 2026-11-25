@@ -55,7 +55,7 @@ function publicGames() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: currentBg(), title: 'NodeGSM',
+    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: currentBg(), title: 'NodeGSM', icon: path.join(__dirname, '..', '..', 'assets', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.setMenuBarVisibility(false);
@@ -113,7 +113,11 @@ app.whenReady().then(() => {
   collector.start();
   mgr.autoStartAll();
 
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'icon.png')).resize({ width: 16, height: 16 });
+  // tray: 16 px image + 32 px representation for high-DPI screens (falls back to resizing the 256 px icon)
+  const assetsDir = path.join(__dirname, '..', '..', 'assets');
+  let icon = nativeImage.createFromPath(path.join(assetsDir, 'icon-16.png'));
+  if (icon.isEmpty()) icon = nativeImage.createFromPath(path.join(assetsDir, 'icon.png')).resize({ width: 16, height: 16 });
+  else { const hi = nativeImage.createFromPath(path.join(assetsDir, 'icon-32.png')); if (!hi.isEmpty()) icon.addRepresentation({ scaleFactor: 2, buffer: hi.toPNG() }); }
   tray = new Tray(icon);
   tray.setToolTip('NodeGSM');
   tray.setContextMenu(Menu.buildFromTemplate([

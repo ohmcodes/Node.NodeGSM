@@ -12,6 +12,7 @@
     "registry": "node scripts/build-registry.js",
     "site": "node scripts/build-site.js",
     "catalog": "node scripts/build-catalog.js",
+    "icons": "node scripts/build-icons.js",
     "site:serve": "node website/server/server.js",
     "test:site": "node website/server/test.js"
   },
@@ -43,6 +44,7 @@
         "nsis",
         "portable"
       ],
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {

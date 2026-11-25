@@ -1319,6 +1319,28 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const pj6 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')); assert(/^\^?14\./.test(pj6.dependencies['discord.js']), 'discord.js 14.x is a runtime dependency');
   }
 
+  // ---- logo / icons ----
+  {
+    const R = path.join(__dirname, '..'); const zl = require('zlib');
+    const pngInfo = (rel) => { const b = fs.readFileSync(path.join(R, rel)); assert(b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), rel + ' PNG signature'); assert.strictEqual(b.readUInt32BE(8), 13, rel + ' IHDR length'); assert.strictEqual(b.subarray(12, 16).toString(), 'IHDR', rel + ' IHDR'); assert.strictEqual(b.subarray(b.length - 8, b.length - 4).toString(), 'IEND', rel + ' IEND'); return { w: b.readUInt32BE(16), h: b.readUInt32BE(20), buf: b }; };
+    const sizes = { 'assets/icon.png': 256, 'assets/icon-32.png': 32, 'assets/icon-16.png': 16, 'website/assets/logo.png': 256, 'website/assets/favicon.png': 64 };
+    for (const [rel, sz] of Object.entries(sizes)) { const i = pngInfo(rel); eq([i.w, i.h], [sz, sz], rel + ' size'); }
+    // IDAT inflates to the expected number of bytes (valid zlib stream)
+    { const b = pngInfo('assets/icon.png').buf; let o = 8; const idat = []; while (o < b.length) { const len = b.readUInt32BE(o); if (b.subarray(o + 4, o + 8).toString() === 'IDAT') idat.push(b.subarray(o + 8, o + 8 + len)); o += 12 + len; } assert.strictEqual(zl.inflateSync(Buffer.concat(idat)).length, (256 * 4 + 1) * 256, 'icon.png pixel data'); }
+    const ico = fs.readFileSync(path.join(R, 'build', 'icon.ico'));
+    eq([ico.readUInt16LE(0), ico.readUInt16LE(2)], [0, 1], 'ICO header'); const n = ico.readUInt16LE(4); eq(n, 6, 'ICO has 6 images');
+    const got = []; for (let i = 0; i < n; i++) { const o = 6 + i * 16; const w = ico[o] || 256; const size = ico.readUInt32LE(o + 8), off = ico.readUInt32LE(o + 12); assert(off + size <= ico.length, 'ICO entry in range'); assert(ico.subarray(off, off + 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'ICO entry is a PNG'); got.push(w); }
+    eq(got, [16, 32, 48, 64, 128, 256], 'ICO sizes');
+    for (const f of ['logo.svg', 'logo-wordmark.svg', 'icon.svg']) { const svg = fs.readFileSync(path.join(R, 'assets', f), 'utf8'); assert(/^<svg[^>]+viewBox=/.test(svg) && svg.trim().endsWith('</svg>') && !/<script/i.test(svg), 'assets/' + f + ' is a plain SVG'); }
+    const pj8 = JSON.parse(fs.readFileSync(path.join(R, 'package.json'), 'utf8')); assert(pj8.build.win.icon && fs.existsSync(path.join(R, pj8.build.win.icon)), 'package.json build.win.icon exists'); assert(pj8.scripts.icons, 'npm run icons');
+    const html8 = fs.readFileSync(path.join(R, 'src', 'renderer', 'index.html'), 'utf8'); assert(/<div class="brand"><svg class="logo"/.test(html8) && html8.includes('assets/icon-32.png'), 'app header shows the logo');
+    for (const p of ['index', 'features', 'plugins', 'download']) assert(fs.readFileSync(path.join(R, 'website', p + '.html'), 'utf8').includes('assets/favicon.png'), 'website/' + p + '.html favicon');
+    assert(fs.readFileSync(path.join(R, 'website', 'layout.js'), 'utf8').includes('assets/logo.png'), 'website header uses the logo');
+    const mj = fs.readFileSync(path.join(R, 'src', 'main', 'main.js'), 'utf8'); assert(/icon-16.png/.test(mj) && /icon.png/.test(mj) && /icon: path.join/.test(mj), 'tray + window icon wiring');
+    { const { buildApi } = require('../src/main/api'); const names = Object.keys(buildApi({ mgr: { settings: {} }, collector: {}, shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin() {}, currentBg() {} })); const doc = fs.readFileSync(path.join(R, 'docs', 'TECH-api.md'), 'utf8'); const missing = names.filter((n) => !new RegExp('`' + n + '`').test(doc)); eq(missing, [], 'every IPC channel is documented in docs/TECH-api.md'); for (const ch of ['status', 'console', 'consoleOut', 'logLines', 'removed', 'metrics', 'cluster:progress', 'discordBot']) assert(doc.includes('| `' + ch + '` |'), 'push event ' + ch + ' documented'); for (const f of fs.readdirSync(path.join(R, 'docs'))) if (f !== 'README.md') assert(fs.readFileSync(path.join(R, 'docs', 'README.md'), 'utf8').includes('(' + f + ')'), 'docs/README.md links ' + f); for (const f of fs.readdirSync(path.join(R, 'docs'))) if (f !== 'README.md') assert(fs.readFileSync(path.join(R, 'README.md'), 'utf8').includes('docs/' + f), 'README.md links docs/' + f); }
+    const B = require('../scripts/build-icons'); const px = B.render(16); assert.strictEqual(px.length, 16 * 16 * 4); assert(px[3] === 0 && px[(8 * 16 + 8) * 4 + 3] === 255 && px[(2 * 16 + 8) * 4 + 3] === 255, 'tile has rounded transparent corners and an opaque body'); assert(B.render(256, { tile: false })[3] === 0, 'mark-only render is transparent in the corner');
+  }
+
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);
