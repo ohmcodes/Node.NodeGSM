@@ -72,6 +72,17 @@
       "path": "logs/latest.log"
     }
   ],
+  "consoles": [
+    { "id": "game", "name": "Game console", "type": "process" },
+    { "id": "rcon", "name": "RCON", "type": "rcon", "source": "rcon:{server-properties:rcon.port}:{server-properties:rcon.password}" },
+    { "id": "latest-log", "name": "latest.log", "type": "log", "source": "latest" }
+  ],
+  "files": {
+    "autoClear": [
+      { "path": "logs", "pattern": "*.log.gz", "olderThanDays": 14, "intervalMin": 1440, "default": true },
+      { "path": "crash-reports", "pattern": "*.txt", "olderThanDays": 30, "intervalMin": 1440, "default": false }
+    ]
+  },
   "cluster": {
     "protectedConfigKeys": ["server-port", "query.port", "rcon.*"],
     "preserve": ["world", "world_nether", "world_the_end", "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json", "usercache.json"],

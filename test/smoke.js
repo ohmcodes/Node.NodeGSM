@@ -206,7 +206,7 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     backup: { presets: [{ id: 'saves', name: 'Saves', paths: ['Saved/SaveGames'] }], exclude: ['*.tmp'] },
     events: [{ id: 'join', label: 'Join', default: true }],
     logging: { logFiles: ['logs/*.log'], patterns: [{ id: 'sud', regex: 'stopped suddenly', level: 'error' }] },
-    consoles: [{ id: 'game', name: 'Game', type: 'process' }, { id: 'lg', name: 'Log', type: 'log', source: 'l' }, { id: 'r', name: 'RCON', type: 'rcon', source: 'rcon' }],
+    consoles: [{ id: 'game', name: 'Game', type: 'process' }, { id: 'lg', name: 'Log', type: 'log', source: 'l' }, { id: 'r', name: 'RCON', type: 'rcon', source: 'rcon:{rcon.port}:{rcon.password}' }],
     update: { validateArgs: { steamcmd: 'validate' } },
     files: { autoClear: [{ path: 'Saved/Crashes', pattern: '*', olderThanDays: 14, intervalMin: 60, default: false }] },
   };
@@ -828,6 +828,237 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   for (const id of ['mc', 'arkse', 'rust']) { const g = P.byId(id); assert(g.cluster.preserve.length && g.cluster.clearFolders.length && g.cluster.protectedConfigKeys.length, 'bundled ' + id + ' declares cluster rules'); }
   assert(P.byId('mc').configs[0].protect.includes('server-port') && P.byId('arkse').configs[0].protect.includes('ServerAdminPassword'), 'configs[].protect shipped for mc and arkse');
   assert(P.validate({ id: 'cl1', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' }, cluster: { clearFolders: [{ path: 'logs', recursive: 'yes' }] } }, null).errors.some((x) => /recursive/.test(x)), 'clearFolders.recursive must be boolean');
+
+  // =====================================================================================================
+  // ---- Phase 5: structured config editor, files auto-clear, injected consoles (RCON), update / validate ----
+  // =====================================================================================================
+  {
+    const CE = require('../src/main/configEdit');
+    const net = require('net'); const util = require('util');
+    const { RconClient, packet } = require('../src/main/rcon');
+    const { Consoles, parseRconSource } = require('../src/main/services/consoles');
+    const { AutoClear } = require('../src/main/services/autoClear');
+    const { EventLog: EL5 } = require('../src/main/services/eventLog');
+    const { buildApi } = require('../src/main/api');
+    const { SteamCMD } = require('../src/main/steamcmd');
+    const lines = (t) => t.split('\n');
+    const ent = (r, p) => r.entries.find((e) => e.path === p);
+    const setv = (fmt, text, p, v) => CE.edit(fmt, text, [{ op: 'set', id: CE.parse(fmt, text).entries.find((e) => e.path === p).id, value: v }]).text;
+
+    // ---- structured parse / serialize: comments and unknown lines survive, only the edited line changes ----
+    const INI = '; header comment\n[Server]\nName = My Server ; not a comment for the parser\nPort=7777\n\n# note\n[Rules]\nPvP=true\nweird line without equals\n';
+    const pi = CE.parse('ini', INI);
+    assert(pi.ok && pi.entries.length === 3 && ent(pi, 'Server.Port').value === '7777' && ent(pi, 'Rules.PvP').value === 'true', 'ini parse');
+    eq(CE.edit('ini', INI, pi.entries.map((e) => ({ op: 'set', id: e.id, value: e.value })).slice(0, 1)).text, INI, 'ini: setting the same value is a no-op (round trip)');
+    const i2 = setv('ini', INI, 'Server.Port', '7778'); eq(lines(i2).filter((l, i) => l !== lines(INI)[i]), ['Port=7778'], 'ini: only the edited line changed');
+    const i3 = CE.edit('ini', INI, [{ op: 'add', path: 'Slots', section: 'Server', value: '16' }]).text;
+    eq(lines(i3).slice(2, 6), ['Name = My Server ; not a comment for the parser', 'Port=7777', 'Slots=16', ''], 'ini: key added at the end of its section'); assert(i3.includes('# note') && i3.includes('weird line without equals'), 'ini: comments and unknown lines kept');
+    assert(CE.edit('ini', INI, [{ op: 'add', path: 'X', section: 'NewSec', value: '1' }]).text.endsWith('weird line without equals\n\n[NewSec]\nX=1\n'), 'ini: new section appended');
+    assert(!CE.edit('ini', INI, [{ op: 'remove', id: ent(pi, 'Server.Port').id }]).text.includes('Port=7777') && CE.edit('ini', INI, [{ op: 'remove', id: ent(pi, 'Server.Port').id }]).text.includes('# note'), 'ini: remove deletes only the line');
+    assert.throws(() => CE.edit('ini', INI, [{ op: 'add', path: 'Port', section: 'Server', value: '1' }]), /already exists/, 'ini: duplicate key refused'); assert.throws(() => CE.edit('ini', INI, [{ op: 'add', path: 'a=b', value: '1' }]), /Invalid key/); assert.throws(() => CE.edit('ini', INI, [{ op: 'add', path: 'k', value: 'a\nb' }]), /line breaks/, 'values cannot inject lines');
+    assert.strictEqual(CE.edit('ini', '[A]\r\nk=1\r\n', [{ op: 'add', path: 'z', section: 'A', value: '2' }]).text, '[A]\r\nk=1\r\nz=2\r\n', 'CRLF files stay CRLF'); assert(CE.edit('ini', '\uFEFF[A]\nk=1\n', [{ op: 'add', path: 'z', section: 'A', value: '2' }]).text.startsWith('\uFEFF'), 'BOM kept');
+
+    const PR = '#Minecraft server properties\n#Sat Nov 01\nserver-port=25565\nmotd=A Minecraft Server\nrcon.password=\nenable-rcon=false\n';
+    const pp = CE.parse('properties', PR);
+    eq(pp.entries.map((e) => e.path), ['server-port', 'motd', 'rcon.password', 'enable-rcon'], 'properties parse keeps dotted keys');
+    eq(CE.get('properties', PR, 'server-port'), '25565', 'get by key'); eq(CE.get('properties', PR, 'RCON.PASSWORD'), '', 'get is case-insensitive'); eq(CE.get('properties', PR, 'nope'), undefined);
+    const p2s = setv('properties', PR, 'enable-rcon', 'true'); eq(lines(p2s).filter((l, i) => l !== lines(PR)[i]), ['enable-rcon=true'], 'properties: one line changed'); assert(p2s.startsWith('#Minecraft server properties\n#Sat Nov 01\n'), 'properties: comments kept');
+    assert(CE.edit('properties', PR, [{ op: 'add', path: 'rcon.port', value: '25575' }]).text.endsWith('enable-rcon=false\nrcon.port=25575\n'), 'properties: add appends'); assert.throws(() => CE.edit('properties', PR, [{ op: 'add', path: 'a b', value: '1' }]), /Invalid key/);
+
+    const CF = '// server config\nhostname "My Server"\nrcon_password "s3cr3t"\nsv_cheats 0 // trailing\nmp_autoteambalance\n';
+    const pc = CE.parse('cfg', CF);
+    eq(pc.entries.map((e) => `${e.key}=${e.value}`), ['hostname="My Server"', 'rcon_password="s3cr3t"', 'sv_cheats=0 // trailing', 'mp_autoteambalance='], 'cfg parse (key value)');
+    eq(CE.get('cfg', CF, 'rcon_password'), 's3cr3t', 'get unquotes cfg values'); eq(setv('cfg', CF, 'hostname', '"Other"'), CF.replace('"My Server"', '"Other"'), 'cfg: set keeps the key and the rest of the file');
+
+    const YM = '# top\nserver:\n  port: 8080   # the port\n  name: "My Server"\n  motd: |\n    multi\n    line\nlimits:\n  players: 20\nitems:\n  - a\n  - b\nflag: true\n';
+    const py = CE.parse('yaml', YM);
+    eq(py.entries.map((e) => `${e.path}=${e.value}`), ['server.port=8080', 'server.name="My Server"', 'limits.players=20', 'flag=true'], 'yaml-simple parse (nested paths, block scalars and lists skipped)');
+    const y2 = setv('yaml', YM, 'server.port', '9090'); eq(lines(y2).filter((l, i) => l !== lines(YM)[i]), ['  port: 9090   # the port'], 'yaml: value replaced, trailing comment and indentation kept');
+    const y3 = CE.edit('yaml', YM, [{ op: 'add', path: 'limits.spectators', value: '4' }]).text; assert(y3.includes('limits:\n  players: 20\n  spectators: 4\nitems:'), 'yaml: add inside an existing mapping'); assert(CE.edit('yaml', YM, [{ op: 'add', path: 'new.deep.key', value: 'v' }]).text.endsWith('flag: true\nnew:\n  deep:\n    key: v\n'), 'yaml: add creates the missing parents');
+    assert(y3.includes('    multi\n    line\n') && y3.includes('  - a\n  - b\n'), 'yaml: block scalars and lists untouched'); assert.strictEqual(CE.parse('yaml', 'a:\n\tb: 1\n').ok, false, 'yaml with tab indentation is raw only');
+
+    const JS = '{\n    "network": { "port": 1, "tags": ["a", "b"] },\n    "name": "x",\n    "on": true\n}\n';
+    const pj = CE.parse('json', JS); eq(pj.entries.map((e) => `${e.path}=${e.value}:${e.type}`), ['network.port=1:number', 'network.tags=["a","b"]:json', 'name=x:string', 'on=true:boolean'], 'json parse: flat + nested paths with types');
+    const j2 = CE.edit('json', JS, [{ op: 'set', id: ent(pj, 'network.port').id, value: '2' }, { op: 'set', id: ent(pj, 'on').id, value: 'false' }, { op: 'add', path: 'a.b.c', value: '7' }]).text;
+    eq(JSON.parse(j2), { network: { port: 2, tags: ['a', 'b'] }, name: 'x', on: false, a: { b: { c: 7 } } }, 'json: typed set + nested add'); assert(j2.startsWith('{\n    "network"') && j2.endsWith('}\n'), 'json: indentation (4) and trailing newline kept');
+    eq(JSON.parse(CE.edit('json', JS, [{ op: 'set', id: ent(pj, 'network.tags').id, value: '["z"]' }]).text).network.tags, ['z'], 'json: list value typed as JSON'); assert.strictEqual(JSON.parse(CE.edit('json', JS, [{ op: 'set', id: ent(pj, 'network.port').id, value: 'abc' }]).text).network.port, 'abc', 'json: a non-number typed into a number falls back to text');
+    eq(JSON.parse(CE.edit('json', JS, [{ op: 'remove', id: ent(pj, 'name').id }]).text), { network: { port: 1, tags: ['a', 'b'] }, on: true }, 'json: remove'); assert.throws(() => CE.edit('json', JS, [{ op: 'add', path: '__proto__.x', value: '1' }]), /Invalid key path/, 'json: prototype keys refused'); assert.throws(() => CE.edit('json', JS, [{ op: 'add', path: 'name', value: '1' }]), /already exists/);
+    for (const [fmt, txt] of [['json', '{ nope'], ['json', '[1,2]'], ['text', 'a'], ['xml', '<a/>'], ['yaml', 'a:\n\tb: 1']]) assert.strictEqual(CE.parse(fmt, txt).ok, false, `${fmt} that cannot be parsed falls back to raw`);
+    assert.throws(() => CE.edit('text', 'a', []), /raw/); assert.throws(() => CE.edit('ini', 'a=1', [{ op: 'bogus' }]), /Unknown operation/);
+    assert.strictEqual(CE.parse('ini', '').ok && CE.parse('ini', '').entries.length, 0, 'an empty ini file is editable (no entries)'); eq(CE.edit('properties', '', [{ op: 'add', path: 'a', value: '1' }]).text, 'a=1', 'add into an empty file');
+    // the editor result is what configWrite stores (existing .bak + event stay)
+    const wdir = m.create('mc', 'CfgEdit'); m.writeConfig(wdir.id, 'server-properties', PR); m.writeConfig(wdir.id, 'server-properties', setv('properties', PR, 'enable-rcon', 'true'));
+    assert(fs.existsSync(path.join(m.filesDir(wdir.id), 'server.properties.bak')) && m.readConfig(wdir.id, 'server-properties').text.includes('enable-rcon=true'), 'structured save goes through configWrite (.bak kept)'); await m.remove(wdir.id, true);
+
+    // ---- auto-clear rule sanitising (strict) ----
+    const AC = S.sanitizeAutoClear;
+    eq(AC([{ path: 'logs\\old/', pattern: ' *.log ', olderThanDays: '7', intervalMin: 30 }])[0], { path: 'logs/old', pattern: '*.log', olderThanDays: 7, intervalMin: 30, enabled: true, recursive: false, onlyWhenStopped: false, lastRun: 0 }, 'rule normalised');
+    for (const bad of ['../x', 'a/../../x', '/abs', 'C:/Windows', 'C:\\Windows', '', '.', '..', 'a/b:stream', 'a\0b', 'a/*/b', null, 5]) assert.throws(() => AC([{ path: bad }]), /Invalid path/, 'rejected path: ' + JSON.stringify(bad));
+    for (const [r, re] of [[{ path: 'a', pattern: 'x/y' }, /file names/], [{ path: 'a', pattern: 'x\\y' }, /file names/], [{ path: 'a', olderThanDays: -1 }, /days/], [{ path: 'a', olderThanDays: 99999 }, /days/], [{ path: 'a', intervalMin: 0 }, /minutes/], [{ path: 'a', intervalMin: 'x' }, /minutes/]]) assert.throws(() => AC([r]), re);
+    assert.throws(() => AC(Array.from({ length: 51 }, () => ({ path: 'a' }))), /At most 50/, 'rule count capped'); assert.throws(() => AC('x'), /list/); eq(AC([{ path: 'ok' }, { path: '../bad' }], false).map((r) => r.path), ['ok'], 'non-strict (hand-edited files) drops bad rules');
+    assert.throws(() => m.saveConfig('1', { autoClear: [{ path: '../x' }] }), /Invalid path/, 'saveConfig refuses escaping rules');
+
+    // ---- auto-clear service ----
+    const acDir = path.join(dir, 'p5-plugin'); fs.mkdirSync(acDir, { recursive: true });
+    const pgame = P.toGame({ id: 'p5fake', name: 'P5 Fake', install: { steps: [{ type: 'steamcmd', appId: 4242 }, { type: 'write', path: 'game.exe', content: 'EXE' }] }, run: { exe: 'game.exe', args: [] },
+      defaults: { port: '32000', queryPort: '32001', map: 'm', maxPlayers: '4' },
+      configs: [{ id: 'props', name: 'server.properties', path: 'server.properties', format: 'properties' }, { id: 'cfg', name: 'server.cfg', path: 'cfg/server.cfg', format: 'cfg' }],
+      logs: [{ id: 'lg', name: 'Log', path: 'logs/latest.log' }],
+      consoles: [{ id: 'game', name: 'Game console', type: 'process' }, { id: 'rc', name: 'RCON', type: 'rcon', source: 'rcon:{props:rcon.port}:{props:rcon.password}' }, { id: 'rc2', name: 'RCON (setting)', type: 'rcon', source: 'rcon:{port}:{cfg:rcon_password}' }, { id: 'rc3', name: 'RCON (search)', type: 'rcon', source: 'rcon:{rcon.port}:S3cretRcon' }, { id: 'lgc', name: 'Log', type: 'log', source: 'lg' }, { id: 'bad', name: 'Missing key', type: 'rcon', source: 'rcon:25575:{props:no.such.key}' }],
+      update: { validateArgs: { steamcmd: 'validate -custom' } },
+      files: { autoClear: [{ path: 'logs', pattern: '*.log', olderThanDays: 7, intervalMin: 60, default: true }, { path: 'tmp', pattern: '*', olderThanDays: 0, intervalMin: 5, default: false }] } }, acDir, 'user');
+    P.GAMES.push(pgame);
+    const a1 = m.create('p5fake', 'AC One').id; let a2;
+    const elog5 = new EL5(m, P, m.settings, dir); elog5.start();
+    const ac = new AutoClear(m, P, m.settings, dir); ac.start(); assert(m._autoClear === ac, 'registered as mgr._autoClear');
+    const acEvents = []; m.events.on('server:autoclear', (p) => acEvents.push(p));
+    const fd = (id, rel) => path.join(m.filesDir(id), rel);
+    const put = (id, rel, ageDays, data = 'x') => { const f = fd(id, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, data); const t = new Date(Date.now() - ageDays * 86400000); fs.utimesSync(f, t, t); return f; };
+    const T0 = Date.now();
+
+    // seeding from the plugin
+    const l1 = ac.list(a1);
+    eq(l1.map((r) => [r.path, r.pattern, r.olderThanDays, r.intervalMin, r.enabled, r.fromPlugin]), [['logs', '*.log', 7, 60, true, true], ['tmp', '*', 0, 5, false, true]], 'plugin files.autoClear seeded: default true = enabled, default false = disabled');
+    eq(m.getConfig(a1).autoClearSeeded.length, 2, 'seeded keys remembered in wgsm.json'); assert(JSON.parse(fs.readFileSync(m.cfgFile(a1), 'utf8')).autoClear.length === 2, 'rules stored in wgsm.json');
+    assert(l1[0].lastRun >= T0 && l1[0].nextRun > T0, 'a seeded rule starts its interval when seeded (no surprise deletion on upgrade)');
+    // user edits survive plugin changes; deleted seeded rules do not come back; new plugin rules are added
+    ac.save(a1, [{ ...l1[0], olderThanDays: 3, enabled: true }]);
+    pgame.autoClear[0].olderThanDays = 30; pgame.autoClear.push({ path: 'crashes', pattern: '*.dmp', olderThanDays: 14, intervalMin: 1440, default: true });
+    const l1b = ac.list(a1); eq(l1b.map((r) => [r.path, r.olderThanDays]), [['logs', 3], ['crashes', 14]], 'user edit kept, deleted seeded rule stays deleted, a new plugin rule appears'); pgame.autoClear.pop(); pgame.autoClear[0].olderThanDays = 7;
+    ac.save(a1, [{ ...l1b[0] }]); // back to one rule
+
+    // dry run / run / pattern / age / folders untouched
+    const old1 = put(a1, 'logs/old.log', 10); const old2 = put(a1, 'logs/old2.log', 8, 'xxxx'); const young = put(a1, 'logs/young.log', 1); const other = put(a1, 'logs/old.txt', 30); const deep = put(a1, 'logs/sub/deep.log', 30);
+    const dr = ac.run(a1, 0, true);
+    eq([dr.dryRun, dr.matched, dr.deleted, dr.results[0].bytes, dr.results[0].sample.sort()], [true, 2, 0, 5, ['logs/old.log', 'logs/old2.log']], 'dry run reports files and bytes (age 3 d, pattern, non-recursive)'); assert(fs.existsSync(old1) && fs.existsSync(old2), 'dry run deletes nothing');
+    const rr = ac.run(a1, 0, false);
+    eq([rr.deleted, rr.freed, rr.locked], [2, 5, 0], 'run deletes the old matching files'); assert(!fs.existsSync(old1) && !fs.existsSync(old2) && fs.existsSync(young) && fs.existsSync(other) && fs.existsSync(deep) && fs.existsSync(fd(a1, 'logs/sub')), 'young file, other pattern, sub-folder content and folders are kept');
+    assert(ac.list(a1)[0].lastRun >= T0, 'lastRun persisted'); const ev = elog5.query({ event: 'autoclear:run' }); assert(ev.length >= 1 && /2 files deleted from logs/.test(ev[0].message) && ev[0].serverId === a1, 'run logged to the NGSM event log'); assert(acEvents.length === 1 && acEvents[0].detail.deleted === 2 && acEvents[0].id === a1, 'server:autoclear event emitted');
+    ac.save(a1, [{ ...ac.list(a1)[0], recursive: true }]); eq(ac.run(a1, 0, true).matched, 1, 'recursive rule reaches sub-folders'); assert.throws(() => ac.run(a1, 5), /Rule not found/); assert.throws(() => ac.run('99', 0), /Server not found/);
+
+    // interval + scheduler
+    ac.save(a1, [{ path: 'logs', pattern: '*.log', olderThanDays: 3, intervalMin: 60, enabled: true, recursive: false, onlyWhenStopped: false, lastRun: 0 }]);
+    const t1 = Date.now(); put(a1, 'logs/t1.log', 20); put(a1, 'logs/t2.log', 20);
+    eq(ac.tick(t1 + 30 * 60000).length, 0, 'not due before intervalMin (counted from the last run / seeding)'); const ticks = ac.tick(t1 + 61 * 60000); eq([ticks.length, ticks[0].result.deleted], [1, 2], 'the scheduler runs a due rule');
+    put(a1, 'logs/t3.log', 20);
+    eq(ac.tick(t1 + 122 * 60000).map((x) => x.result.deleted), [1], 'due again after the interval'); put(a1, 'logs/t4.log', 20); eq(ac.tick(t1 + 123 * 60000).length, 0, 'interval counted from the last run');
+    // lastRun persists across service instances (restart of the app)
+    const ac2 = new AutoClear(m, P, m.settings, dir); eq(ac2.tick(t1 + 124 * 60000).length, 0, 'a new service instance honours the persisted lastRun'); m._autoClear = ac;
+    // disabled, only-when-stopped, busy
+    ac.save(a1, [{ ...ac.list(a1)[0], enabled: false, lastRun: 0 }]); eq(ac.tick(t1 + 999 * 60000).length, 0, 'disabled rule never runs by itself'); eq(ac.run(a1).deleted, 0, 'run without an index only runs enabled rules');
+    eq(ac.run(a1, 0).deleted, 1, 'an explicit Run now works on a disabled rule (t4.log)');
+    put(a1, 'logs/t5.log', 20); ac.save(a1, [{ ...ac.list(a1)[0], enabled: true, onlyWhenStopped: true, lastRun: 0 }]);
+    const realRunning = m.isRunning; const mine = (r) => r.filter((x) => x.id === a1); m.isRunning = () => true; eq(mine(ac.tick(t1 + 2000 * 60000)).length, 0, 'onlyWhenStopped waits while the server runs'); m.isRunning = realRunning;
+    const rtA = m.rt(a1); rtA.busy = 'Updating'; eq(mine(ac.tick(t1 + 2000 * 60000)).length, 0, 'busy servers (install / update / backup) are skipped'); rtA.busy = null;
+    eq(mine(ac.tick(t1 + 2000 * 60000)).length, 1, 'runs once the server is stopped and idle'); assert(!fs.existsSync(fd(a1, 'logs/t5.log')));
+    // per-server isolation
+    a2 = m.create('p5fake', 'AC Two').id; put(a2, 'logs/x.log', 40); eq(ac.list(a2).length, 2, 'second server seeded separately'); assert(fs.existsSync(fd(a2, 'logs/x.log')), 'other servers are not touched by a run on this one');
+
+    // path escape, links and hand-edited rules
+    const outside = path.join(dir, 'p5-outside'); fs.mkdirSync(outside, { recursive: true }); fs.writeFileSync(path.join(outside, 'secret.log'), 's'); const oldT = new Date(Date.now() - 90 * 86400000); fs.utimesSync(path.join(outside, 'secret.log'), oldT, oldT);
+    const cfgRaw = JSON.parse(fs.readFileSync(m.cfgFile(a1), 'utf8')); cfgRaw.autoClear = [{ path: '../p5-outside', pattern: '*' }, { path: 'a/../../p5-outside', pattern: '*' }, { path: path.dirname(outside), pattern: '*' }, { path: 'C:/Windows', pattern: '*' }]; fs.writeFileSync(m.cfgFile(a1), JSON.stringify(cfgRaw));
+    eq(ac.list(a1).length, 0, 'hand-edited rules that escape the folder are dropped on read'); eq(ac.run(a1).deleted, 0); eq(mine(ac.tick(Date.now() + 1e10)).length, 0); assert(fs.existsSync(path.join(outside, 'secret.log')), 'files outside the server folder are never deleted');
+    let linked = true; try { fs.symlinkSync(outside, fd(a1, 'logs/link'), 'junction'); } catch { linked = false; }
+    ac.save(a1, [{ path: 'logs', pattern: '*', olderThanDays: 0, recursive: true, intervalMin: 5 }, ...(linked ? [{ path: 'logs/link', pattern: '*', intervalMin: 5 }] : [])]);
+    if (linked) { const rl = ac.run(a1, undefined, false); assert(fs.existsSync(path.join(outside, 'secret.log')), 'a link inside the server folder is not followed (recursive rule)'); { const lr = ac.run(a1, 1, true).results[0]; assert(lr.errors.length === 1 && /link/.test(lr.errors[0]), 'a rule whose folder is a link reports it and matches nothing'); } }
+    eq(ac.run(a1, 0, true).results[0].exists, true); eq(ac.save(a1, [{ path: 'no/such/folder' }]).length, 1); eq(ac.run(a1, 0).results[0].exists, false, 'a missing folder is not an error');
+    const ipc = buildApi({ mgr: m, collector: {}, shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '', autoClear: ac });
+    eq(ipc.autoClearList(a1).length, 1, 'autoClearList IPC'); assert.throws(() => ipc.autoClearSave(a1, [{ path: '../x' }]), /Invalid path/, 'autoClearSave IPC validates'); eq(ipc.autoClearRun(a1, 0, true).dryRun, true, 'autoClearRun IPC (dry run)');
+    ac.stop(); await m.remove(a2, true);
+
+    // ---- RCON client against a local fake server (never anything else) ----
+    const fakeRcon = (mode) => new Promise((resolve) => {
+      const seen = []; const socks = new Set();
+      const srv = net.createServer((sock) => {
+        socks.add(sock); let buf = Buffer.alloc(0);
+        sock.on('close', () => socks.delete(sock)); sock.on('error', () => {});
+        sock.on('data', (d) => {
+          buf = Buffer.concat([buf, d]);
+          while (buf.length >= 4 && buf.length >= 4 + buf.readInt32LE(0)) {
+            const size = buf.readInt32LE(0); const id = buf.readInt32LE(4); const type = buf.readInt32LE(8); const body = buf.slice(12, 4 + size - 2).toString(); buf = buf.slice(4 + size);
+            seen.push({ id, type, body });
+            if (mode === 'silent') continue;
+            if (type === 3) { if (mode !== 'minecraft') sock.write(packet(id, 0, '')); sock.write(packet(body === 'S3cretRcon' ? id : -1, 2, '')); }
+            else if (type === 2) {
+              if (body === 'echo hi') sock.write(packet(id, 0, 'hi there'));
+              else if (body === 'big') { sock.write(packet(id, 0, 'A'.repeat(4000))); sock.write(packet(id, 0, 'B'.repeat(10))); }
+              else if (body === 'drop') { sock.destroy(); }
+              else sock.write(packet(id, 0, `unknown: ${body}`));
+            } else if (type === 0) { if (mode === 'minecraft') sock.write(packet(id, 0, 'Unknown request 0')); else if (mode !== 'nomarker') { sock.write(packet(id, 0, '')); sock.write(packet(id, 0, '\x00\x01\x00\x00')); } }
+          }
+        });
+      });
+      srv.listen(0, '127.0.0.1', () => resolve({ port: srv.address().port, seen, close: () => { for (const s of socks) s.destroy(); srv.close(); } }));
+    });
+    const fr = await fakeRcon('source'); const R5 = (o) => new RconClient({ host: '127.0.0.1', port: fr.port, password: 'S3cretRcon', connectTimeoutMs: 1500, commandTimeoutMs: 2500, idleMs: 50, ...o });
+    const rc = R5({}); await rc.connect(); assert(rc.connected, 'auth ok');
+    eq(await rc.send('echo hi'), 'hi there', 'command response'); eq(await rc.send('other'), 'unknown: other', 'second command on the same connection');
+    const big = await rc.send('big'); eq([big.length, big.startsWith('AAAA'), big.endsWith('BBBBBBBBBB')], [4010, true, true], 'multi-packet response joined');
+    const bad = R5({ password: 'wrong-pw-123' }); await assert.rejects(bad.connect(), (e) => /authentication failed/.test(e.message) && !/wrong-pw-123/.test(e.message), 'wrong password rejected, password not in the error'); assert(!bad.connected);
+    assert(!/S3cretRcon/.test(util.inspect(rc)) && !/S3cretRcon/.test(JSON.stringify(rc)) && !/S3cretRcon/.test(String(rc)), 'the password never shows in inspect / JSON / toString');
+    await assert.rejects(rc.send('x'.repeat(4097)), /too long/, 'payload over 4096 bytes refused locally'); await assert.rejects(rc.send('é'.repeat(2049)), /too long/, 'limit counts bytes, not characters'); eq(await rc.send('echo hi'), 'hi there', 'still usable after a refused command');
+    assert(fr.seen.every((p) => p.body.length <= 4096), 'nothing larger than 4096 bytes was ever sent');
+    await assert.rejects(rc.send('drop'), /closed|timed out|failed/, 'server drops the connection mid-command'); eq(await rc.send('echo hi'), 'hi there', 'reconnects on demand after a dropped connection (re-authenticates)');
+    assert.throws(() => new RconClient({ port: 0, password: 'x' }), /port/); assert.throws(() => new RconClient({ port: 70000, password: 'x' }), /port/);
+    rc.close(); fr.close();
+    const frm = await fakeRcon('minecraft'); const mc5 = new RconClient({ host: '127.0.0.1', port: frm.port, password: 'S3cretRcon', idleMs: 50 }); eq(await mc5.send('echo hi'), 'hi there', 'Minecraft style (no empty packet before the auth reply, marker answered with "Unknown request 0")'); mc5.close(); frm.close();
+    const frn = await fakeRcon('nomarker'); const nm5 = new RconClient({ host: '127.0.0.1', port: frn.port, password: 'S3cretRcon', idleMs: 50 }); eq(await nm5.send('echo hi'), 'hi there', 'server that never answers the end marker: idle fallback ends the response'); nm5.close(); frn.close();
+    const frs = await fakeRcon('silent'); const sl = new RconClient({ host: '127.0.0.1', port: frs.port, password: 'S3cretRcon', connectTimeoutMs: 300, commandTimeoutMs: 300 }); const tt = Date.now(); await assert.rejects(sl.connect(), /timed out/, 'a server that never answers times out'); assert(Date.now() - tt < 2000); sl.close(); frs.close();
+    await assert.rejects(new RconClient({ host: '127.0.0.1', port: 1, password: 'x', connectTimeoutMs: 500 }).connect(), /failed|timed out/, 'refused connection reports a clean error');
+
+    // ---- consoles: source format, IPC, rcon / log / main routing ----
+    eq(parseRconSource('rcon:25575:pw:with:colons'), { port: '25575', password: 'pw:with:colons' }, 'source: literal port, password may contain ":"'); eq(parseRconSource('rcon:{props:rcon.port}:{props:rcon.password}'), { port: '{props:rcon.port}', password: '{props:rcon.password}' });
+    for (const badSrc of ['', 'tcp:1:2', 'rcon:', 'rcon:abc:pw', 'rcon:123456789:pw']) assert.throws(() => parseRconSource(badSrc), /Invalid RCON source/, 'bad source: ' + badSrc);
+    assert(P.validate({ id: 'rcbad', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' }, consoles: [{ id: 'r', name: 'R', type: 'rcon', source: 'just-a-string' }] }, null).errors.some((x) => /rcon:<port>/.test(x)), 'plugin validation rejects a malformed rcon source'); assert(P.validate({ id: 'rcbad', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' }, consoles: [{ id: 'main', name: 'R', type: 'rcon', source: 'rcon:1:x' }] }, null).errors.some((x) => /reserved/.test(x)), 'console id "main" is reserved');
+    const cs = new Consoles(m, P, m.settings, dir); cs.start(); assert(m._consoles === cs);
+    const c1 = m.create('p5fake', 'Con One').id; const fr2 = await fakeRcon('source');
+    m.writeConfig(c1, 'props', `rcon.port=${fr2.port}\nrcon.password=S3cretRcon\n`); m.writeConfig(c1, 'cfg', 'rcon_password "S3cretRcon"\n'); m.saveConfig(c1, { port: String(fr2.port) });
+    const api5 = buildApi({ mgr: m, collector: {}, shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '', consoles: cs, autoClear: ac });
+    eq(api5.consolesList(c1).map((c) => [c.id, c.type, c.readOnly]), [['main', 'process', false], ['rc', 'rcon', false], ['rc2', 'rcon', false], ['rc3', 'rcon', false], ['lgc', 'log', true], ['bad', 'rcon', false]], 'consolesList: game console first, then the declared ones');
+    assert(!JSON.stringify(api5.consolesList(c1)).includes('S3cretRcon') && !JSON.stringify(api5.consolesList(c1)).includes('source'), 'consolesList never exposes sources / passwords');
+    const cg1 = m.create('csgo', 'plain').id; const cg2 = m.create('hl2dm', 'nocon').id; eq(api5.consolesList(cg1).length, 3, 'a game with consoles[] lists them'); eq(api5.consolesList(cg2).map((c) => c.id), ['main'], 'a game without consoles[] only has the game console (UI unchanged)'); await m.remove(cg1, true); await m.remove(cg2, true);
+    const outs = []; m.on('consoleOut', (o) => outs.push(o));
+    await assert.rejects(api5.consoleCommand(c1, 'rc', 'echo hi'), /not running/, 'rcon needs a running server');
+    const sent = []; const rt1 = m.rt(c1); rt1.proc = { pid: 1, stdin: { writable: true, write: (t) => sent.push(t) } }; rt1.status = 'Started';
+    eq(await api5.consoleCommand(c1, 'main', 'say hello'), { output: '' }, 'main console command goes to stdin'); eq(sent, ['say hello\n']); eq(await api5.consoleCommand(c1, undefined, 'x'), { output: '' }, 'no console id = main (old API shape)');
+    eq((await api5.consoleCommand(c1, 'rc', 'echo hi')).output, 'hi there', 'rcon command via {config:key} source'); assert(outs.some((o) => o.consoleId === 'rc' && o.id === c1 && o.lines[0] === '> echo hi' && o.lines[1] === 'hi there'), 'rcon output pushed as consoleOut with consoleId');
+    eq((await api5.consoleCommand(c1, 'rc2', 'echo hi')).output, 'hi there', 'rcon command via {setting} + {config:key} source');
+    eq((await api5.consoleCommand(c1, 'rc3', 'echo hi')).output, 'hi there', 'rcon command via a bare {key} (searched in the config files) and a literal password');
+    await assert.rejects(api5.consoleCommand(c1, 'bad', 'x'), (e) => /no\.such\.key/.test(e.message) && !/S3cretRcon/.test(e.message), 'missing key: message names the key, not any S3cretRcon');
+    await assert.rejects(api5.consoleCommand(c1, 'lgc', 'x'), /read-only/, 'log consoles are read-only'); await assert.rejects(api5.consoleCommand(c1, 'nope', 'x'), /Unknown console/); await assert.rejects(api5.consoleCommand(c1, 'rc', '   '), /Empty/); await assert.rejects(api5.consoleCommand(c1, 'rc', 'x'.repeat(5000)), /too long/);
+    eq(fr2.seen.filter((p) => p.type === 3).length, 3, 'one RCON connection is reused per console (rc, rc2, rc3) - reconnect only on demand');
+    m.writeConfig(c1, 'props', `rcon.port=${fr2.port}\nrcon.password=changed\n`); await assert.rejects(api5.consoleCommand(c1, 'rc', 'echo hi'), /authentication failed/, 'a changed password is picked up (reconnects with the new one)'); m.writeConfig(c1, 'props', `rcon.port=${fr2.port}\nrcon.password=S3cretRcon\n`);
+    eq((await api5.consoleCommand(c1, 'rc', 'echo hi')).output, 'hi there', 'recovers after the password is fixed');
+    assert(!JSON.stringify(elog5.query({ limit: 1000 })).includes('S3cretRcon') && !JSON.stringify(outs).includes('S3cretRcon'), 'the RCON password is not in the event log or console output');
+    assert(elog5.query({ event: 'server:command' }).some((e) => /echo hi/.test(e.message)), 'rcon commands are logged like console commands');
+    // log console: lines stream as consoleOut with the console id
+    fs.mkdirSync(path.dirname(fd(c1, 'logs/latest.log')), { recursive: true }); fs.writeFileSync(fd(c1, 'logs/latest.log'), 'l1\nl2\n');
+    const st = api5.consoleStart(c1, 'lgc'); eq(st.lines, ['l1', 'l2'], 'log console returns the initial lines'); outs.length = 0; fs.appendFileSync(fd(c1, 'logs/latest.log'), 'l3\n'); await sleep(1500);
+    eq(outs.filter((o) => o.consoleId === 'lgc').flatMap((o) => o.lines), ['l3'], 'log console streams new lines with consoleId'); api5.consoleStop(c1, 'lgc'); outs.length = 0; fs.appendFileSync(fd(c1, 'logs/latest.log'), 'l4\n'); await sleep(1300); eq(outs.length, 0, 'stopped log console is silent'); assert.throws(() => api5.consoleStart(c1, 'rc'), /Not a log console/);
+    // removing a server closes its connections
+    rt1.proc = null; rt1.status = 'Stopped'; cs.stop(); fr2.close(); await m.remove(c1, true);
+
+    // ---- update vs validate ----
+    eq(SteamCMD.validateTokens(undefined), ['validate'], 'default validate args'); eq(SteamCMD.validateTokens('validate -x1'), ['validate', '-x1'], 'plugin validate args'); eq(SteamCMD.validateTokens('validate +quit'), ['validate'], 'steamcmd +commands refused'); eq(SteamCMD.validateTokens('a;b'), ['validate'], 'odd characters refused');
+    eq(m.steam.buildArgs('D:/x', '1', { validate: true, validateArgs: 'validate -custom' }), ['+force_install_dir', 'D:/x', '+login', 'anonymous', '+app_update', '1', 'validate', '-custom', '+quit'], 'steamcmd args: validateArgs applied');
+    eq(m.steam.buildArgs('D:/x', '1', { validate: false, validateArgs: 'validate -custom' }), ['+force_install_dir', 'D:/x', '+login', 'anonymous', '+app_update', '1', '+quit'], 'Update (no validate) ignores validateArgs');
+    const u1 = m.create('p5fake', 'Upd').id; const calls = []; const realInstall = m.steam.install; m.steam.install = async (d, appId, o) => { calls.push({ appId: String(appId), validate: o.validate, validateArgs: o.validateArgs }); return 0; };
+    const seenSt = []; const onSt = (v) => seenSt.push([v.id, v.status, v.pending]); m.on('status', onSt); const updEv = []; m.events.on('server:updated', (p) => updEv.push(p.detail));
+    await m.update(u1, false); await m.update(u1, true);
+    eq(calls, [{ appId: '4242', validate: false, validateArgs: 'validate -custom' }, { appId: '4242', validate: true, validateArgs: 'validate -custom' }], 'update(id, false) = no validate, update(id, true) = validate with the plugin validateArgs');
+    assert(seenSt.some((x) => x[1] === 'Updating' && x[2] === 'Updating') && seenSt.some((x) => x[1] === 'Validating' && x[2] === 'Validating'), 'busy / status text tells Update and Validate apart'); eq(updEv.map((d) => d.validate), [false, true], 'server:updated carries the validate flag'); eq(m.view(u1).status, 'Stopped');
+    calls.length = 0; const br = await m.bulk('validate', [u1]); eq([br[0].ok, calls.length, calls[0].validate], [true, 1, true], 'bulk validate'); await assert.rejects(m.bulk('nope', [u1]), /Unknown action/); const ba = await m.bulk('update', [u1]); eq([ba[0].ok, calls[1].validate], [true, false], 'bulk update stays a plain update');
+    const apiU = buildApi({ mgr: m, collector: {}, shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '' }); calls.length = 0; await apiU.update(u1, true); eq(calls[0].validate, true, 'IPC update(id, validate)');
+    m.off('status', onSt); m.steam.install = realInstall; await m.remove(u1, true);
+    for (const sid of [a1]) await m.remove(sid, true);
+    elog5.stop(); P.GAMES.splice(P.GAMES.indexOf(pgame), 1);
+    // bundled plugins that ship consoles / auto-clear
+    const mcg = P.byId('mc'); assert(mcg.consoles.some((x) => x.type === 'rcon' && /^rcon:/.test(x.source)) && mcg.consoles.some((x) => x.type === 'log' && mcg.logs.some((l) => l.id === x.source)) && mcg.autoClear.length >= 1, 'bundled mc declares consoles (rcon + latest.log) and files.autoClear'); assert(P.byId('csgo').consoles.some((x) => x.type === 'rcon'), 'bundled csgo declares an rcon console');
+    const html5 = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
+    for (const id of ['vConfigs', 'cfServer', 'cfBody', 'dlgAutoClear', 'acForm', 'acPath', 'acPattern', 'acDays', 'acEvery', 'tbValidate']) assert(html5.includes('id="' + id + '"'), 'element #' + id); assert(html5.includes('data-view="configs"'), 'nav entry Configs');
+    for (const f of ['consolesView.js', 'configsView.js', 'autoClearView.js']) assert(html5.includes(`<script src="${f}">`) && fs.existsSync(path.join(__dirname, '..', 'src', 'renderer', f)), 'script ' + f);
+  }
+
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);

@@ -260,6 +260,8 @@ function validateExtensions(m, e) {
       if (!CONSOLE_TYPES.includes(x.type)) e(`${at}.type must be one of ${CONSOLE_TYPES.join(', ')}`);
       if (x.source !== undefined && typeof x.source !== 'string') e(`${at}.source must be text`);
       if (x.type === 'log' && !logIds.has(x.source)) e(`${at}.source must be the id of a declared log`);
+      if (x.id === 'main' && x.type !== 'process') e(`${at}.id "main" is reserved for the game console`);
+      if (x.type === 'rcon' && !/^rcon:({[^}]+}|d{1,5}):/.test(String(x.source || ''))) e(`${at}.source must look like rcon:<port>:<password> (each part a literal or a {placeholder})`);
     });
   }
   if (m.update !== undefined) {

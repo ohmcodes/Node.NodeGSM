@@ -84,5 +84,27 @@ Entries are the server files with paths relative to the server folder (`/`, UTF-
 
 All paths are relative to the server files folder (`safeRel`: no `..`, drive letters, `:`). A missing or corrupt file starts with no clusters (the corrupt one is kept as `clusters.json.corrupt-<ms>`). Unknown versions are not migrated yet.
 
+## Auto-clear rules (`servers/<id>/configs/wgsm.json`)
+```json
+"autoClear": [
+  { "path": "logs", "pattern": "*.log.gz", "olderThanDays": 14, "intervalMin": 1440, "enabled": true, "recursive": false, "onlyWhenStopped": false, "lastRun": 1795577684830 }
+],
+"autoClearSeeded": ["logs|*.log.gz", "crash-reports|*.txt"]
+```
+| Field | Meaning |
+|---|---|
+| `path` | folder relative to the server files folder; `/` separators, no `..`, no absolute path, drive letter, `:` or NUL (`settings.relFolder`) |
+| `pattern` | file-name wildcard (`*` `?`, case-insensitive), no `/` or `\`; default `*` |
+| `olderThanDays` | 0 to 3650 (0 = any age); compared with the last-modified time |
+| `intervalMin` | 1 to 525600; a rule runs at most once per interval (checked every minute) |
+| `enabled`, `recursive`, `onlyWhenStopped` | booleans (default true / false / false) |
+| `lastRun` | ms since epoch of the last run (also kept in memory); 0 = never |
+| `autoClearSeeded` | `<path lower-case>|<pattern>` keys of plugin rules already copied to this server (so deleted rules stay deleted) |
+
+At most 50 rules. Invalid rules are refused when saving through the app and dropped when read from a hand-edited file.
+
+## Plugin `consoles[]` RCON source
+`rcon:<port>:<password>`; `<port>` is 1-5 digits or a `{placeholder}`, `<password>` is everything after the second `:` (literal or a `{placeholder}`). Placeholders: `{port}` `{queryPort}` `{maxPlayers}` `{map}` `{ip}`, `{configId:key}`, `{key}` (first config file with that key). See [PLUGINS.md](../PLUGINS.md).
+
 ### Config merge markers
 `NGSM:ignore` anywhere in a line of a config file (in the parent's or the member's copy) keeps the member's line during config sync, whatever the comment style: `# NGSM:ignore`, `// NGSM:ignore`, `; NGSM:ignore`, `<!-- NGSM:ignore -->`.

@@ -118,24 +118,26 @@ function renderTable() {            // Table view: all servers, checkboxes, bulk
 function updateToolbar() {
   const rows = liveRows().filter((r) => tsel.has(r.id));
   const running = (r) => ['Started', 'Starting', 'Stopping'].includes(r.status);
-  const busy = (r) => ['Installing', 'Updating'].includes(r.status);
+  const busy = (r) => ['Installing', 'Updating', 'Validating'].includes(r.status);
   const set = (id, on) => { const e = $(id); if (e) e.disabled = !on; };
   set('#tbStart', rows.some((r) => r.status === 'Stopped'));
   set('#tbStop', rows.some((r) => running(r)));
   set('#tbRestart', rows.some((r) => running(r)));
   set('#tbKill', rows.some((r) => running(r)));
   set('#tbUpdate', rows.some((r) => !busy(r)));
+  set('#tbValidate', rows.some((r) => !busy(r)));
   set('#tbBackup', rows.some((r) => !busy(r)));
   set('#tbOpen', rows.length === 1);
   $('#tbSel').textContent = rows.length ? `${rows.length} selected` : 'Select servers with the checkboxes (Ctrl / Shift click works too)';
 }
 
-const BULK_LABEL = { start: 'Starting', stop: 'Stopping', restart: 'Restarting', kill: 'Killing', update: 'Updating', backup: 'Backing up' };
+const BULK_LABEL = { start: 'Starting', stop: 'Stopping', restart: 'Restarting', kill: 'Killing', update: 'Updating', validate: 'Validating', backup: 'Backing up' };
 async function bulkRun(action) {
   const ids = [...tsel]; if (!ids.length) return;
   const names = ids.map((i) => (state.servers.get(i) || {}).name || i);
   if (action === 'kill' && !confirm(`Force-kill ${ids.length} server(s)?\n\n${names.join('\n')}\n\nThey are terminated immediately - unsaved world data can be lost. Use Stop for a graceful shutdown.`)) return;
   if (action === 'update' && ids.length > 1 && !confirm(`Update ${ids.length} servers one after another? Running servers are stopped, updated, then started again.`)) return;
+  if (action === 'validate' && !confirm(`Validate ${ids.length} server(s) one after another? Every game file is re-checked and repaired, which can take long. Running servers are stopped, validated, then started again.`)) return;
   toast(`${BULK_LABEL[action]} ${ids.length} server(s) ...`);
   const res = await run('bulk', action, ids);
   if (!res) return;
@@ -144,7 +146,7 @@ async function bulkRun(action) {
   if (failed.length) toast(`${failed.length} failed: ${failed.slice(0, 3).map((f) => `${nm(f.id)} (${f.error})`).join('; ')}`, true);
   else toast(`${action}: done for ${res.length - skipped} server(s)${skipped ? `, ${skipped} skipped (not applicable)` : ''}`);
 }
-for (const [id, action] of [['#tbStart', 'start'], ['#tbStop', 'stop'], ['#tbRestart', 'restart'], ['#tbKill', 'kill'], ['#tbUpdate', 'update'], ['#tbBackup', 'backup']]) $(id).onclick = () => bulkRun(action);
+for (const [id, action] of [['#tbStart', 'start'], ['#tbStop', 'stop'], ['#tbRestart', 'restart'], ['#tbKill', 'kill'], ['#tbUpdate', 'update'], ['#tbValidate', 'validate'], ['#tbBackup', 'backup']]) $(id).onclick = () => bulkRun(action);
 $('#tbOpen').onclick = async () => { const id = [...tsel][0]; if (id) { await setView('servers'); select(id); } };
 $('#tbCols').onclick = (e) => { e.stopPropagation(); $('#tbColPanel').hidden = !$('#tbColPanel').hidden; };
 
@@ -225,7 +227,7 @@ function renderTables() {
 
 // ---------- view switching ----------
 const HOME_VIEWS = ['servers', 'table', 'dashboard'];   // remembered in settings.view
-const ALL_VIEWS = [...HOME_VIEWS, 'plugins', 'settings', 'discord', 'logs', 'backups', 'clusters'];
+const ALL_VIEWS = [...HOME_VIEWS, 'plugins', 'settings', 'discord', 'logs', 'backups', 'clusters', 'configs'];
 const viewHooks = {};                                    // view -> function run when it opens (filled by app.js / shell.js)
 async function setView(v) {
   if (!ALL_VIEWS.includes(v)) v = 'servers';

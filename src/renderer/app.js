@@ -34,6 +34,7 @@ function renderList() {
 
 async function select(id) {
   stopLog();
+  if (typeof stopConsoleLog === 'function') stopConsoleLog();
   state.sel = id;
   state.consoleBuf = (await run('console', id)) || [];
   renderList();
@@ -46,6 +47,7 @@ const TABS = [['console', 'Console'], ['logs', 'Logs'], ['configs', 'Config File
 
 function renderDetail() {
   if (state.tab !== 'logs') stopLog();
+  if (state.tab !== 'console' && typeof stopConsoleLog === 'function') stopConsoleLog();
   const s = state.servers.get(state.sel);
   const d = $('#detail');
   if (!s) { d.innerHTML = '<div class="muted pad center">Select a server</div>'; return; }
@@ -62,7 +64,8 @@ function renderDetail() {
         <button id="aStop" ${!running || busy ? 'disabled' : ''}>Stop</button>
         <button id="aRestart" ${!running || busy ? 'disabled' : ''}>Restart</button>
         <button id="aInstall" ${running || busy ? 'disabled' : ''}>Install/Verify</button>
-        <button id="aUpdate" ${running || busy ? 'disabled' : ''}>Update</button>
+        <button id="aUpdate" ${running || busy ? 'disabled' : ''} title="Download the newest version of the game">Update</button>
+        <button id="aValidate" ${running || busy ? 'disabled' : ''} title="Re-check every game file against the source and repair broken ones (slower than Update)">Validate</button>
         <button id="aFolder">Folder</button>
         <button id="aDelete" class="danger" ${busy ? 'disabled' : ''}>Delete</button>
       </div>
@@ -80,6 +83,11 @@ function renderDetail() {
     if (!r.available && r.local) { if (!confirm(`Already latest (build ${r.local}). Update/verify anyway?`)) return; }
     if ((await run('update', id, false)) !== undefined) toast('Update finished');
   };
+  $('#aValidate').onclick = async () => {
+    if (!confirm('Validate re-checks every game file and re-downloads damaged or modified ones. It can take a long time for big games and may overwrite edited game files (configs are normally kept).\n\nRunning servers are stopped first. Continue?')) return;
+    toast('Validating - watch the console');
+    if ((await run('update', id, true)) !== undefined) toast('Validate finished');
+  };
   $('#aFolder').onclick = () => run('openFolder', id);
   $('#aDelete').onclick = async () => {
     if (!confirm(`Delete server "${s.name}" and its files? This cannot be undone.`)) return;
@@ -94,16 +102,7 @@ function renderTab(s) {
   ({ console: tabConsole, logs: tabLogs, configs: tabConfigs, settings: tabSettings, automation: tabAutomation, backups: tabBackups, files: tabFiles }[state.tab])(b, s);
 }
 
-function tabConsole(b, s) {
-  b.innerHTML = `<div id="con"><div id="conOut"></div>
-    <div class="row"><input id="conIn" placeholder="Type a command and press Enter (not supported by Source/GoldSource engines)"><button id="conSend">Send</button></div></div>`;
-  const out = $('#conOut');
-  out.textContent = state.consoleBuf.join('\n');
-  out.scrollTop = out.scrollHeight;
-  const send = async () => { const v = $('#conIn').value; if (!v) return; $('#conIn').value = ''; await run('command', s.id, v); };
-  $('#conSend').onclick = send;
-  $('#conIn').onkeydown = (e) => { if (e.key === 'Enter') send(); };
-}
+// tabConsole() lives in consolesView.js
 
 const PRIOS = ['Idle', 'BelowNormal', 'Normal', 'AboveNormal', 'High', 'RealTime'];
 const field = (k, label, s, type = 'text') => `<label>${label}<input data-k="${k}" type="${type}" value="${esc(s[k])}"></label>`;
@@ -181,7 +180,7 @@ function tabAutomation(b, s) {
 
 async function tabFiles(b, s) {
   let cwd = '';
-  b.innerHTML = `<div class="files"><div class="tree" id="tree"></div><div><div class="row"><span id="fpath" class="muted" style="flex:1"></span><button id="fsave" class="primary" disabled>Save file</button></div><textarea id="fileEd" disabled></textarea></div></div>`;
+  b.innerHTML = `<div class="filesPage"><div class="files"><div class="treewrap"><div class="row"><button id="acHere" title="Delete old files in the open folder on a schedule">Auto-clear this folder...</button></div><div class="tree" id="tree"></div></div><div><div class="row"><span id="fpath" class="muted" style="flex:1"></span><button id="fsave" class="primary" disabled>Save file</button></div><textarea id="fileEd" disabled></textarea></div></div><div id="acPanel"></div></div>`;
   let openFile = null;
   const load = async (rel) => {
     const items = await run('listDir', s.id, rel);
@@ -189,6 +188,7 @@ async function tabFiles(b, s) {
     cwd = rel;
     items.sort((a, c) => (c.dir - a.dir) || a.name.localeCompare(c.name));
     $('#tree').innerHTML = (rel ? '<div data-up="1">⬆ ..</div>' : '') + items.map((i) => `<div data-n="${esc(i.name)}" data-dir="${i.dir ? 1 : 0}">${i.dir ? '📁' : '📄'} ${esc(i.name)}</div>`).join('');
+    $('#tree').querySelectorAll('div').forEach((el) => { if (el.dataset.dir === '1') el.oncontextmenu = (e) => { e.preventDefault(); acDialog(rel ? `${rel}/${el.dataset.n}` : el.dataset.n); }; });
     $('#tree').querySelectorAll('div').forEach((el) => (el.onclick = async () => {
       if (el.dataset.up) return load(rel.split(/[\\/]/).slice(0, -1).join('/'));
       const next = rel ? `${rel}/${el.dataset.n}` : el.dataset.n;
@@ -199,7 +199,9 @@ async function tabFiles(b, s) {
     }));
   };
   $('#fsave').onclick = async () => { await run('writeFile', s.id, openFile, $('#fileEd').value); toast('File saved'); };
+  $('#acHere').onclick = () => { if (!cwd) return toast('Open a folder first (auto-clear works on one folder at a time)', true); acDialog(cwd); };
   load('');
+  acMount(s);
 }
 
 // ---------- logs tab (live) ----------
@@ -238,48 +240,7 @@ async function tabLogs(b, s) {
   open(list[0].id);
 }
 
-// ---------- config files tab (INI / JSON / ... declared by the plugin) ----------
-async function tabConfigs(b, s) {
-  const list = (await run('configList', s.id)) || [];
-  if (!list.length) { b.innerHTML = '<p class="muted">This game plugin does not declare config files. Use the <b>Files</b> tab, or ask the plugin author to add a <code>configs</code> list.</p>'; return; }
-  b.innerHTML = `<div class="split"><div class="tree" id="cfgList">${list.map((c) => `<div data-c="${esc(c.id)}"><b>${esc(c.name)}</b> <span class="badge">${esc(c.format)}</span><br><span class="muted small">${esc(c.path)}${c.exists ? '' : ' - missing'}</span></div>`).join('')}</div>
-    <div class="view"><div id="cfgHead" class="muted">Select a config file</div>
-    <div class="row"><button id="cfgSave" class="primary" disabled>Save</button><button id="cfgReload" disabled>Reload</button><button id="cfgFmt" hidden>Format JSON</button><button id="cfgCreate" hidden>Create file</button><span id="cfgStatus" class="muted"></span></div>
-    <textarea id="cfgEd" spellcheck="false" disabled></textarea></div></div>`;
-  let cur = null; let dirty = false;
-  const ed = $('#cfgEd');
-  const status = (t, bad) => { const e = $('#cfgStatus'); e.textContent = t; e.style.color = bad ? 'var(--bad)' : ''; };
-  const check = () => {
-    if (!cur || cur.format !== 'json') return;
-    try { JSON.parse(ed.value); status('Valid JSON'); } catch (e) { status(`Invalid JSON: ${e.message}`, true); }
-  };
-  const load = async (id) => {
-    if (dirty && !confirm('Discard unsaved changes?')) return;
-    const c = await run('configRead', s.id, id);
-    if (!c) return;
-    const def = list.find((x) => x.id === id);
-    cur = c; dirty = false;
-    b.querySelectorAll('#cfgList div').forEach((d) => d.classList.toggle('sel', d.dataset.c === id));
-    $('#cfgHead').innerHTML = `<b>${esc(c.name)}</b> · ${esc(c.path)}${def.description ? ' · ' + esc(def.description) : ''}`;
-    ed.value = c.text; ed.disabled = !c.exists;
-    $('#cfgSave').disabled = true; $('#cfgReload').disabled = false;
-    $('#cfgCreate').hidden = c.exists; $('#cfgFmt').hidden = !(c.format === 'json' && c.exists);
-    status(c.exists ? '' : 'File does not exist yet (the game may create it on first start).');
-    check();
-  };
-  const save = async () => {
-    if (!cur || ed.disabled) return;
-    if ((await run('configWrite', s.id, cur.id, ed.value)) !== undefined) { dirty = false; $('#cfgSave').disabled = true; status('Saved (previous version kept as .bak)'); }
-  };
-  ed.oninput = () => { dirty = true; $('#cfgSave').disabled = false; check(); };
-  ed.onkeydown = (e) => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); save(); } };
-  $('#cfgSave').onclick = save;
-  $('#cfgReload').onclick = () => { dirty = false; load(cur.id); };
-  $('#cfgFmt').onclick = () => { try { ed.value = JSON.stringify(JSON.parse(ed.value), null, 2) + '\n'; dirty = true; $('#cfgSave').disabled = false; check(); } catch (e) { status(`Invalid JSON: ${e.message}`, true); } };
-  $('#cfgCreate').onclick = async () => { if ((await run('configCreate', s.id, cur.id)) !== undefined) { dirty = false; await load(cur.id); } };
-  b.querySelectorAll('#cfgList div').forEach((d) => (d.onclick = () => load(d.dataset.c)));
-  load(list[0].id);
-}
+// tabConfigs() lives in configsView.js (shared with the Configs screen)
 
 // ---------- add dialog ----------
 function openAdd(pre) {
@@ -472,7 +433,7 @@ function patchHeader(v) {
   const running = ['Started', 'Starting', 'Stopping'].includes(v.status); const busy = !!v.pending;
   const set = (id, dis) => { const e = $(id); if (e) e.disabled = dis; };
   set('#aStart', running || busy); set('#aStop', !running || busy); set('#aRestart', !running || busy);
-  set('#aInstall', running || busy); set('#aUpdate', running || busy);
+  set('#aInstall', running || busy); set('#aUpdate', running || busy); set('#aValidate', running || busy);
   const b = document.querySelector('.dhead .badge'); if (b) { b.textContent = v.status; b.className = `badge ${v.status}`; }
 }
 api.on('console', ({ id, line }) => {
@@ -480,7 +441,7 @@ api.on('console', ({ id, line }) => {
   state.consoleBuf.push(line);
   if (state.consoleBuf.length > 2000) state.consoleBuf.shift();
   const out = $('#conOut');
-  if (out) {
+  if (out && (typeof conState === 'undefined' || conState.sub === 'main')) {
     const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
     out.textContent += (out.textContent ? '\n' : '') + line;
     if (atBottom) out.scrollTop = out.scrollHeight;

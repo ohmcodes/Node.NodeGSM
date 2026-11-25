@@ -27,6 +27,7 @@
       <div class="nav-sub">
         <button class="nav-item sub" data-view="servers" title="Sidebar list with details"><span class="ico">&#9776;</span><span class="lbl">List</span></button>
         <button class="nav-item sub" data-view="table" title="Horizontal table, multi-select"><span class="ico">&#9638;</span><span class="lbl">Table</span></button>
+        <button class="nav-item sub" data-view="configs" title="Edit the config files of a server"><span class="ico">&#9881;</span><span class="lbl">Configs</span></button>
         <button class="nav-item sub" data-view="logs" title="NodeGSM event log"><span class="ico">&#9776;</span><span class="lbl">Logs</span></button>
         <button class="nav-item sub" data-view="backups" title="Backups of all servers"><span class="ico">&#9729;</span><span class="lbl">Backups</span></button>
         <button class="nav-item sub" data-view="clusters" title="Clusters: update, config sync, clear folders"><span class="ico">&#9741;</span><span class="lbl">Clusters</span></button>
@@ -53,6 +54,7 @@
       <button id="tbKill" class="b-kill" title="Force-kill selected (no save)">Kill</button>
       <span class="sep"></span>
       <button id="tbUpdate" title="Update selected, one after another">Update</button>
+      <button id="tbValidate" title="Validate (re-check and repair all game files) of selected, one after another">Validate</button>
       <button id="tbBackup" title="Backup selected, one after another">Backup</button>
       <button id="tbOpen" title="Open the selected server">Details</button>
       <span class="spacer"></span><span class="muted small" id="tbSel"></span>
@@ -138,6 +140,11 @@
     <h4>Bot (slash commands)</h4>
     <p class="muted small">Coming in a later release: /start, /stop, /restart, /backup, /list ... with user and role permissions.</p>
   </section>
+  <section id="vConfigs">
+    <div class="toolbar lg-bar"><label class="inline">Server <select id="cfServer" class="inline"></select></label><span class="spacer"></span><span class="muted small">Pick a config file on the left; nothing opens until you choose one.</span></div>
+    <div id="cfBody" class="cf-body"></div>
+    <div id="cfEmpty" class="muted pad" hidden>No servers yet. Click <b>+ Add Server</b> to install one.</div>
+  </section>
   <section id="vLogs">
     <div class="toolbar lg-bar">
       <select id="lgServer" class="inline" title="Server"></select>
@@ -211,6 +218,21 @@
   </form>
 </dialog>
 
+<dialog id="dlgAutoClear">
+  <form method="dialog" id="acForm">
+    <h3>Auto-clear</h3>
+    <label>Folder (relative to the server files) <input id="acPath" autocomplete="off" spellcheck="false"></label>
+    <div class="grid"><label>File name pattern (* and ?) <input id="acPattern" value="*" autocomplete="off"></label>
+    <label>Older than (days, 0 = any age) <input id="acDays" type="number" min="0" max="3650" step="any"></label>
+    <label>Run every (minutes) <input id="acEvery" type="number" min="1" max="525600"></label></div>
+    <label class="check"><input type="checkbox" id="acRecursive"> Include sub-folders</label>
+    <label class="check"><input type="checkbox" id="acStopped"> Only while the server is stopped</label>
+    <label class="check"><input type="checkbox" id="acEnabled" checked> Enabled</label>
+    <p class="muted small">Only files are deleted, never folders. The age is the last-modified time. Locked files are skipped. Use <b>Preview</b> in the rules list to see what would go.</p>
+    <div class="row end"><button type="button" id="acCancel">Cancel</button><button type="submit" class="primary">Save rule</button></div>
+  </form>
+</dialog>
+
 <dialog id="dlgBkNew">
   <form method="dialog" id="bnForm">
     <h3>Restore as new server</h3>
@@ -242,6 +264,9 @@
 <script src="app.js"></script>
 <script src="dashboard.js"></script>
 <script src="shell.js"></script>
+<script src="consolesView.js"></script>
+<script src="configsView.js"></script>
+<script src="autoClearView.js"></script>
 <script src="discordView.js"></script>
 <script src="logsView.js"></script>
 <script src="backupsView.js"></script>

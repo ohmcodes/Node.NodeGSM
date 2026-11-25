@@ -141,7 +141,7 @@
     "consoles": {
       "type": "array",
       "description": "Optional. Extra consoles shown in the Console tab.",
-      "items": { "type": "object", "required": ["id", "name", "type"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "type": { "enum": ["process", "log", "rcon"] }, "source": { "type": "string", "description": "For type log: id of a declared log." } } }
+      "items": { "type": "object", "required": ["id", "name", "type"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "type": { "enum": ["process", "log", "rcon"] }, "source": { "type": "string", "description": "type log: id of a declared log. type rcon: rcon:<port>:<password>, each part a literal or a {placeholder} ({port}, {configId:key}, {key}); see PLUGINS.md." } } }
     },
     "update": {
       "type": "object",

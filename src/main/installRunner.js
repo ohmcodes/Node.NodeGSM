@@ -68,10 +68,11 @@ const fill = (s, vars) => String(s).replace(/\{(\w+)\}/g, (_, k) => (vars[k] ===
  */
 async function runInstall(game, env) {
   const { dir, cfg, log, steam, onProgress } = env;
+  const validate = env.validate; const validateArgs = env.validateArgs || {};   // Update vs Validate (see PLUGINS.md: update.validateArgs)
   fs.mkdirSync(dir, { recursive: true });
   const vars = { ...cfg, serverFiles: dir, appId: game.appId };
   const helpers = {
-    dir, cfg, log, fetchJson, fetchText, download: (u, d) => download(u, inside(dir, d), onProgress),
+    dir, cfg, log, validate: !!validate, validateArgs, fetchJson, fetchText, download: (u, d) => download(u, inside(dir, d), onProgress),
     extract: (f, d) => extract(inside(dir, f), inside(dir, d)), inside: (r) => inside(dir, r), path, fs,
     steamcmd: (appId, opts) => steam.install(dir, appId, { onProgress, ...opts }, log),
   };
@@ -82,7 +83,7 @@ async function runInstall(game, env) {
     i += 1;
     log(`[step ${i}/${steps.length}] ${s.type}${s.appId ? ' ' + s.appId : s.url ? ' ' + fill(s.url, vars) : ''}`);
     if (s.type === 'steamcmd') {
-      const code = await steam.install(dir, s.appId, { validate: s.validate !== false, mod: s.mod, repeat: s.repeat, beta: s.beta, onProgress }, log);
+      const code = await steam.install(dir, s.appId, { validate: s.validate !== false, validateArgs: validateArgs.steamcmd, mod: s.mod, repeat: s.repeat, beta: s.beta, onProgress }, log);
       if (code !== 0) throw new Error(`SteamCMD exited with code ${code} - the download did not complete`);
     } else if (s.type === 'download') {
       const to = inside(dir, fill(s.to, vars));

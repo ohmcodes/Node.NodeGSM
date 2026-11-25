@@ -100,6 +100,54 @@ function sanitizeServerBackup(patch) {
   return out;
 }
 
+const MAX_RULES = 50;
+/** Relative folder path inside the server files folder: no "..", no absolute path, no drive letter / stream (":"), no NUL. Throws. */
+function relFolder(p) {
+  if (typeof p !== 'string') throw new Error('Invalid path');
+  const s = p.replace(/[\\]/g, '/').trim();
+  if (!s || s.length > 240 || s.includes('\0') || s.startsWith('/') || /^[a-z]:/i.test(s)) throw new Error(`Invalid path: ${p}`);
+  const parts = s.split('/').filter((x) => x && x !== '.');
+  if (!parts.length || parts.some((x) => x === '..' || x.includes(':') || /[<>"|?*]/.test(x))) throw new Error(`Invalid path: ${p}`);
+  return parts.join('/');
+}
+/**
+ * One auto-clear rule { path, pattern, olderThanDays, intervalMin, enabled, recursive, onlyWhenStopped, lastRun }.
+ * path: relative folder (see relFolder), pattern: file-name wildcard (* ?, no "/" or "\\"), olderThanDays 0..3650, intervalMin 1..525600.
+ */
+function sanitizeAutoClearRule(r) {
+  if (!r || typeof r !== 'object') throw new Error('Invalid auto-clear rule');
+  const pattern = str(r.pattern, 100) || '*';
+  if (/[/\\\0]/.test(pattern)) throw new Error('The pattern is matched against file names and cannot contain / or a backslash');
+  const days = Number(r.olderThanDays === undefined || r.olderThanDays === '' ? 0 : r.olderThanDays);
+  if (!Number.isFinite(days) || days < 0 || days > 3650) throw new Error('"Older than" must be 0 to 3650 days');
+  const every = Number(r.intervalMin === undefined || r.intervalMin === '' ? 1440 : r.intervalMin);
+  if (!Number.isFinite(every) || every < 1 || every > 525600) throw new Error('"Every" must be 1 to 525600 minutes');
+  const lr = Number(r.lastRun);
+  return {
+    path: relFolder(r.path), pattern, olderThanDays: Math.round(days * 100) / 100, intervalMin: Math.floor(every),
+    enabled: r.enabled !== false, recursive: r.recursive === true, onlyWhenStopped: r.onlyWhenStopped === true,
+    lastRun: Number.isFinite(lr) && lr > 0 ? Math.floor(lr) : 0,
+  };
+}
+/** Rule list. strict: throw on the first invalid rule (user input); otherwise invalid rules are dropped (files edited by hand). */
+function sanitizeAutoClear(list, strict = true) {
+  if (!Array.isArray(list)) { if (strict) throw new Error('Auto-clear rules must be a list'); return []; }
+  if (strict && list.length > MAX_RULES) throw new Error(`At most ${MAX_RULES} auto-clear rules per server`);
+  const out = [];
+  for (const r of list.slice(0, MAX_RULES)) {
+    try { out.push(sanitizeAutoClearRule(r)); } catch (e) { if (strict) throw e; }
+  }
+  return out;
+}
+/** Per-server auto-clear fields of wgsm.json: autoClear (rules) and autoClearSeeded (plugin rule keys that were already copied once). */
+function sanitizeServerAutoClear(patch) {
+  const out = {};
+  if (!patch || typeof patch !== 'object') return out;
+  if ('autoClear' in patch) out.autoClear = sanitizeAutoClear(patch.autoClear, true);
+  if ('autoClearSeeded' in patch) out.autoClearSeeded = Array.isArray(patch.autoClearSeeded) ? [...new Set(patch.autoClearSeeded.filter((x) => typeof x === 'string').map((x) => x.slice(0, 340)))].slice(0, 200) : [];
+  return out;
+}
+
 function sanitizeDiscord(v) {
   v = v && typeof v === 'object' ? v : {};
   return {
@@ -137,4 +185,4 @@ function read(dataDir) {
 /** 'system' -> dark/light depending on Windows */
 const resolveTheme = (theme, systemDark) => (theme === 'system' ? (systemDark ? 'dark' : 'light') : theme === 'light' ? 'light' : 'dark');
 
-module.exports = { DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord, sanitizeServerBackup };
+module.exports = { DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord, sanitizeServerBackup, sanitizeAutoClear, sanitizeAutoClearRule, sanitizeServerAutoClear, relFolder };

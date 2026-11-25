@@ -167,7 +167,7 @@ Every server already gets **CPU, memory (whole process tree), threads, uptime, P
 NodeGSM cannot read FPS from a game by itself - the game has to print it. Check what your server prints (or which console command reports it) and describe it here. Only add metrics you have verified.
 
 ### Optional fields for clusters, backups, events, logging, consoles, update and auto-clear
-All of these are optional. They are validated and carried onto the game object (and exported in `registry.json` when present). `backup`, `events`, `logging`, `cluster` and `configs[].protect` are used by the app today; `consoles`, `update.validateArgs` and `files.autoClear` are being built (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
+All of these are optional. They are validated and carried onto the game object (and exported in `registry.json` when present). All of them are used by the app (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
 ```json
 "cluster": {
   "protectedConfigKeys": ["Port", "RCONPort"],
@@ -202,9 +202,27 @@ All of these are optional. They are validated and carried onto the game object (
 | `events[]` | `{ id, label, default }` extra game-specific events. They show up in the Discord view as `game:<id>` (label shown as "<Game>: <label>", `default` = initial toggle). They fire when a `logging.patterns` entry with the same `id` matches |
 | `logging.logFiles[]` | log files (wildcards allowed) scanned by the NGSM event log |
 | `logging.patterns[]` | `{ id, regex, level }` (`info` / `warn` / `error`); a matching **console line** becomes an event log entry (case-insensitive, at most once per pattern per server per 10 s); `regex` must compile. If the pattern `id` equals an `events[].id`, the entry is the event `game:<id>` and can be sent to Discord |
-| `consoles[]` | `{ id, name, type, source }` extra consoles; `type` is `process`, `log` (`source` = id of a declared log) or `rcon` |
-| `update.validateArgs` | per-installer text used for "Validate", e.g. `{ "steamcmd": "validate" }` |
-| `files.autoClear[]` | `{ path, pattern, olderThanDays, intervalMin, default }` rules that delete old files periodically (`olderThanDays` >= 0, `intervalMin` >= 1) |
+| `consoles[]` | `{ id, name, type, source }` consoles of the **Console** tab; `type` is `process` (the game console, always present as `main`; an entry only renames it), `log` (`source` = id of a declared `logs[]` entry, read-only) or `rcon` (`source` = `rcon:<port>:<password>`, see below). A game without `consoles[]` shows only the game console. The id `main` is reserved |
+| `update.validateArgs` | per-installer text used by **Validate** (not by Update). Supported key: `steamcmd` - the words placed after `+app_update <id>` (default `validate`; plain words like `validate`, `-x1` only, `+commands` are refused and fall back to `validate`). For `plugin.js` installers the helpers get `helpers.validate` (true for Validate) and `helpers.validateArgs` (the whole object) so a script can do its own check |
+| `files.autoClear[]` | `{ path, pattern, olderThanDays, intervalMin, default, recursive? }` rules that delete old **files** periodically (`olderThanDays` >= 0, `intervalMin` >= 1 minutes, `pattern` is a file-name wildcard `*` `?`, `default` = enabled when first copied to a server). They are copied once into each server's own rule list; users can edit, disable or delete them, and later plugin changes do not overwrite those edits (new rules are added). See below |
+
+#### `consoles[].source` for `rcon` consoles
+`rcon:<port>:<password>` - the part after the second `:` is the password (it may contain `:`). Each of the two parts is either a literal or a `{placeholder}` that NodeGSM resolves in the main process whenever a command is sent:
+
+| Placeholder | Value |
+|---|---|
+| `{port}`, `{queryPort}`, `{maxPlayers}`, `{map}`, `{ip}` | that server setting (secrets such as the GSLT are not available) |
+| `{configId:key}` | the value of `key` in the plugin config file `configId` (`format` ini / properties / cfg / json / yaml; ini keys can be `Section.Key`, json / yaml nested keys `a.b.c`; case-insensitive) |
+| `{key}` | the value of `key` in the first declared config file that contains it |
+
+Examples: `rcon:{server-properties:rcon.port}:{server-properties:rcon.password}` (Minecraft), `rcon:{port}:{server-cfg:rcon_password}` (Source: RCON runs on the game port), `rcon:25575:{rcon.password}`. NodeGSM always connects to `127.0.0.1`; the host cannot be set. The password is never logged, shown or returned to the UI. Source RCON and Minecraft RCON are supported (not the Rust / ARK web-socket variants). The game has to have RCON enabled in its own config; the **RCON** sub-tab shows the reason when a value is missing.
+
+#### `files.autoClear` and the `update` object
+```json
+"files": { "autoClear": [{ "path": "logs", "pattern": "*.log.gz", "olderThanDays": 14, "intervalMin": 1440, "default": true }] },
+"update": { "validateArgs": { "steamcmd": "validate" } }
+```
+Auto-clear deletes only files (never folders), never follows links, never leaves the server files folder and skips locked files. Plugin authors: use `default: true` only for things that are always safe to delete (old compressed logs, crash dumps); otherwise leave it `false` so users opt in.
 
 #### Example: cluster rules (Minecraft Java, `plugins/mc/plugin.json`)
 ```json

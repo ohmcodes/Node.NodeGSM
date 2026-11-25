@@ -23,13 +23,13 @@ main{flex:1;display:flex;min-height:0}
 #serverList .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
 #serverList .sub{font-size:12px;color:var(--muted)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--dot);margin-left:auto;flex:none}
-.dot.Started{background:var(--ok)}.dot.Starting,.dot.Updating,.dot.Installing,.dot.Stopping{background:var(--warn)}.dot.Stopped{background:var(--dot)}
+.dot.Started{background:var(--ok)}.dot.Starting,.dot.Updating,.dot.Validating,.dot.Installing,.dot.Stopping{background:var(--warn)}.dot.Stopped{background:var(--dot)}
 #detail{flex:1;display:flex;flex-direction:column;min-width:0}
 .dhead{display:flex;gap:14px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
 .dhead img{width:48px;height:48px;border-radius:8px}.dhead h2{margin:0;font-size:18px}
 .dhead .actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
 .badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:var(--badge)}
-.badge.Started{background:#17402a;color:var(--ok)}.badge.Starting,.badge.Updating,.badge.Installing,.badge.Stopping{background:#4a3f10;color:var(--warn)}
+.badge.Started{background:#17402a;color:var(--ok)}.badge.Starting,.badge.Updating,.badge.Validating,.badge.Installing,.badge.Stopping{background:#4a3f10;color:var(--warn)}
 .tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line)}
 .tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 14px}
 .tabs button.on{border-bottom-color:var(--accent);color:var(--accent)}
@@ -177,10 +177,10 @@ html[data-nav-collapsed="1"] #nav .lbl,html[data-nav-collapsed="1"] #nav .chev{d
 html[data-nav-collapsed="1"] .nav-sub{padding-left:0}
 html[data-nav-collapsed="1"] .nav-item{padding:8px 0;justify-content:center}
 /* which view shows which section / panel */
-body:not([data-view=servers]) #detail,body:not([data-view=plugins]) #vPlugins,body:not([data-view=settings]) #vSettings,body:not([data-view=discord]) #vDiscord,body:not([data-view=logs]) #vLogs,body:not([data-view=backups]) #vBackups,body:not([data-view=clusters]) #vClusters{display:none}
+body:not([data-view=servers]) #detail,body:not([data-view=plugins]) #vPlugins,body:not([data-view=settings]) #vSettings,body:not([data-view=discord]) #vDiscord,body:not([data-view=logs]) #vLogs,body:not([data-view=backups]) #vBackups,body:not([data-view=clusters]) #vClusters,body:not([data-view=configs]) #vConfigs{display:none}
 body:not([data-view=servers]) #leftPanel{display:none}
 body[data-view=plugins] #rightPanel,body[data-view=plugins] #bottomPanel,body[data-view=settings] #rightPanel,body[data-view=settings] #bottomPanel,
-body[data-view=discord] #rightPanel,body[data-view=discord] #bottomPanel,body[data-view=logs] #rightPanel,body[data-view=logs] #bottomPanel,body[data-view=backups] #rightPanel,body[data-view=backups] #bottomPanel,body[data-view=clusters] #rightPanel,body[data-view=clusters] #bottomPanel{display:none}
+body[data-view=discord] #rightPanel,body[data-view=discord] #bottomPanel,body[data-view=logs] #rightPanel,body[data-view=logs] #bottomPanel,body[data-view=backups] #rightPanel,body[data-view=backups] #bottomPanel,body[data-view=clusters] #rightPanel,body[data-view=clusters] #bottomPanel,body[data-view=configs] #rightPanel,body[data-view=configs] #bottomPanel{display:none}
 html[data-left-collapsed="1"] #leftPanel,html[data-right-collapsed="1"] #rightPanel,html[data-bottom-collapsed="1"] #bottomPanel{display:none!important}
 #rightPanel{width:250px;flex:none;background:var(--panel);border-left:1px solid var(--line);overflow:auto}
 #bottomPanel{flex:none;max-height:38vh;overflow:auto;background:var(--panel);border-top:1px solid var(--line)}
@@ -279,3 +279,26 @@ footer a,.linkbtn{color:var(--muted);text-decoration:none;cursor:pointer}footer 
 #vClusters .row>button,#vClusters .toolbar button{white-space:nowrap}
 .cl-cfgs{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}.cl-cfgs .check{white-space:nowrap}
 .cl-members .dot,.cl-dots .dot{margin-left:0}.cl-members td:first-child{width:22px}
+
+/* ---- Phase 5: consoles, configs editor, auto-clear ---- */
+.subtabs{display:flex;gap:2px;border-bottom:1px solid var(--line)}
+.subtabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:6px 12px}
+.subtabs button.on{border-bottom-color:var(--accent);color:var(--accent)}
+.cfg-split{grid-template-columns:240px 1fr;height:100%}
+.cfg-view{height:100%}.cfg-bar .seg{margin-right:6px}
+.cfg-struct{display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
+.cfg-rows{flex:1;overflow:auto;border:1px solid var(--line);border-radius:6px;min-height:160px}
+.cfg-row{display:grid;grid-template-columns:minmax(120px,38%) 1fr 32px;gap:8px;align-items:center;padding:3px 8px;border-bottom:1px solid var(--line)}
+.cfg-row:last-child{border-bottom:0}.cfg-k{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Consolas,monospace;font-size:12px}
+.cfg-v{font-family:Consolas,monospace;font-size:12px;min-width:0}
+.cfg-del{padding:2px 8px}.cfg-addrow input{min-width:0}.cfg-addkey{flex:1.2}.cfg-addval{flex:1.6}.cfg-addsec{width:130px}
+.cfg-ed{flex:1;min-height:300px;font:12px/1.4 Consolas,monospace;resize:none;white-space:pre;overflow:auto}
+.cf-body{flex:1;min-height:0;padding:12px 16px}
+#vConfigs{display:flex;flex-direction:column;height:100%;min-height:0}
+body:not([data-view=configs]) #vConfigs{display:none}
+.filesPage{display:flex;flex-direction:column;gap:12px;min-height:100%}.filesPage .files{flex:1;min-height:260px;height:auto}
+.treewrap{display:flex;flex-direction:column;gap:6px;min-height:0}.treewrap .tree{flex:1;overflow:auto}
+#acPanel table{width:100%}#acPanel .err{color:var(--bad)}#acResult{margin-top:8px}
+.cfg-bar[hidden],.cfg-struct[hidden],.cfg-ed[hidden],.cfg-addsec[hidden]{display:none!important}
+.filesPage .files>div{min-width:0}.filesPage .files>div:last-child{display:flex;flex-direction:column;gap:6px}.filesPage #fileEd{flex:1;height:auto;min-height:200px}
+#acPanel{overflow-x:auto;min-width:0}#acPanel .bk-act{white-space:normal}#acPanel .bk-act button{margin:1px}

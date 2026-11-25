@@ -49,3 +49,17 @@ Decisions deferred while implementing, to confirm with the project owner.
 - The UI edits the cluster clear rules as `path | pattern | days` lines (no `recursive` toggle).
 - Clusters of different game versions or branches are not supported (same game only); there is no cluster-level schedule yet (for example "update every Tuesday 04:00").
 - The NGSM log shows cluster entries per member server id; there is no cluster filter on the Logs screen yet.
+
+## Phase 5 - configs, auto-clear, consoles, validate
+- **Real-world testing:** RCON was tested only against a local fake server (Source style, Minecraft style, no end marker). Please try a real Minecraft server (`enable-rcon=true`, `rcon.password` set) and a Source server (`rcon_password` in `server.cfg`) once. Rust / ARK web-socket RCON and BattlEye / Battlefield-style protocols are not supported.
+- Source / Minecraft servers only accept RCON after they have read the saved config; if the password changed, the server has to be restarted. The RCON sub-tab reports "authentication failed" in that case, with no hint of the password.
+- RCON commands are written to the NGSM log (as `server:command`) like console commands; commands that carry secrets (for example `rcon_password x`) would be logged. Should RCON commands be logged without arguments, or with a deny-list?
+- Structured editor: values of `cfg` / `ini` files are shown raw (quotes included); there is no type-aware widget (checkbox for true / false, number spinner). YAML is the simple subset only (nested maps with space indentation); lists, anchors and block scalars are kept but not editable. JSON files with comments are raw only. Multi-line values and duplicate keys are edited line by line. Is a type-aware editor wanted?
+- The Configs screen edits one file at a time; there is no "apply to several servers" (use clusters for that).
+- Auto-clear: a seeded `default: true` plugin rule is enabled for every server of that game as soon as the app first looks at the server (its first run is one interval later). Should plugin defaults rather start disabled everywhere and be switched on by the user?
+- Auto-clear deletes files directly (no recycle bin) and does not rotate or close a log that a running server holds open (such files are locked and skipped). Folders are never removed, even when empty. There is no per-rule size limit ("keep the newest N files / max X MB").
+- Auto-clear counts the age by modified time only; there is no cron-style time of day.
+- Consoles: log consoles share the tail of the Logs tab (one tail per server and log at a time), so following the same log in both tabs restarts the tail. The game console of Source / GoldSource engines still has no stdin; use an RCON console for those.
+- Validate for games without a SteamCMD step re-runs the plugin install steps (same as Update); only `plugin.js` installers can tell the difference through `helpers.validate`. `update.validateArgs` supports only the key `steamcmd` for now.
+- Validate asks for a confirmation (it can overwrite edited game files, configs are normally kept). Auto update never validates.
+- The busy state text (`Validating`) was only checked through tests and the status events; the badge colour reuses the "Updating" style.

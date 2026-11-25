@@ -21,6 +21,7 @@ const DEFAULTS = {
   restartCrontab: false, crontabFormat: '0 6 * * *',
   autoStartAlert: true, autoRestartAlert: true, autoUpdateAlert: true, restartCrontabAlert: true, crashAlert: true,
   backupKeep: 0, // keep the newest N backups (0 = unlimited)
+  autoClear: [], autoClearSeeded: [], // Files auto-clear rules (services/autoClear.js); autoClearSeeded = plugin rule keys already copied once
   cpuPriority: 'Normal', cpuAffinity: '', installDir: '', // installDir: custom location for imported servers
 };
 
@@ -85,7 +86,7 @@ class ServerManager extends EventEmitter {
   }
   saveConfig(id, patch) {
     const cur = this.getConfig(id) || { ...DEFAULTS };
-    const next = { ...cur, ...patch, ...require('./settings').sanitizeServerDiscord(patch), ...require('./settings').sanitizeServerBackup(patch) };
+    const next = { ...cur, ...patch, ...require('./settings').sanitizeServerDiscord(patch), ...require('./settings').sanitizeServerBackup(patch), ...require('./settings').sanitizeServerAutoClear(patch) };
     delete next.id;
     fs.mkdirSync(path.dirname(this.cfgFile(id)), { recursive: true });
     fs.writeFileSync(this.cfgFile(id), JSON.stringify(next, null, 2));
@@ -173,7 +174,7 @@ class ServerManager extends EventEmitter {
     steps = steps.map((x) => (x.type === 'steamcmd' ? { ...x, validate } : x));
     const onProgress = (p) => { rt.progress = p; this.emit('status', this.view(id)); };
     try {
-      await runInstall({ ...g, steps }, { dir: this.filesDir(id), cfg: this.getConfig(id), log: (l) => this.log(id, l), steam: this.steam, onProgress });
+      await runInstall({ ...g, steps }, { dir: this.filesDir(id), cfg: this.getConfig(id), log: (l) => this.log(id, l), steam: this.steam, onProgress, validate, validateArgs: (g.update && g.update.validateArgs) || {} });
     } finally { rt.progress = null; }
   }
 
@@ -341,6 +342,7 @@ class ServerManager extends EventEmitter {
       restart: async (id) => { if (!running(id)) return 'skipped'; busy(id); await this.restart(id); },
       kill: async (id) => { if (!running(id)) return 'skipped'; await this.kill(id); },
       update: async (id) => { busy(id); await this.update(id, false); },
+      validate: async (id) => { busy(id); await this.update(id, true); },
       backup: async (id) => { busy(id); await this.backup(id); },
     };
     const fn = actions[action];
@@ -404,11 +406,13 @@ class ServerManager extends EventEmitter {
     const wasRunning = !!rt.proc;
     if (rt.busy) throw new Error(`Busy: ${rt.busy}`);
     if (wasRunning) await this.stop(id);
-    rt.busy = 'Updating';
-    this.setStatus(id, 'Updating');
+    const what = validate ? 'Validating' : 'Updating';   // shown as the busy / status text, so the UI tells Update and Validate apart
+    rt.busy = what;
+    this.setStatus(id, what);
     try {
+      this.log(id, validate ? 'Validating game files (this re-checks every file and can take a while) ...' : 'Updating ...');
       await this.runSteps(id, { validate, mode: 'update' });
-      this.log(id, 'Update finished.');
+      this.log(id, validate ? 'Validate finished.' : 'Update finished.');
       this.emitEvent('server:updated', id, { validate: !!validate, ...info });
     } finally {
       rt.busy = null;
@@ -536,6 +540,8 @@ class ServerManager extends EventEmitter {
     this.timers.push(setInterval(() => this.cronTick(), 60000));
     // auto-update every 30 min
     this.timers.push(setInterval(() => this.autoUpdateTick(), 30 * 60 * 1000));
+    // Files auto-clear rules (services/autoClear.js) every minute
+    this.timers.push(setInterval(() => { try { if (this._autoClear) this._autoClear.tick(); } catch { /* never break the scheduler */ } }, 60000));
   }
   stopScheduler() { this.timers.forEach(clearInterval); this.timers = []; }
 
@@ -548,7 +554,7 @@ class ServerManager extends EventEmitter {
       const info = await query(g.query, c.ip, c.queryPort || c.port, 2500);
       const status = info ? 'Started' : 'Starting';
       rt.players = info ? info.players : null; rt.maxPlayersLive = info ? info.maxPlayers : null; rt.queryInfo = info || null;
-      if (rt.status !== status && rt.status !== 'Updating') this.setStatus(id, status);
+      if (rt.status !== status && rt.status !== 'Updating' && rt.status !== 'Validating') this.setStatus(id, status);
       else this.emit('status', this.view(id));
     }
   }

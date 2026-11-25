@@ -59,7 +59,14 @@ class SteamCMD {
     });
   }
 
-  buildArgs(installDir, appId, { validate = true, user, pass, beta, mod, repeat = 1 } = {}) {
+  /** Extra tokens after "validate": a plugin's update.validateArgs.steamcmd (plain words only, never "+commands"). */
+  static validateTokens(text) {
+    const t = String(text == null ? 'validate' : text).split(/\s+/).filter(Boolean);
+    const ok = t.filter((x) => /^[A-Za-z0-9_.=-]{1,60}$/.test(x) && !x.startsWith('+'));
+    return ok.length && ok.length === t.length ? ok : ['validate'];
+  }
+
+  buildArgs(installDir, appId, { validate = true, validateArgs, user, pass, beta, mod, repeat = 1 } = {}) {
     const a = ['+force_install_dir', installDir];
     a.push('+login', ...(user ? [user, pass || ''] : ['anonymous']));
     // GoldSource games are a "mod" of the HLDS app (90): +app_set_config 90 mod <game>
@@ -67,7 +74,7 @@ class SteamCMD {
     for (let i = 0; i < Math.max(1, repeat); i++) {
       a.push('+app_update', String(appId));
       if (beta) a.push('-beta', beta);
-      if (validate) a.push('validate');
+      if (validate) a.push(...SteamCMD.validateTokens(validateArgs));
     }
     a.push('+quit');
     return a;

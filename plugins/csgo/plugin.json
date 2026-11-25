@@ -56,6 +56,11 @@
       "description": "Main server config (hostname, rcon_password, ...)"
     }
   ],
+  "consoles": [
+    { "id": "game", "name": "Game console", "type": "process" },
+    { "id": "rcon", "name": "RCON", "type": "rcon", "source": "rcon:{port}:{server-cfg:rcon_password}" },
+    { "id": "server-log", "name": "Server log", "type": "log", "source": "server-logs" }
+  ],
   "logs": [
     {
       "id": "server-logs",

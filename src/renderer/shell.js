@@ -27,7 +27,7 @@ window.addEventListener('DOMContentLoaded', () => applyShell({ ui: appSettings.u
 applyShell({ ui: appSettings.ui || {} });
 
 // ---------- navigation ----------
-const HOME_NAV = ['servers', 'table', 'logs', 'backups', 'clusters'];   // views that live under Home in the navigation
+const HOME_NAV = ['servers', 'table', 'configs', 'logs', 'backups', 'clusters'];   // views that live under Home in the navigation
 const homeView = () => (['servers', 'table'].includes(appSettings.view) ? appSettings.view : 'servers');
 function syncNav(v) {
   document.querySelectorAll('#nav [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === v));

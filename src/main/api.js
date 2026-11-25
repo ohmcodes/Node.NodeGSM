@@ -4,6 +4,7 @@
 // Functions return plain data or throw; the transport wraps the result as { ok, data } / { ok:false, error }.
 const { detail: pluginDetail } = require('./plugins');
 const appSettings = require('./settings');
+const configEdit = require('./configEdit');
 
 /**
  * @param {object} ctx
@@ -14,7 +15,7 @@ const appSettings = require('./settings');
  *   getWin       () => BrowserWindow | undefined
  *   currentBg    () => string
  *   beforeRelaunch  async () => void   (marks the app as quitting)
- *   eventLog, discord, cluster   service instances (services/eventLog.js, services/discord.js, services/cluster.js)
+ *   eventLog, discord, cluster, autoClear, consoles   service instances (services/*.js)
  */
 function buildApi(ctx) {
   const { mgr, collector, shell, dialog, app, nativeTheme, getWin, currentBg } = ctx;
@@ -54,6 +55,18 @@ function buildApi(ctx) {
     configRead: (id, c) => mgr.readConfig(id, c),
     configWrite: (id, c, t) => mgr.writeConfig(id, c, t),
     configCreate: (id, c) => mgr.createConfig(id, c),
+    // structured key/value editing (pure helpers, see configEdit.js): parse(format, text) and edit(format, text, ops)
+    configParse: (format, text) => configEdit.parse(format, text),
+    configEdit: (format, text, ops) => configEdit.edit(format, text, ops),
+    // files auto-clear (services/autoClear.js)
+    autoClearList: (id) => svc('autoClear').list(id),
+    autoClearSave: (id, rules) => svc('autoClear').save(id, rules),
+    autoClearRun: (id, ruleIndex, dryRun) => svc('autoClear').run(id, ruleIndex, dryRun),
+    // consoles (services/consoles.js): the game console plus the plugin's injected consoles (log tail, RCON)
+    consolesList: (id) => svc('consoles').list(id),
+    consoleCommand: (id, consoleId, text) => svc('consoles').command(id, consoleId, text),
+    consoleStart: (id, consoleId) => svc('consoles').startLog(id, consoleId),
+    consoleStop: (id, consoleId) => svc('consoles').stopLog(id, consoleId),
     logsList: (id) => mgr.logsList(id),
     logStart: (id, l) => mgr.logStart(id, l),
     logStop: (id, l) => mgr.logStop(id, l),

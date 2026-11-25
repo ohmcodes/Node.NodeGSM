@@ -81,13 +81,14 @@ plugins/_template/   copy this to start a new plugin
 plugins/registry.json generated list of all plugins (npm run registry)
 src/main/            Electron main process (server manager, plugin loader, install runner, log tailer)
 src/main/api.js      the IPC/API table (name -> function); main.js mounts it on ipcMain
-src/main/services/   event-driven services (event log, Discord webhook + bot, backups, clusters, auto-clear); constructed in main.js, subscribe to mgr.events
+src/main/services/   event-driven services (event log, Discord webhook + bot, backups, clusters, auto-clear, consoles); constructed in main.js, subscribe to mgr.events
+src/main/configEdit.js  structured config parse / edit (pure functions); src/main/rcon.js  Source RCON client
 src/renderer/        UI (plain JS/CSS): app.js (servers, detail tabs, games browser, settings), dashboard.js (table + metrics + view switching), shell.js (nav, panels, footer), discordView.js (Discord view + embed editor), logsView.js (Logs screen), backupsView.js (server Backups tab + Backups screen), links.js (footer URLs - placeholders), theme-boot.js (theme + layout before first paint)
 scripts/             validate-plugins.js, build-registry.js, build-catalog.js (plugin catalog), build-site.js
 website/             the website + its community backend (npm run site, npm run site:serve; see website/README.md)
 test/                npm test
 ```
 Plugins that want game events in the Logs screen / Discord declare `events` + `logging.patterns` (example in [PLUGINS.md](PLUGINS.md)); architecture notes live in [docs/TECH-architecture.md](docs/TECH-architecture.md).
-Plugins should declare `backup.presets` (saves, configs) and `backup.exclude` (logs, temp files) so players can make neat-pick backups - see [docs/GUIDE-backups.md](docs/GUIDE-backups.md). Declare `cluster.preserve` (saves and per-server data that a cluster update must not overwrite), `cluster.clearFolders` and `configs[].protect` (ports, passwords) so clusters can update and sync safely - see [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md). Plugins may declare optional `cluster`, `backup`, `events`, `logging`, `consoles`, `update` and `files.autoClear` fields (see [PLUGINS.md](PLUGINS.md); paths must be relative, regexes must compile).
+Plugins should declare `backup.presets` (saves, configs) and `backup.exclude` (logs, temp files) so players can make neat-pick backups - see [docs/GUIDE-backups.md](docs/GUIDE-backups.md). Declare `cluster.preserve` (saves and per-server data that a cluster update must not overwrite), `cluster.clearFolders` and `configs[].protect` (ports, passwords) so clusters can update and sync safely - see [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md). Declare `consoles` (RCON with `rcon:<port>:<password>` sources, log tails) and `files.autoClear` (only safe-to-delete files may be `default: true`) where the game supports them - see [docs/GUIDE-configs-files.md](docs/GUIDE-configs-files.md). Plugins may declare optional `cluster`, `backup`, `events`, `logging`, `consoles`, `update` and `files.autoClear` fields (see [PLUGINS.md](PLUGINS.md); paths must be relative, regexes must compile).
 
 App-code changes: run `npm test`, and update [FEATURES.md](FEATURES.md) (changelog + tables) and the README/PLUGINS docs in the same PR.

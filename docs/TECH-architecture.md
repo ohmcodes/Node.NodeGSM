@@ -21,6 +21,7 @@ This document grows with each release. It describes what exists today.
 | `server:backup`, `server:restore` | `{ file }` |
 | `server:command` | `{ command, silent }` |
 | `server:config` | `{ config, path }` |
+| `server:autoclear` | `{ path, pattern, deleted, bytes, locked }` |
 | `cluster:created`, `cluster:deleted` | `{ clusterId, clusterName, memberIds?, reason? }` (id = parent) |
 | `cluster:update-started` / `-finished` / `-failed` | `{ clusterId, clusterName, parentId, memberIds, validate, onlyChanged, durationMs?, members?, error? }` |
 | `cluster:config-synced`, `cluster:cleared` | `{ clusterId, clusterName, written/errors or files/bytes/locked }` |
@@ -38,7 +39,9 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 | `discord.js` | **done** - webhook alerts: templates, toggles, queue, 429 handling |
 | `backup.js` (+ `zip.js`) | **done** - full / neat-pick backups, restore, restore as new, retention, all-backups listing |
 | `cluster.js` (+ `clusterMerge.js`) | **done** - clusters, cluster update, config sync, clear folders |
-| `discordBot.js`, `autoClear.js` | skeletons |
+| `autoClear.js` | **done** - per-server rules, seeding from the plugin, scheduler tick, preview / run |
+| `consoles.js` (+ `../rcon.js`, `../configEdit.js`) | **done** - injected consoles (log tail, RCON), structured config helpers |
+| `discordBot.js` | skeleton |
 
 ### Event log (`eventLog.js`)
 - `log({ level, event, serverId, serverName, message, detail })` - fills `ts`, validates `level` (`info|warn|error`), caps message (1000 chars) and detail (4000 chars), appends to today's file and emits `ngsm:log`. Never throws.
@@ -70,11 +73,25 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 - **Config sync:** `configResults` computes `mergeConfig({ format, parentText, memberText, protect })` for every member and config id (protect = `configs[].protect` + `cluster.protectedConfigKeys` + `options.protect`); `configPlan` strips the texts and returns diffs; `configApply` writes with a `.bak` and emits `server:config`. `clusterMerge.js` is pure (no fs): line merge (ini / properties / cfg / yaml / text / xml) with occurrence matching of repeated keys and `NGSM:ignore` detection, json deep merge, `unifiedDiff` (prefix / suffix trim + LCS up to 2.5 M cells).
 - **Clear folders:** `scanClear` confines every rule with `safeRel` + `inside` + `realInside`, skips links, filters by name glob and mtime; `clear` re-checks with `lstat` before `unlink`, counts locked files (`EBUSY / EPERM / EACCES`).
 
+### Auto-clear (`autoClear.js`)
+- `new AutoClear(...)` registers as `mgr._autoClear`; `mgr.startScheduler()` calls `tick(now)` every minute. `seed(id)` copies plugin `files.autoClear` rules once (`autoClearSeeded` keeps the rule keys `<path>|<pattern>`, so deleted or edited rules never come back / get overwritten); a seeded rule starts its interval at seeding.
+- `scan(id, rule, now)` confines the rule folder with `safeRel` + `inside` + `realInside`, refuses a link as the folder, skips links while walking, filters by name glob (`logTail.globToRegex`) and mtime. `runRule` re-checks with `lstat` before `unlink`, counts locked files (`EBUSY / EPERM / EACCES`), persists `lastRun` in the rule (+ in memory), logs `autoclear:run`, emits `server:autoclear`.
+- `tick` skips disabled rules, rules not yet due (`lastRun + intervalMin`), `onlyWhenStopped` rules of running servers and servers with `rt.busy`. Rules are re-sanitised (non-strict: invalid hand-edited rules are dropped) on every read; user input goes through the strict sanitiser (`settings.sanitizeAutoClear`).
+
+### Consoles and RCON (`consoles.js`, `rcon.js`)
+- `list(id)` returns `main` (the game console) plus the plugin's `consoles[]`; sources are never returned. `command(id, consoleId, text)` routes: `main` -> `mgr.sendCommand`, `rcon` -> `RconClient`, `log` -> refused. RCON clients are cached per `server:console`, re-created when the resolved port / password changes, closed after 5 idle minutes and when the server is removed; a failed command drops the client so the next command reconnects.
+- `resolveRcon(id, source)` parses `rcon:<port>:<password>` (`parseRconSource`) and resolves `{placeholders}` from server settings (whitelist `port, queryPort, maxPlayers, map, ip`) or config files through `configEdit.get`. Host is always `127.0.0.1`.
+- `rcon.js`: packets `int32le size | id | type | body | 0 0`; auth (type 3, success = auth response with the same id, `-1` = wrong password), commands (type 2) followed by an empty type-0 packet whose echo marks the end of a (multi-packet) response; if no marker returns, an idle timeout ends it. Limits: 4096-byte command, 4160-byte packet, 1 MB response text, connect / command timeouts. Events of a replaced socket are ignored.
+- Output reaches the renderer as the push event `consoleOut { id, consoleId, lines[], reset?, file? }` (log consoles re-emit the `logLines` of `LogTail` with their console id).
+
+### Structured config editing (`configEdit.js`)
+Pure functions: `parse(format, text) -> { ok, reason?, entries[{ id, path, key, section, value, type? }] }`, `edit(format, text, ops) -> { text, entries, ok }` (ops `set`/`remove` by entry `id`, `add` by `path` (+ `section` for ini); apply one at a time because line ids shift), `get(format, text, name)`. Line formats keep every other line byte-for-byte; json is re-serialised.
+
 ## Data files (`<data>` = `%APPDATA%\NodeGSM`, or the legacy `%APPDATA%\node-wgsm2026\WGSM`)
 | Path | Content |
 |---|---|
 | `settings.json` | app settings (sanitised on read and write by `settings.js`): theme, `ui`, `headerStats`, `discord{ webhookUrl, events, templates, ...}`, `logging{ retentionDays }` |
-| `servers/<id>/configs/wgsm.json` | per-server config incl. `discordWebhook`, `discordAlert`, `discordEvents`, old alert flags, `backupKeep` |
+| `servers/<id>/configs/wgsm.json` | per-server config incl. `discordWebhook`, `discordAlert`, `discordEvents`, old alert flags, `backupKeep`, `autoClear` (rules), `autoClearSeeded` |
 | `logs/ngsm-YYYY-MM-DD.log` | NGSM event log, JSONL |
 | `logs/crash.log`, `logs/crash-history.json` | app crash handling |
 | `clusters.json` | clusters (members, parent, per-cluster rules) - see [TECH-data-formats.md](TECH-data-formats.md) |
@@ -89,5 +106,7 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 `eventLogQuery(filters)`, `eventLogExport(filters)` (text), `eventLogClear()`, `discordInfo()`, `discordTest(kind, template?)`, `discordPreview(template, sampleVars, event)`.
 
 Backups: `backups()` (all) / `backups(folder)`, `backup(id, opts)`, `backupInfo(id)`, `backupPreview(id, opts)`, `restore(id, file, opts)`, `restoreNew(folder, file, opts)`, `deleteBackup(id, file)`, `backupDownload(folder, file)`, `backupOpenFolder(folder)`.
+
+Configs / auto-clear / consoles: `configParse(format, text)`, `configEdit(format, text, ops)`, `autoClearList(id)`, `autoClearSave(id, rules)`, `autoClearRun(id, ruleIndex?, dryRun?)`, `consolesList(id)`, `consoleCommand(id, consoleId, text)`, `consoleStart(id, consoleId)`, `consoleStop(id, consoleId)`; push channel `consoleOut`. `update(id, validate)` and `bulk("validate", ids)` run Validate.
 
 Clusters: `clusters()`, `clusterCreate({ name, memberIds, parentId, options })`, `clusterSave(id, patch)`, `clusterDelete(id)`, `clusterUpdatePlan(id, opts)`, `clusterUpdate(id, opts)` (`{ validate, onlyChanged, skipParentUpdate, memberIds }`), `clusterConfigPlan(id, { configIds, memberIds })`, `clusterConfigApply(id, ...)`, `clusterClearPlan(id, { memberIds })`, `clusterClear(id, ...)`. Push channel: `cluster:progress` `{ clusterId, phase: parent|member|done|failed, percent, memberId, memberName, memberIndex, memberCount, file?, message }`.

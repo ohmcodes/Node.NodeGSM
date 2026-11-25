@@ -13,6 +13,7 @@ const { DiscordBot } = require('./services/discordBot');
 const { BackupService } = require('./services/backup');
 const { Cluster } = require('./services/cluster');
 const { AutoClear } = require('./services/autoClear');
+const { Consoles } = require('./services/consoles');
 
 // Keep using the pre-rename data folder if it exists so existing servers/downloads are not orphaned.
 const legacyDir = path.join(app.getPath('appData'), 'node-wgsm2026', 'WGSM');
@@ -83,18 +84,21 @@ app.whenReady().then(() => {
   mgr.on('console', (m) => send('console', m));
   mgr.on('removed', (id) => send('removed', id));
   mgr.on('logLines', (m) => send('logLines', m));
+  mgr.on('consoleOut', (m) => send('consoleOut', m));
   collector = new MetricsCollector(mgr);
   collector.on('metrics', (m) => send('metrics', m));
 
   // Services subscribe to mgr.events (see services/*.js)
-  const instances = [EventLog, Discord, DiscordBot, BackupService, Cluster, AutoClear].map((S) => new S(mgr, require('./plugins'), mgr.settings, dataDir));
+  const instances = [EventLog, Discord, DiscordBot, BackupService, Cluster, AutoClear, Consoles].map((S) => new S(mgr, require('./plugins'), mgr.settings, dataDir));
   services = instances;
   const [eventLog, discord] = instances;
   const cluster = instances.find((x) => x instanceof Cluster);
+  const autoClear = instances.find((x) => x instanceof AutoClear);
+  const consoles = instances.find((x) => x instanceof Consoles);
   cluster.onProgress = (p) => send('cluster:progress', p);
 
   const api = buildApi({
-    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord, cluster,
+    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord, cluster, autoClear, consoles,
     getWin: () => win,
     beforeRelaunch: () => { quitting = 'done'; },
   });
