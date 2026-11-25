@@ -1,9 +1,14 @@
 'use strict';
 const api = window.wgsm;
+// 'desktop' (Electron preload) or 'web' (transport-web.js); desktop-only controls carry class "desktop-only" and are hidden in web mode (styles.css)
+document.documentElement.dataset.mode = api.mode || 'desktop';
+const isWeb = () => api.mode === 'web';
+/** Open an http(s) link: through the main process on desktop, in a new tab in web mode. */
+function openLink(u) { if (!/^https?:\/\//i.test(String(u))) return; if (isWeb()) window.open(String(u), '_blank', 'noopener,noreferrer'); else run('openExternal', u); }
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const state = { games: [], servers: new Map(), sel: null, tab: 'console', consoleBuf: [], pickGame: null };
+const state = { platform: 'windows', features: {}, games: [], servers: new Map(), sel: null, tab: 'console', consoleBuf: [], pickGame: null };
 
 function toast(msg, err) {
   const d = document.createElement('div');
@@ -66,7 +71,7 @@ function renderDetail() {
         <button id="aInstall" ${running || busy ? 'disabled' : ''}>Install/Verify</button>
         <button id="aUpdate" ${running || busy ? 'disabled' : ''} title="Download the newest version of the game">Update</button>
         <button id="aValidate" ${running || busy ? 'disabled' : ''} title="Re-check every game file against the source and repair broken ones (slower than Update)">Validate</button>
-        <button id="aFolder">Folder</button>
+        <button id="aFolder" class="desktop-only">Folder</button>
         <button id="aDelete" class="danger" ${busy ? 'disabled' : ''}>Delete</button>
       </div>
     </div>
@@ -243,6 +248,7 @@ async function tabLogs(b, s) {
 // tabConfigs() lives in configsView.js (shared with the Configs screen)
 
 // ---------- add dialog ----------
+const platformName = () => ({ windows: 'Windows', linux: 'Linux', macos: 'macOS' }[state.platform] || state.platform || 'this system');
 function openAdd(pre) {
   state.pickGame = typeof pre === 'string' ? pre : null;
   $('#addName').value = state.pickGame ? (state.games.find((g) => g.id === state.pickGame) || {}).name || '' : ''; $('#addDir').value = ''; $('#addFilter').value = '';
@@ -252,8 +258,10 @@ function openAdd(pre) {
 function renderGamePick() {
   const f = $('#addFilter').value.toLowerCase();
   $('#gamePick').innerHTML = state.games.filter((g) => g.name.toLowerCase().includes(f)).map((g) =>
-    `<div data-g="${g.id}" class="${state.pickGame === g.id ? 'sel' : ''}"><img src="${iconSrc(g.icon)}" alt=""><span>${esc(g.name)}</span></div>`).join('');
+    `<div data-g="${g.id}" class="${state.pickGame === g.id ? 'sel' : ''}${g.supported === false ? ' unsupported' : ''}"${g.supported === false ? ` title="Not available on ${esc(platformName())}"` : ''}><img src="${iconSrc(g.icon)}" alt=""><span>${esc(g.name)}${g.supported === false ? ' <span class="badge nap">not available on this platform</span>' : ''}</span></div>`).join('');
   $('#gamePick').querySelectorAll('div').forEach((d) => (d.onclick = () => {
+    const g = state.games.find((x) => x.id === d.dataset.g);
+    if (g && g.supported === false) return toast(`${g.name} is not available on this platform (${platformName()}). Supported: ${(g.platforms || []).join(', ')}.`, true);
     state.pickGame = d.dataset.g;
     if (!$('#addName').value) $('#addName').value = state.games.find((g) => g.id === d.dataset.g).name;
     renderGamePick();
@@ -312,7 +320,7 @@ function md(src) {
 }
 document.addEventListener('click', (e) => {
   const a = e.target.closest('a[data-url]');
-  if (a) { e.preventDefault(); run('openExternal', a.dataset.url); }
+  if (a) { e.preventDefault(); openLink(a.dataset.url); }
 });
 
 state.gbSel = null;
@@ -323,7 +331,7 @@ async function renderBrowser() {
   const items = state.games.filter((g) => `${g.name} ${(g.tags || []).join(' ')} ${g.description || ''}`.toLowerCase().includes(q));
   $('#gbCount').textContent = `${items.length} of ${state.games.length} games`;
   $('#gbList').innerHTML = items.map((g) => `<div data-g="${esc(g.id)}" class="${state.gbSel === g.id ? 'sel' : ''}"><img src="${iconSrc(g.icon)}" alt=""><div><b>${esc(g.name)}</b>
-    <div class="muted small">${g.source === 'user' ? (g.overrides ? 'Local override' : 'Installed plugin') : 'Built-in'} · v${esc(g.version || '?')}</div></div></div>`).join('');
+    <div class="muted small">${g.source === 'user' ? (g.overrides ? 'Local override' : 'Installed plugin') : 'Built-in'} · v${esc(g.version || '?')}${g.supported === false ? ' <span class="badge nap">not available on this platform</span>' : ''}</div></div></div>`).join('');
   $('#gbList').querySelectorAll('[data-g]').forEach((d) => (d.onclick = () => showDetail(d.dataset.g)));
 }
 function docsHtml(docs) {
@@ -343,8 +351,8 @@ async function showDetail(id) {
   $('#gbDetail').innerHTML = `${d.banner ? `<img class="banner" src="${d.banner}" alt="">` : ''}
     <div class="dhead nopad"><img src="${d.icon || ''}" alt=""><div><h2>${esc(d.name)}</h2>
       <div class="muted">by ${esc(d.author || 'unknown')} · v${esc(d.version || '?')} · ${d.source === 'user' ? (d.overrides ? 'local override of a built-in plugin' : 'installed plugin') : 'built-in'}</div>
-      <div>${(d.tags || []).map((t) => `<span class="badge">${esc(t)}</span>`).join(' ')}</div></div>
-      <div class="actions"><button class="primary" id="gbAdd">Add server</button>${/^https?:/.test(d.url) ? `<a href="#" data-url="${esc(d.url)}"><button>Open link</button></a>` : ''}</div></div>
+      <div>${(d.tags || []).map((t) => `<span class="badge">${esc(t)}</span>`).join(' ')} ${(d.platforms || ['windows']).map((p) => `<span class="badge plat${p === state.platform ? ' here' : ''}">${esc(p)}</span>`).join(' ')}${d.supported === false ? ' <span class="badge nap">not available on this platform</span>' : ''}</div></div>
+      <div class="actions"><button class="primary" id="gbAdd" ${d.supported === false ? 'disabled title="Not available on this platform"' : ''}>Add server</button>${/^https?:/.test(d.url) ? `<a href="#" data-url="${esc(d.url)}"><button>Open link</button></a>` : ''}</div></div>
     <p>${esc(d.description)}</p>
     ${docsHtml(d.docs)}
     <h4>Defaults</h4><table><tr><td>Steam app</td><td>${esc(d.appId || '-')}</td><td>Game port</td><td>${esc(d.port || '-')}</td></tr>
@@ -499,6 +507,12 @@ async function refreshMetrics() {
 }
 
 async function init() {
+  const pi = await run('platformInfo');
+  if (pi) {
+    state.platform = pi.platform; state.features = pi.features || {};
+    document.documentElement.dataset.mode = pi.mode;
+    if (pi.mode === 'web') { $('#addDir').readOnly = false; $('#addDir').placeholder = 'Path on the server, e.g. /srv/games/mc'; }
+  }
   const st = await run('settings'); if (st) applyAppearance(st);
   const ms = await run('metricsState'); if (ms) { dash.snap = ms.snapshot; dash.history = ms.history; }
   state.games = (await run('games')) || [];

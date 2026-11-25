@@ -2,7 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn, spawnSync, execFile } = require('child_process');
+const { spawn } = require('child_process');
+const platform = require('./platform');
 const { EventEmitter } = require('events');
 const cronParser = require('cron-parser');
 const { GAMES, byId } = require('./plugins');
@@ -155,6 +156,7 @@ class ServerManager extends EventEmitter {
   create(gameId, name, extra = {}) {
     const g = byId(gameId);
     if (!g) throw new Error(`Unknown game: ${gameId}`);
+    this.assertSupported(g);
     const id = this.nextId();
     const cfg = this.saveConfig(id, {
       ...DEFAULTS, game: gameId, name: name || g.name, port: this.suggestPort(g, 'port'), queryPort: this.suggestPort(g, 'queryPort'),
@@ -162,6 +164,11 @@ class ServerManager extends EventEmitter {
     });
     fs.mkdirSync(this.filesDir(id), { recursive: true });
     return cfg;
+  }
+
+  /** Games that do not declare the current platform (plugin.json "platforms", default Windows only) cannot be created. */
+  assertSupported(g) {
+    if (g.supported === false) throw new Error(`${g.name} is not available on this platform (${platform.current()}). The plugin supports: ${(g.platforms || ['windows']).join(', ')}.`);
   }
 
   /** Run the plugin's install steps. mode: 'install' (all steps) | 'update' (steamcmd steps only when the game has one). */
@@ -205,6 +212,7 @@ class ServerManager extends EventEmitter {
   importServer(gameId, name, dir) {
     const g = byId(gameId);
     if (!g) throw new Error('Unknown game');
+    this.assertSupported(g);
     if (!fs.existsSync(path.join(dir, g.exe))) throw new Error(`Invalid path: ${g.exe} not found in ${dir}`);
     return this.create(gameId, name, { installDir: dir });
   }
@@ -260,7 +268,9 @@ class ServerManager extends EventEmitter {
     this.setStatus(id, 'Started', { startedAt: Date.now(), stopping: false, players: null, latency: null });
     let proc;
     try {
-      proc = spawn(cmd, args, { cwd, windowsHide: true, stdio: [g.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], windowsVerbatimArguments: false });
+      if (!g.command) platform.makeExecutable(exePath);   // Linux: servers extracted without the executable bit
+      const env = g.env && Object.keys(g.env).length ? { ...process.env, ...Object.fromEntries(Object.entries(g.env).map(([k, v]) => [k, String(v).replace(/\{serverFiles\}/g, this.filesDir(id))])) } : undefined;
+      proc = spawn(cmd, args, { cwd, env, ...platform.spawnOptions(), stdio: [g.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], windowsVerbatimArguments: false });
     } catch (e) { this.setStatus(id, 'Stopped'); throw e; }
     rt.proc = proc;
     this.emit('status', this.view(id)); // the first Started event fired before the process existed: announce the PID now
@@ -305,10 +315,10 @@ class ServerManager extends EventEmitter {
     const graceful = g.stopCommand || 'quit';
     try { if (proc.stdin && proc.stdin.writable) proc.stdin.write(graceful + '\n'); } catch {}
     // soft taskkill (WM_CLOSE to windows), then hard kill
-    spawnSync('taskkill', ['/PID', String(proc.pid), '/T'], { windowsHide: true });
+    platform.killTree(proc.pid, { force: false });
     const timeout = new Promise((res) => setTimeout(res, 15000, 'timeout'));
     if ((await Promise.race([exited, timeout])) === 'timeout') {
-      spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { windowsHide: true });
+      platform.killTree(proc.pid, { force: true });
       await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
     }
     return this.view(id);
@@ -322,7 +332,7 @@ class ServerManager extends EventEmitter {
     rt.stopping = true;
     this.setStatus(id, 'Stopping');
     const exited = new Promise((res) => proc.once('exit', res));
-    spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { windowsHide: true });
+    platform.killTree(proc.pid, { force: true });
     await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
     return this.view(id);
   }
@@ -377,11 +387,8 @@ class ServerManager extends EventEmitter {
   applyPriority(id, pid) {
     const c = this.getConfig(id);
     try { os.setPriority(pid, PRIORITY[c.cpuPriority] ?? 0); } catch (e) { this.log(id, `Priority: ${e.message}`); }
-    if (c.cpuAffinity && /^[01]+$/.test(c.cpuAffinity)) {
-      // cpuAffinity as bit string e.g. "1100" => cores 3,2 ; convert to mask
-      const mask = parseInt(c.cpuAffinity, 2);
-      execFile('powershell', ['-NoProfile', '-Command', `(Get-Process -Id ${pid}).ProcessorAffinity = ${mask}`], { windowsHide: true }, () => {});
-    }
+    // cpuAffinity as bit string e.g. "1100" => cores 3,2 (PowerShell on Windows, taskset on Linux)
+    if (c.cpuAffinity) platform.setAffinity(pid, c.cpuAffinity);
   }
 
   // ---------- update ----------
@@ -433,20 +440,8 @@ class ServerManager extends EventEmitter {
 
   // Discord alerts are sent by services/discord.js from the server:* events (see this.events).
 
-  // ---------- Windows firewall ----------
-  firewall(id, enable = true) {
-    const c = this.getConfig(id);
-    const name = `NodeGSM #${id} ${c.name}`;
-    const ports = [...new Set([c.port, c.queryPort].filter(Boolean))].join(',');
-    spawnSync('netsh', ['advfirewall', 'firewall', 'delete', 'rule', `name=${name}`], { windowsHide: true });
-    if (!enable) return { ok: true };
-    let ok = true;
-    for (const proto of ['TCP', 'UDP']) {
-      const r = spawnSync('netsh', ['advfirewall', 'firewall', 'add', 'rule', `name=${name}`, 'dir=in', 'action=allow', `protocol=${proto}`, `localport=${ports}`], { windowsHide: true });
-      if (r.status !== 0) ok = false;
-    }
-    return { ok, message: ok ? `Opened ports ${ports}` : 'Failed - run the app as Administrator to modify the firewall' };
-  }
+  // ---------- firewall (Windows: netsh; other platforms: not managed, returns a ufw hint) ----------
+  firewall(id, enable = true) { return platform.firewall(this.getConfig(id), id, enable); }
 
   // ---------- Mods / files ----------
   listDir(id, rel = '') {

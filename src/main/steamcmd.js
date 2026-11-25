@@ -3,9 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { spawn } = require('child_process');
+const { spawnSync } = require('child_process');
 const AdmZip = require('adm-zip');
-
-const STEAMCMD_URL = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip';
+const platform = require('./platform');
 
 function download(url, dest, redirects = 5) {
   return new Promise((resolve, reject) => {
@@ -39,18 +39,26 @@ function fetchText(url) {
 }
 
 class SteamCMD {
-  constructor(dataDir) {
-    this.dir = path.join(dataDir, 'bin', 'steamcmd');
-    this.exe = path.join(this.dir, 'steamcmd.exe');
+  /** plat: process.platform value (injectable for tests). Windows: steamcmd.exe from the zip; Linux: steamcmd.sh from steamcmd_linux.tar.gz. */
+  constructor(dataDir, plat = process.platform) {
+    this.platform = plat;
+    this.info = platform.steamcmdInfo(dataDir, plat);
+    this.dir = this.info.dir;
+    this.exe = this.info.exe;
   }
 
   async ensure(onLog = () => {}) {
     if (fs.existsSync(this.exe)) return;
-    onLog('Downloading steamcmd.zip ...');
-    const zip = path.join(this.dir, 'steamcmd.zip');
-    await download(STEAMCMD_URL, zip);
-    new AdmZip(zip).extractAllTo(this.dir, true);
-    fs.unlinkSync(zip);
+    const archive = this.info.archive;
+    onLog(`Downloading ${path.basename(archive)} ...`);
+    await download(this.info.url, archive);
+    if (this.info.kind === 'zip') new AdmZip(archive).extractAllTo(this.dir, true);
+    else {
+      const r = spawnSync('tar', platform.tarArgs(archive, this.dir), { encoding: 'utf8' });
+      if (r.status !== 0) throw new Error(`Could not extract ${path.basename(archive)} (is tar installed?): ${String(r.stderr || '').trim()}`);
+      platform.makeExecutable(this.exe, this.platform);
+    }
+    fs.unlinkSync(archive);
     onLog('SteamCMD extracted. Running first-time self-update ...');
     await new Promise((res) => {
       const p = spawn(this.exe, ['+quit'], { cwd: this.dir, windowsHide: true });
@@ -66,8 +74,11 @@ class SteamCMD {
     return ok.length && ok.length === t.length ? ok : ['validate'];
   }
 
-  buildArgs(installDir, appId, { validate = true, validateArgs, user, pass, beta, mod, repeat = 1 } = {}) {
-    const a = ['+force_install_dir', installDir];
+  buildArgs(installDir, appId, { validate = true, validateArgs, user, pass, beta, mod, repeat = 1, forcePlatform } = {}) {
+    const a = [];
+    // +@sSteamCmdForcePlatformType must come first; only added when the wanted platform differs from the host's
+    if (forcePlatform && platform.steamPlatform(forcePlatform) !== platform.steamPlatform(this.platform)) a.push('+@sSteamCmdForcePlatformType', platform.steamPlatform(forcePlatform));
+    a.push('+force_install_dir', installDir);
     a.push('+login', ...(user ? [user, pass || ''] : ['anonymous']));
     // GoldSource games are a "mod" of the HLDS app (90): +app_set_config 90 mod <game>
     if (mod) a.push('+app_set_config', '90', 'mod', mod);

@@ -1,6 +1,6 @@
 'use strict';
 // Transport-agnostic API table: { channelName: fn(...args) }.
-// Electron mounts it on ipcMain (see main.js); a future HTTP/WebSocket server can mount the same table.
+// Electron mounts it on ipcMain (see main.js); the headless server (src/server/headless.js) mounts the same table on POST /api/<channel>.
 // Functions return plain data or throw; the transport wraps the result as { ok, data } / { ok:false, error }.
 const { detail: pluginDetail } = require('./plugins');
 const appSettings = require('./settings');
@@ -106,6 +106,7 @@ function buildApi(ctx) {
     discordInfo: () => svc('discord').info(),
     discordTest: (kind, template) => svc('discord').test(kind, template),
     discordPreview: (template, sampleVars, event) => svc('discord').preview(template, sampleVars, event),
+    platformInfo: () => (ctx.platformInfo ? ctx.platformInfo() : require('./core').platformInfo('desktop')),
     settingsDefaults: () => appSettings.DEFAULTS,
     metricsState: () => collector.state(),
     pluginsInfo: () => mgr.pluginInfo,
@@ -132,14 +133,14 @@ function buildApi(ctx) {
     saveSettings: (p) => {
       const s = mgr.saveSettings(cleanSettingsPatch(p));
       if (ctx.discordBot) ctx.discordBot.apply().catch(() => {});   // reconnects only when the bot fields changed
-      app.setLoginItemSettings({ openAtLogin: !!s.startOnLogin });
-      nativeTheme.themeSource = s.theme;
-      const win = getWin();
+      if (app && app.setLoginItemSettings) app.setLoginItemSettings({ openAtLogin: !!s.startOnLogin });
+      if (nativeTheme) nativeTheme.themeSource = s.theme;
+      const win = getWin && getWin();
       if (win && !win.isDestroyed()) win.setBackgroundColor(currentBg());
       return publicSettings(s);
     },
     relaunch: async () => {
-      ctx.beforeRelaunch();
+      ctx.beforeRelaunch();   // web mode: throws a restart hint, the process is never restarted from the browser
       try { await mgr.shutdown(); } catch { /* ignore */ }
       app.relaunch();
       app.exit(0);

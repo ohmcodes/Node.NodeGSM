@@ -28,10 +28,12 @@ function buildRegistry() {
     if (Array.isArray(m.consoles) && m.consoles.length) ext.consoles = m.consoles;
     if (m.update) ext.update = m.update;
     if (m.files && Array.isArray(m.files.autoClear) && m.files.autoClear.length) ext.files = { autoClear: m.files.autoClear };
+    const platforms = Array.isArray(m.platforms) && m.platforms.length ? m.platforms : ['windows'];
     plugins.push({
       id: m.id, name: m.name, description: m.description || '', author: m.author || '', version: m.version || '', url: m.url || '',
       tags: m.tags || [],
       docs: (m.docs || []).map((d) => ({ title: d.title, url: d.url, type: d.type, description: d.description || '' })),
+      platforms, // OS support; Linux entries are 'declared, untested' (see docs/GUIDE-web-linux.md)
       install: steam ? 'steamcmd' : steps.length ? 'download' : 'manual',
       steamAppId: steam ? String(steam.appId) : null,
       ports: { game: d.port || null, query: d.queryPort || null },

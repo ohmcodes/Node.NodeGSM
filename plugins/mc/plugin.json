@@ -5,6 +5,7 @@
   "description": "Dedicated server support for Minecraft: Java Edition. Install, run, configure and monitor it from NodeGSM.",
   "author": "WindowsGSM contributors (ported to NodeGSM)",
   "version": "1.0.0",
+  "platforms": ["windows", "linux"],
   "url": "",
   "tags": ["minecraft", "java", "download"],
   "docs": [

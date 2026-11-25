@@ -107,7 +107,7 @@ document.querySelectorAll('footer [data-link]').forEach((a) => (a.onclick = (e) 
   e.preventDefault();
   const url = (typeof NODEGSM_LINKS !== 'undefined') ? NODEGSM_LINKS[a.dataset.link] : null;
   $('#ftDonateMenu').hidden = true;
-  if (url) run('openExternal', url);
+  if (url) openLink(url);
 }));
 $('#ftDonate').onclick = (e) => { e.stopPropagation(); $('#ftDonateMenu').hidden = !$('#ftDonateMenu').hidden; };
 document.addEventListener('click', (e) => { if (!e.target.closest('.donate')) $('#ftDonateMenu').hidden = true; });

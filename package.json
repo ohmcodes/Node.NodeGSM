@@ -5,6 +5,8 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
+    "serve": "node src/server/headless.js",
+    "serve:dev": "node --watch src/server/headless.js --port 8731",
     "test": "node test/smoke.js && node scripts/validate-plugins.js --check",
     "dist": "electron-builder --win",
     "pack": "electron-builder --win --dir",
@@ -20,7 +22,8 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "cron-parser": "^4.9.0",
-    "discord.js": "^14.28.1"
+    "discord.js": "^14.28.1",
+    "ws": "8.23.0"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -51,5 +54,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
+  },
+  "bin": {
+    "nodegsm": "src/server/headless.js"
   }
 }

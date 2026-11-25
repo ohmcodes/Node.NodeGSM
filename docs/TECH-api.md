@@ -1,6 +1,6 @@
 # NodeGSM - API reference (IPC channels and push events)
 
-Every function of the app backend is one entry of the table returned by `buildApi(ctx)` in [`src/main/api.js`](../src/main/api.js). `main.js` mounts the table on Electron's `ipcMain` (one channel per name); a future HTTP / WebSocket transport can mount the same table. The channel names below are the exact keys of that table (81 channels). `test/smoke.js` checks that every channel of the table is listed in this file.
+Every function of the app backend is one entry of the table returned by `buildApi(ctx)` in [`src/main/api.js`](../src/main/api.js). `main.js` mounts the table on Electron's `ipcMain` (one channel per name); the headless server (`src/server/headless.js`, web mode) mounts the same table on `POST /api/<channel>` (see [HTTP and WebSocket transport](#http-and-websocket-transport-web-mode)). The channel names below are the exact keys of that table (82 channels). `test/smoke.js` checks that every channel of the table is listed in this file.
 
 ## Calling convention
 - **Renderer:** `await window.wgsm.call(name, ...args)` (see `src/main/preload.js`). It resolves with the `data` of the reply or throws `Error(message)`.
@@ -15,14 +15,14 @@ Every function of the app backend is one entry of the table returned by `buildAp
 ## Servers
 | Channel | Args | Returns | Notes |
 |---|---|---|---|
-| `games` | - | public game list | Id, name, icon, description, tags, ports, default map / players, `appId`, `query`, `gslt`, `source`, `author`, `version`, `overrides` of every plugin (no secrets, no code) |
+| `games` | - | public game list | Id, name, icon, description, tags, ports, default map / players, `appId`, `query`, `gslt`, `source`, `author`, `version`, `overrides`, `platforms[]` and `supported` (false = the plugin does not declare the current OS; `create` / `import` refuse it) of every plugin (no secrets, no code) |
 | `list` | - | server view[] | All servers with live status |
 | `get` | `id` | config object | The saved `wgsm.json` of the server (not the live view) |
 | `create` | `game, name` | server view | Creates the server record (ports picked free); does not install |
 | `import` | `game, name, dir` | server view | Points a server at an existing folder (no copy; delete never removes imported files) |
 | `install` | `id` | - | Runs the plugin install steps; progress arrives as `status` events (`pending`, `progress`) |
 | `save` | `id, patch` | server view | Validates and merges the patch into `wgsm.json` (name, ports, param, flags, per-server Discord webhook / overrides, `backupKeep`, ...). Throws on an invalid value |
-| `start` / `stop` / `restart` | `id` | - | Stop = console command, then `taskkill`, then force-kill after 15 s |
+| `start` / `stop` / `restart` | `id` | - | Stop = console command, then `taskkill` (Windows) or SIGTERM to the process group (Linux), then force-kill after 15 s |
 | `kill` | `id` | - | Force-kills the whole process tree (no save) |
 | `remove` | `id, files` | - | Deletes the server; `files` (default true) also deletes the files folder (imported folders are never deleted). Emits `removed` |
 | `console` | `id` | string[] | Buffered game-console lines (the live ones arrive as `console` events) |
@@ -111,8 +111,9 @@ Every function of the app backend is one entry of the table returned by `buildAp
 | `saveSettings` | `patch` | settings | Validates, merges (nested objects merge key-wise), applies theme / login item / bot. A blank `botToken` keeps the saved token, `discord.clearBotToken: true` removes it |
 | `settingsDefaults` | - | settings | `DEFAULTS` of `settings.js` (reset buttons) |
 | `openExternal` | `url` | - | Opens an `http(s)` link in the default browser; anything else throws |
-| `pickFolder` | - | path or `null` | Folder dialog |
-| `relaunch` | - | - | Stops the servers gracefully and relaunches the app |
+| `pickFolder` | - | path or `null` | Folder dialog. Web mode: throws ("not available in web mode"); the UI hides the button and lets the user type the path |
+| `relaunch` | - | - | Stops the servers gracefully and relaunches the app. Web mode: throws a hint to restart the service yourself |
+| `platformInfo` | - | `{ mode, platform, features }` | `mode` = `desktop` or `web`; `platform` = `windows`, `linux` or `macos`; `features` = booleans the UI uses to hide what cannot work: `pickFolder`, `openFolder`, `revealBackup`, `backupDownload` (web only), `relaunch`, `tray`, `startOnLogin`, `hardwareAcceleration`, `installPluginFile`, `pluginsFolder`, `firewall` (Windows only) |
 
 ## Push events (main -> renderer)
 Subscribe with `window.wgsm.on(channel, cb)`.
@@ -130,3 +131,21 @@ Subscribe with `window.wgsm.on(channel, cb)`.
 
 ## Server-side event bus (not IPC)
 Services subscribe to `mgr.events` (`server:*`, `cluster:*`, `plugins:reloaded`, `ngsm:log`); the list with payloads is in [TECH-architecture.md](TECH-architecture.md). These events are not forwarded to the renderer; the UI sees their effect through the push events above and the Logs screen.
+
+## HTTP and WebSocket transport (web mode)
+The headless server ([`src/server/headless.js`](../src/server/headless.js), `npm run serve`) exposes the same API table and the same push events. `src/renderer/transport-web.js` implements `window.wgsm = { call, on, mode: 'web' }` on top of it, so the renderer code is identical in both modes.
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /healthz` | none | `{ "ok": true }` and nothing else (Docker / monitoring health check) |
+| `POST /login` | none (rate limited) | Body `{ "token": "..." }`. 200 sets the session cookie; 401 wrong token; 429 locked (`Retry-After` seconds); 403 cross-origin; 415 not JSON |
+| `POST /logout` | cookie | Destroys the session and clears the cookie |
+| `POST /api/<channel>` | cookie or bearer | Body `{ "args": [ ... ] }` (JSON, `Content-Type: application/json`). Reply `200 { "ok": true, "data": ... }` or `200 { "ok": false, "error": "..." }` (same shape as IPC). Protocol errors use HTTP codes: 400 bad JSON / `args` not an array, 401, 403 cross-origin, 404 unknown channel, 405 not POST, 413 body too large (default 4 MiB, `NODEGSM_MAX_BODY`), 415, 429 |
+| `GET /download/backup?folder=<id>&file=<name>.zip` | cookie or bearer | Streams a backup zip as an attachment. `folder` / `file` are validated by the backup service (`^\d+(\.deleted-\d+)?$` and `^[A-Za-z0-9._-]+\.zip$`), so nothing outside `<data>/backups` can be read |
+| `GET /ws` (upgrade) | cookie or bearer, same-origin | Push channel. Every message is a JSON text frame `{ "ch": "<event>", "payload": ... }` for the events listed below (`status`, `console`, `consoleOut`, `logLines`, `removed`, `metrics`, `cluster:progress`, `discordBot`). Client frames are ignored. The server pings every 30 s; close code 4401 = session expired, 1001 = shutting down |
+| `GET /`, `/index.html` and the other renderer files, `/assets/*` | cookie or bearer (except the login page, `styles.css`, `theme-boot.js`, the logo) | Static files with strict path confinement; unauthenticated `/` redirects to `/login.html` |
+
+- **Credentials:** the browser uses the `nodegsm_session` cookie (`HttpOnly; SameSite=Strict; Path=/`, `Secure` when `--https` or `X-Forwarded-Proto: https`). Scripts can send `Authorization: Bearer <token>` instead (no Origin header needed, no cookie).
+- **CSRF:** for cookie (and no-auth) requests the `Origin` header must be present and equal to `Host`; otherwise 403. JSON content type only; there is no CORS (no `Access-Control-*` headers).
+- **Not available in web mode** (they throw an error, the UI hides them): `pickFolder`, `openFolder`, `backupOpenFolder`, `backupDownload` (use the HTTP download above), `pluginsInstallZip`, `pluginsInstallFolder`, `pluginsFolder`, `openExternal` (the browser opens links itself), `relaunch`.
+- **Example:** `curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"args":["1"]}' http://127.0.0.1:8730/api/start`

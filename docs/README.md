@@ -14,12 +14,13 @@ Start with the project [README](../README.md). This folder holds the user guides
 | [GUIDE-clusters.md](GUIDE-clusters.md) | Clusters: create, update, config sync (protected keys, `NGSM:ignore`), clear folders |
 | [GUIDE-logging.md](GUIDE-logging.md) | The NGSM event log: location, format, retention, plugin patterns, the Logs screen |
 | [GUIDE-discord.md](GUIDE-discord.md) | Webhook alerts, the embed editor, per-server overrides, the slash-command bot |
+| [GUIDE-web-linux.md](GUIDE-web-linux.md) | Web mode (headless server) and Linux: install, systemd, Docker, nginx + TLS, first login, hardening checklist, limits of web mode, per-game Linux caveats |
 
 ## Technical documentation
 | Document | What it covers |
 |---|---|
-| [TECH-architecture.md](TECH-architecture.md) | Process layout, event bus, services, data files |
-| [TECH-api.md](TECH-api.md) | Every IPC channel (name, arguments, result) and every push event |
+| [TECH-architecture.md](TECH-architecture.md) | Process layout, core bootstrap, web mode and auth model, platform layer, event bus, services, data files |
+| [TECH-api.md](TECH-api.md) | Every IPC channel (name, arguments, result), every push event, the HTTP / WebSocket protocol of web mode |
 | [TECH-data-formats.md](TECH-data-formats.md) | Backup manifest, event log line, `clusters.json`, auto-clear rules, `rcon:` sources |
 | [../PLUGINS.md](../PLUGINS.md) | The complete `plugin.json` reference (all fields, one place) with a full example |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | How to add or fix a game by pull request; project layout |
@@ -30,6 +31,3 @@ Start with the project [README](../README.md). This folder holds the user guides
 |---|---|
 | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) | Decisions deferred while building, grouped by topic, with a short "needs your input first" list |
 | [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md) | Manual checks to run in the real app (things the automated tests cannot cover) |
-
-## Not written yet
-The web / Linux version has no guide yet (it is built last: `GUIDE-web-linux.md` will arrive with it).

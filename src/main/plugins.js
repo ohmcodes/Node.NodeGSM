@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const AdmZip = require('adm-zip');
+const platform = require('./platform');
 
 const BUNDLED_DIR = path.join(__dirname, '..', '..', 'plugins');
 const ID_RE = /^[a-z0-9][a-z0-9_-]{1,31}$/;
@@ -102,20 +103,33 @@ function validate(m, dir) {
   });
   const steps = normalizeInstall(m.install);
   if (!steps) e('"install" is required: { "type": "steamcmd", "appId": "..." } or { "type": "manual" } or { "steps": [...] }');
-  else {
-    steps.forEach((s, i) => {
-      const at = `install.steps[${i}]`;
-      if (!STEP_TYPES.includes(s.type)) return e(`${at}.type must be one of ${STEP_TYPES.join(', ')}`);
-      if (s.type === 'steamcmd' && !/^\d+$/.test(String(s.appId || ''))) e(`${at}.appId must be a numeric Steam app id`);
-      if (s.type === 'download' && (!s.url || !s.to)) e(`${at} (download) needs "url" and "to"`);
-      if (s.type === 'extract' && (!s.from || !s.to)) e(`${at} (extract) needs "from" and "to"`);
-      if (s.type === 'run' && !s.exe) e(`${at} (run) needs "exe"`);
-      if (s.type === 'write' && (!s.path || s.content === undefined)) e(`${at} (write) needs "path" and "content"`);
-      if (s.type === 'mkdir' && !s.path) e(`${at} (mkdir) needs "path"`);
-      for (const k of ['to', 'from', 'path']) if (s[k] !== undefined && !safeRel(s[k]) && s[k] !== '.') e(`${at}.${k} must be a relative path without ".."`);
-      if (s.type === 'script' && !(dir && fs.existsSync(path.join(dir, 'plugin.js')))) e(`${at} (script) needs a plugin.js with install()`);
-    });
+  else validateSteps(steps, 'install.steps', dir, e);
+  // ---- platforms / Linux overrides (all optional; plugins without "platforms" are Windows only) ----
+  if (m.platforms !== undefined) {
+    if (!Array.isArray(m.platforms) || !m.platforms.length || m.platforms.some((p) => !platform.ALL.includes(p))) e(`"platforms" must be a non-empty array of ${platform.ALL.join(' / ')}`);
+    else if (m.platforms.includes('linux') && !m.platforms.includes('windows')) w('"platforms" lists linux but not windows - Windows users will not see this game');
   }
+  if (run.env !== undefined && !(run.env && typeof run.env === 'object' && !Array.isArray(run.env) && Object.values(run.env).every((v) => typeof v === 'string'))) e('"run.env" must be an object of text values');
+  if (run.linux !== undefined) {
+    const l = run.linux; const at = 'run.linux';
+    if (!l || typeof l !== 'object' || Array.isArray(l)) e(`"${at}" must be an object`);
+    else {
+      if (l.exe !== undefined && !safeRel(l.exe)) e(`"${at}.exe" must be a relative path without ".."`);
+      if (l.workingDir !== undefined && !safeRel(l.workingDir)) e(`"${at}.workingDir" must be a relative path without ".."`);
+      if (l.command !== undefined && typeof l.command !== 'string') e(`"${at}.command" must be text`);
+      if (l.stopCommand !== undefined && typeof l.stopCommand !== 'string') e(`"${at}.stopCommand" must be text`);
+      if (l.stdin !== undefined && typeof l.stdin !== 'boolean') e(`"${at}.stdin" must be true or false`);
+      if (l.args !== undefined && !Array.isArray(l.args)) e(`"${at}.args" must be an array`);
+      (Array.isArray(l.args) ? l.args : []).forEach((a, i) => { if (!(typeof a === 'string' || (Array.isArray(a) && a.every((x) => typeof x === 'string')))) e(`${at}.args[${i}] must be a string or an array of strings`); });
+      if (l.env !== undefined && !(l.env && typeof l.env === 'object' && !Array.isArray(l.env) && Object.values(l.env).every((v) => typeof v === 'string'))) e(`"${at}.env" must be an object of text values`);
+    }
+  }
+  if (m.install && m.install.linux !== undefined) {
+    const ls = normalizeInstall(m.install.linux);
+    if (!m.install.linux || typeof m.install.linux !== 'object' || !ls) e('"install.linux" must be { "type": "steamcmd", "appId": "..." } or { "steps": [...] }');
+    else validateSteps(ls, 'install.linux.steps', dir, e);
+  }
+  if (Array.isArray(m.platforms) && m.platforms.includes('linux') && !run.linux && run.exe && /\.(exe|bat|cmd)$/i.test(run.exe) && !run.command) w('plugin declares linux but run.exe looks like a Windows executable and there is no "run.linux" override');
   if (m.docs !== undefined) {
     if (!Array.isArray(m.docs)) e('"docs" must be an array of { title, url, type }');
     else m.docs.forEach((d, i) => {
@@ -197,6 +211,22 @@ function validate(m, dir) {
     if (!fs.existsSync(path.join(dir, 'README.md')) && !media.readme) w('no README.md (shown in the game browser and on the website)');
   }
   return { errors, warnings };
+}
+
+function validateSteps(steps, name, dir, e) {
+  steps.forEach((s, i) => {
+    const at = `${name}[${i}]`;
+    if (!STEP_TYPES.includes(s.type)) return e(`${at}.type must be one of ${STEP_TYPES.join(', ')}`);
+    if (s.type === 'steamcmd' && !/^\d+$/.test(String(s.appId || ''))) e(`${at}.appId must be a numeric Steam app id`);
+    if (s.type === 'steamcmd' && s.platform !== undefined && !['windows', 'linux'].includes(s.platform)) e(`${at}.platform must be "windows" or "linux" (forces +@sSteamCmdForcePlatformType)`);
+    if (s.type === 'download' && (!s.url || !s.to)) e(`${at} (download) needs "url" and "to"`);
+    if (s.type === 'extract' && (!s.from || !s.to)) e(`${at} (extract) needs "from" and "to"`);
+    if (s.type === 'run' && !s.exe) e(`${at} (run) needs "exe"`);
+    if (s.type === 'write' && (!s.path || s.content === undefined)) e(`${at} (write) needs "path" and "content"`);
+    if (s.type === 'mkdir' && !s.path) e(`${at} (mkdir) needs "path"`);
+    for (const k of ['to', 'from', 'path']) if (s[k] !== undefined && !safeRel(s[k]) && s[k] !== '.') e(`${at}.${k} must be a relative path without ".."`);
+    if (s.type === 'script' && !(dir && fs.existsSync(path.join(dir, 'plugin.js')))) e(`${at} (script) needs a plugin.js with install()`);
+  });
 }
 
 /** Validation of the optional cluster / backup / events / logging / consoles / update / files fields. */
@@ -300,10 +330,14 @@ function validateExtensions(m, e) {
 // ---------- build a game object ------------------------------------------------------------------
 const readB64 = (f) => `data:image/${path.extname(f).slice(1).replace('jpg', 'jpeg')};base64,${fs.readFileSync(f).toString('base64')}`;
 
-function toGame(m, dir, source) {
+/** plat: 'windows' | 'linux' (default: the platform this process runs on). exe / command / args / install steps are resolved for it. */
+function toGame(m, dir, source, plat = platform.current()) {
   const d = m.defaults || {};
-  const run = m.run || {};
-  const steps = normalizeInstall(m.install);
+  const lin = plat === 'linux' && m.run && m.run.linux && typeof m.run.linux === 'object' ? m.run.linux : null;
+  const run = lin ? { ...m.run, ...lin, command: lin.exe !== undefined && lin.command === undefined ? undefined : lin.command !== undefined ? lin.command : m.run.command, env: { ...(m.run.env || {}), ...(lin.env || {}) } } : (m.run || {});
+  const linInstall = plat === 'linux' && m.install && m.install.linux ? normalizeInstall(m.install.linux) : null;
+  const steps = linInstall || normalizeInstall(m.install);
+  const platforms = Array.isArray(m.platforms) && m.platforms.length ? m.platforms : ['windows'];
   let hooks = {};
   const js = path.join(dir, 'plugin.js');
   if (fs.existsSync(js)) { delete require.cache[require.resolve(js)]; hooks = require(js); }
@@ -317,7 +351,8 @@ function toGame(m, dir, source) {
     icon: fs.existsSync(iconFile) ? readB64(iconFile) : null,
     media,
     appId: steam ? String(steam.appId) : null, steps, hooks,
-    exe: run.exe, command: run.command || null, cwd: run.workingDir || '', stdin: run.stdin !== false, stopCommand: run.stopCommand || null,
+    platforms, platform: plat, supported: platforms.includes(plat), linuxDeclared: !!(m.platforms && m.platforms.includes('linux')),
+    exe: run.exe, command: run.command || null, cwd: run.workingDir || '', stdin: run.stdin !== false, stopCommand: run.stopCommand || null, env: run.env || {},
     port: String(d.port || ''), queryPort: String(d.queryPort || d.port || ''), map: String(d.map || ''),
     maxPlayers: String(d.maxPlayers || ''), additional: String(d.additional || ''), portIncrement: d.portIncrement || 1,
     query: m.query || null, gslt: !!m.gslt,
@@ -404,7 +439,7 @@ function detail(id) {
   const rd = (f) => { try { return readB64(path.join(g.dir, f)); } catch { return null; } };
   return {
     id: g.id, name: g.name, description: g.description, author: g.author, version: g.version, url: g.url, tags: g.tags, source: g.source,
-    docs: g.docs, appId: g.appId, port: g.port, queryPort: g.queryPort, maxPlayers: g.maxPlayers, query: g.query, overrides: !!g.overrides,
+    docs: g.docs, platforms: g.platforms, supported: g.supported, appId: g.appId, port: g.port, queryPort: g.queryPort, maxPlayers: g.maxPlayers, query: g.query, overrides: !!g.overrides,
     icon: g.icon, banner: m.banner ? rd(m.banner) : null,
     readme: fs.existsSync(readmeFile) ? fs.readFileSync(readmeFile, 'utf8') : '',
     screenshots: (m.screenshots || []).map(rd).filter(Boolean),

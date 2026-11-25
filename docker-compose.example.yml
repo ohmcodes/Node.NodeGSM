@@ -1,0 +1,22 @@
+# Copy to docker-compose.yml and adjust. Start: docker compose up -d --build
+# The first start prints the access token in the log:  docker compose logs nodegsm
+services:
+  nodegsm:
+    build: .
+    container_name: nodegsm
+    restart: unless-stopped
+    environment:
+      # Set your own token (at least 12 characters) or leave it out to get a generated one in /data/web-token
+      # NODEGSM_TOKEN: "change-me-to-a-long-random-string"
+      NODEGSM_HTTPS: "1"            # you terminate TLS in a reverse proxy -> Secure cookies
+      NODEGSM_TRUST_PROXY: "1"      # use X-Forwarded-For for the login rate limit (only behind your own proxy)
+    volumes:
+      - nodegsm-data:/data
+    ports:
+      # Web UI: publish on the host's loopback only; the reverse proxy (deploy/nginx.conf.example) talks to it.
+      - "127.0.0.1:8730:8730"
+      # Game ports: open exactly what your game servers use, for example a Source server:
+      # - "27015:27015/udp"
+      # - "27015:27015/tcp"
+volumes:
+  nodegsm-data:

@@ -105,7 +105,7 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - RCON polls are not written to the NGSM log (to avoid a line every 15 s). Failures are only kept in memory (`pollErrors`); there is no UI for them yet - should a failing tick poll show a hint (for example "RCON not reachable") in the details panel?
 - `kind` is the only new `metrics[]` kind; the `registry.json` entry carries it, but the website catalog does not show it yet.
 
-## Phase 8 - logo (the web / Linux part of Phase 8 is not started)
+## Phase 8 - logo
 - **Logo direction is a first pass.** Concept: an "N" whose two stems are stacked server units and whose diagonal is a network link with a node at each end; accent colour = the app's default `--accent` (#4f8cff). Please review `assets/logo.svg`, `assets/logo-wordmark.svg` and `assets/icon.svg` (or the generated `assets/icon.png`) and say what to change (shape, colours, a different motif, a lettered "NGSM" mark).
 - The wordmark SVG uses text (Space Grotesk, falling back to Segoe UI / Arial) rather than outlined letters, so its look depends on the font that is installed. Convert it to outlines once the design is final?
 - The Windows .exe itself keeps the Electron icon: `build.win.signAndEditExecutable` is still `false` (needs Windows Developer Mode to extract electron-builder's helper tools). The icon is set in `build.win.icon`, so it is used as soon as signing/editing is enabled; the window, taskbar, tray and installer-less runs (`npm start`) already use the new icon. Enable it?
@@ -115,4 +115,19 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 ## Phase 9 - docs, tests and release
 - Features not done and listed as ⏳ in FEATURES.md: scheduled (cron) backups, `logging.logFiles` scanning, Steam login, mod manager, WindowsGSM plugin converter, online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
 - Which of the unverified (🧪) features do you want promoted to ✅ after the manual run in [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md)?
-- The docs folder has no guide for the web / Linux version yet (`GUIDE-web-linux.md` arrives with that phase).
+- *(Resolved: `GUIDE-web-linux.md` exists.)*
+
+## Phase 8 - web mode and Linux
+- **Real Linux testing:** nothing ran on a real Linux machine. Unit-tested only: the `/proc` parser, process-group kill, `taskset` command, XDG data folder, SteamCMD Linux paths / arguments, the Linux firewall message. Please run the Linux section of [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md) (SteamCMD download, a real install and start, stop / kill leaving no orphans, Docker image, systemd unit, nginx).
+- **Per-game Linux validation:** `mc`, `csgo`, `rust` and `palworld` are *declared, untested* (written from public knowledge: `srcds_run`, `RustDedicated` with `LD_LIBRARY_PATH`, `PalServer.sh`). Which other games should be declared next, and who verifies them? Some need extra steps (Palworld's `steamclient.so`, CS:GO's `lib32stdc++6`) that are only documented, not automated. Should NodeGSM check for missing system libraries (`lib32gcc-s1`, Java) and warn before install?
+- **Multi-user accounts:** web mode has one shared token (no users, roles, per-user audit trail, 2FA). Would you want accounts with roles (viewer / operator / admin), per-server permissions, and who-did-what in the NGSM log? Today the token holder can edit files, send console / RCON commands and delete servers.
+- **Public exposure:** is exposing NodeGSM to the internet (behind TLS + token) acceptable, or should the docs require a VPN / IP allow list? Should sensitive actions (file editor, console, delete, plugin install) require re-entering the token or be switchable off per deployment (a read-only mode)?
+- **HTTPS built in or not:** TLS is left to a reverse proxy (nginx example, `--https` only sets `Secure` cookies). Should NodeGSM terminate TLS itself (`--cert` / `--key`, Let's Encrypt)?
+- **Sessions are in memory:** every restart logs everyone out. Persist them (signed, in `<data>`)? A single failed-login counter per client address; behind a proxy without `NODEGSM_TRUST_PROXY` all users share the proxy's address.
+- **Web mode limits:** no folder picker (paths are typed), no plugin ZIP / folder install from the browser (copy to `<data>/plugins` and Reload), no file upload / download except backups. Add a file upload / download endpoint for plugins and server files?
+- **Linux paths and users:** the data folder is `~/.local/share/NodeGSM` by default; the Docker image and systemd unit use `/data` and `/var/lib/nodegsm`. Game servers run as the NodeGSM user with the systemd hardening inherited (read-only system, no home); some games may need relaxed settings.
+- **Firewall on Linux** is not managed (a `ufw` hint is shown). Manage `ufw` / `firewalld` through an optional, explicitly configured sudo rule?
+- **Process isolation:** game servers are children of the NodeGSM process; a hard NodeGSM crash leaves them running (as orphans of init) and they are not re-attached after a restart. Re-attach by pid file, or run each server in its own systemd scope / container?
+- **Crash handling in web mode:** uncaught exceptions are logged to `logs/crash.log` and the process keeps running (the desktop app can relaunch itself, a service relies on systemd `Restart=`). Exit and let the supervisor restart instead?
+- **Windows web mode:** `npm run serve` also works on Windows (used for the automated tests); it is not packaged as a Windows service.
+- **New dependency:** `ws` 8.23.0 (about 0.2 MB; it was already installed transitively by `discord.js`, now pinned as a direct dependency).

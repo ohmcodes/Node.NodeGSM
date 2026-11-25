@@ -5,6 +5,7 @@
   "description": "Palworld Dedicated Server",
   "author": "ohmcodes",
   "version": "1.1.4",
+  "platforms": ["windows", "linux"],
   "url": "https://github.com/ohmcodes/WindowsGSM.Palworld",
   "tags": ["steamcmd"],
   "docs": [
@@ -23,6 +24,7 @@
   },
   "run": {
     "exe": "Pal/Binaries/Win64/PalServer-Win64-Shipping-Cmd.exe",
+    "linux": { "exe": "PalServer.sh" },
     "args": ["{param}", "-publicip={ip}", "-port={port}", "-publicport={port}", "-players={maxPlayers}", "-servername={name}"]
   },
   "defaults": {

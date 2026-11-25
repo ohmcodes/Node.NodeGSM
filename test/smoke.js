@@ -1341,6 +1341,139 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const B = require('../scripts/build-icons'); const px = B.render(16); assert.strictEqual(px.length, 16 * 16 * 4); assert(px[3] === 0 && px[(8 * 16 + 8) * 4 + 3] === 255 && px[(2 * 16 + 8) * 4 + 3] === 255, 'tile has rounded transparent corners and an opaque body'); assert(B.render(256, { tile: false })[3] === 0, 'mark-only render is transparent in the corner');
   }
 
+  // ---- Phase 8: platform layer, plugin platforms, headless web server ----
+  {
+    const PL = require('../src/main/platform'); const { SteamCMD } = require('../src/main/steamcmd'); const { treeTotals } = require('../src/main/metrics');
+    const R = path.join(__dirname, '..');
+    // /proc parsing (injected fake proc files)
+    const st1 = '1000 (my (weird) game) S 1 1000 1000 0 -1 4194304 100 0 0 0 150 50 0 0 20 0 7 0 12345 1000000 2500 18446744073709551615';
+    const p1 = PL.parseProcStat(st1); eq([p1.pid, p1.comm, p1.state, p1.ppid, p1.utime, p1.stime, p1.threads, p1.rssPages], [1000, 'my (weird) game', 'S', 1, 150, 50, 7, 2500], 'stat with parentheses / spaces in the name');
+    assert.strictEqual(PL.parseProcStat('garbage'), null); eq(PL.parseProcStatus('Name:\tx\nVmRSS:\t   4096 kB\nThreads:\t9\n'), { vmRssKb: 4096, threads: 9 });
+    const files = { '/proc/1000/stat': st1, '/proc/1000/status': 'VmRSS:\t4096 kB\nThreads:\t7\n', '/proc/1001/stat': '1001 (child) R 1000 1000 1000 0 -1 0 0 0 0 0 100 100 0 0 20 0 2 0 99 1 100', '/proc/1001/status': 'VmRSS:\t1024 kB\nThreads:\t2\n', '/proc/1002/stat': '1002 (other) S 1 1 1 0 -1 0 0 0 0 0 5 5 0 0 20 0 1 0 99 1 10' };
+    const rows = PL.readProcessesLinux({ readdir: () => ['1000', '1001', '1002', 'self', 'cpuinfo'], readFile: (f) => { if (!(f in files)) throw new Error('ENOENT'); return files[f]; }, clkTck: 100, pageSize: 4096 });
+    eq(rows.find((r) => r.pid === 1000), { pid: 1000, ppid: 1, mem: 4096 * 1024, cpuTime: 2e7, threads: 7 }, 'cpuTime is in 100 ns units like Windows');
+    eq(rows.find((r) => r.pid === 1002).mem, 10 * 4096, 'RSS pages used when /status is missing');
+    eq(treeTotals(rows, 1000), { mem: 4096 * 1024 + 1024 * 1024, cpuTime: 2e7 + 2e7, threads: 9, procs: 2 }, 'child processes are summed through ppid');
+    // process-tree kill, affinity, data dir, steamcmd, firewall
+    const sig = []; PL.killTree(4242, { force: false }, { platform: 'linux', kill: (p, s2) => sig.push([p, s2]) }); PL.killTree(4242, { force: true }, { platform: 'linux', kill: (p, s2) => sig.push([p, s2]) });
+    eq(sig, [[-4242, 'SIGTERM'], [-4242, 'SIGKILL']], 'POSIX kills the process group: TERM then KILL');
+    const sig2 = []; PL.killTree(7, {}, { platform: 'linux', kill: (p) => { sig2.push(p); if (p < 0) throw new Error('ESRCH'); } }); eq(sig2, [-7, 7], 'falls back to the single pid');
+    const wk = []; PL.killTree(9, { force: true }, { platform: 'win32', spawnSync: (c, a, b) => { wk.push([c, ...a]); return { status: 0 }; } }); eq(wk, [['taskkill', '/PID', '9', '/T', '/F']], 'Windows keeps taskkill /T /F');
+    eq(PL.spawnOptions('linux'), { detached: true }); eq(PL.spawnOptions('win32'), { windowsHide: true });
+    eq(PL.affinityCommand(5, '1100', 'linux'), { cmd: 'taskset', args: ['-a', '-p', 'c', '5'] }); assert(/ProcessorAffinity = 12/.test(PL.affinityCommand(5, '1100', 'win32').args[2])); assert.strictEqual(PL.affinityCommand(5, 'x', 'linux'), null);
+    assert.strictEqual(PL.defaultDataDir({ platform: 'linux', env: {}, home: '/home/u' }), path.join('/home/u', '.local', 'share', 'NodeGSM')); assert.strictEqual(PL.defaultDataDir({ platform: 'linux', env: { XDG_DATA_HOME: '/x' }, home: '/h' }), path.join('/x', 'NodeGSM')); assert.strictEqual(PL.defaultDataDir({ platform: 'linux', env: { NODEGSM_DATA: '/d' } }), '/d');
+    assert.strictEqual(PL.defaultDataDir({ platform: 'win32', env: {}, appData: 'C:\\A', exists: () => true }), path.join('C:\\A', 'node-wgsm2026', 'WGSM'), 'legacy Windows data folder still wins'); assert.strictEqual(PL.defaultDataDir({ platform: 'win32', env: {}, appData: 'C:\\A', exists: () => false }), path.join('C:\\A', 'NodeGSM'));
+    const si = PL.steamcmdInfo('/d', 'linux'); assert(/steamcmd_linux\.tar\.gz$/.test(si.url) && /steamcmd\.sh$/.test(si.exe) && si.kind === 'tar'); assert(/steamcmd\.zip$/.test(PL.steamcmdInfo('C:\\d', 'win32').url));
+    eq(PL.tarArgs('/x/steamcmd_linux.tar.gz', '/dest'), ['-xzf', '/x/steamcmd_linux.tar.gz', '-C', '/dest']); eq(PL.tarArgs('/x/a.tar', '/d')[0], '-xf');
+    const sl = new SteamCMD('/d', 'linux'); assert(/steamcmd\.sh$/.test(sl.exe));
+    eq(sl.buildArgs('/srv/g', '740', { validate: true }), ['+force_install_dir', '/srv/g', '+login', 'anonymous', '+app_update', '740', 'validate', '+quit'], 'same arguments on Linux');
+    eq(sl.buildArgs('/srv/g', '740', { validate: false, forcePlatform: 'windows' }).slice(0, 2), ['+@sSteamCmdForcePlatformType', 'windows'], 'platform override goes first'); assert(!sl.buildArgs('/g', '1', { forcePlatform: 'linux' }).includes('+@sSteamCmdForcePlatformType'), 'no override when it equals the host');
+    eq(new SteamCMD('C:\\d', 'win32').buildArgs('D:/x', '90', { validate: true }), ['+force_install_dir', 'D:/x', '+login', 'anonymous', '+app_update', '90', 'validate', '+quit'], 'Windows arguments unchanged');
+    const fwl = PL.firewall({ name: 'n', port: '27015', queryPort: '27015' }, '1', true, 'linux'); assert(!fwl.ok && fwl.unsupported && /ufw allow 27015/.test(fwl.message), 'firewall hint on Linux, nothing executed');
+    // plugin platforms
+    const pbase = { id: 'plat1', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' } };
+    assert(P.validate({ ...pbase, platforms: ['windows', 'linux'] }).errors.length === 0); assert(P.validate({ ...pbase, platforms: ['beos'] }).errors.some((x) => /platforms/.test(x))); assert(P.validate({ ...pbase, platforms: [] }).errors.length > 0);
+    assert(P.validate({ ...pbase, run: { exe: 'a.exe', linux: { exe: '../x' } } }).errors.some((x) => /run\.linux\.exe/.test(x))); assert(P.validate({ ...pbase, run: { exe: 'a.exe', linux: { args: 'no' } } }).errors.some((x) => /run\.linux\.args/.test(x)));
+    assert(P.validate({ ...pbase, install: { type: 'manual', linux: { steps: [{ type: 'steamcmd', appId: 'x' }] } } }).errors.some((x) => /install\.linux\.steps\[0\]\.appId/.test(x))); assert(P.validate({ ...pbase, install: { steps: [{ type: 'steamcmd', appId: '1', platform: 'beos' }] } }).errors.some((x) => /platform/.test(x)));
+    assert(P.validate({ ...pbase, platforms: ['linux', 'windows'], run: { exe: 'a.exe', linux: { exe: 'a', command: 'java', env: { A: 'b' } } }, install: { steps: [{ type: 'steamcmd', appId: '1' }], linux: { steps: [{ type: 'steamcmd', appId: '2', platform: 'linux' }] } } }).errors.length === 0, 'valid linux fields');
+    const csgoM = JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'csgo', 'plugin.json'), 'utf8'));
+    const gl = P.toGame(csgoM, path.join(R, 'plugins', 'csgo'), 'bundled', 'linux'); const gw = P.toGame(csgoM, path.join(R, 'plugins', 'csgo'), 'bundled', 'windows');
+    eq([gl.exe, gw.exe, gl.supported, gl.stdin], ['srcds_run', 'srcds.exe', true, false], 'run.linux overrides exe, keeps args / stdin'); const acfg = { port: '1', param: '', map: 'm', maxPlayers: '2', gslt: '', ip: '' }; eq(gl.args(acfg, { serverFiles: 'x' }), gw.args(acfg, { serverFiles: 'x' }));
+    const rl = P.toGame(JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'rust', 'plugin.json'), 'utf8')), path.join(R, 'plugins', 'rust'), 'bundled', 'linux'); assert(rl.exe === 'RustDedicated' && /x86_64/.test(rl.env.LD_LIBRARY_PATH));
+    const winOnly = P.toGame(JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'cs', 'plugin.json'), 'utf8')), path.join(R, 'plugins', 'cs'), 'bundled', 'linux'); eq([winOnly.supported, winOnly.platforms], [false, ['windows']], 'plugins without platforms are Windows only');
+    const lins = P.toGame({ ...pbase, install: { steps: [{ type: 'steamcmd', appId: '1' }], linux: { steps: [{ type: 'steamcmd', appId: '2' }] } } }, path.join(R, 'plugins', 'csgo'), 'bundled', 'linux'); assert.strictEqual(lins.appId, '2', 'install.linux replaces the install steps on Linux');
+    const linOnly = P.toGame({ ...pbase, id: 'linonly', platforms: ['linux'] }, path.join(R, 'plugins', 'csgo'), 'bundled', 'windows'); P.GAMES.push(linOnly);
+    assert.throws(() => m.create('linonly', 'x'), /not available on this platform/, 'unsupported game refused on the wrong platform'); assert.throws(() => m.importServer('linonly', 'x', dir), /not available on this platform/); P.GAMES.splice(P.GAMES.indexOf(linOnly), 1);
+    const reg = JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'registry.json'), 'utf8')); eq(reg.plugins.filter((x) => x.platforms.includes('linux')).map((x) => x.id).sort(), ['csgo', 'mc', 'palworld', 'rust'], 'registry lists the declared Linux plugins'); assert(reg.plugins.every((x) => Array.isArray(x.platforms)));
+    assert(P.detail('csgo').platforms.includes('linux') && typeof P.detail('csgo').supported === 'boolean');
+    // electron must never load in the headless path
+    const cp = require('child_process');
+    const probe = `const M=require('module');const o=M._resolveFilename;M._resolveFilename=function(r,...a){if(r==='electron'||r.startsWith('electron/'))throw new Error('ELECTRON_BLOCKED');return o.call(this,r,...a)};require(${JSON.stringify(path.join(R, 'src', 'main', 'core.js'))});require(${JSON.stringify(path.join(R, 'src', 'server', 'headless.js'))});console.log('loaded')`;
+    const pr = cp.spawnSync(process.execPath, ['-e', probe], { encoding: 'utf8' }); assert(pr.status === 0 && /loaded/.test(pr.stdout), 'core.js + headless.js load with electron unresolvable: ' + pr.stderr);
+    for (const f of fs.readdirSync(path.join(R, 'src', 'main'), { recursive: true })) if (/\.js$/.test(f) && !/^(main|preload)\.js$/.test(f)) assert(!/require\(['"]electron['"]\)/.test(fs.readFileSync(path.join(R, 'src', 'main', f), 'utf8')), f + ' must not require electron');
+
+    // ---- the headless server ----
+    const { startServer, resolveStatic } = require('../src/server/headless'); const WS = require('ws');
+    const rq = (port, method, p, { headers = {}, body } = {}) => new Promise((res, rej) => { const r = http.request({ host: '127.0.0.1', port, method, path: p, headers }, (x) => { let d = ''; x.on('data', (c) => { d += c; }); x.on('end', () => res({ status: x.statusCode, headers: x.headers, text: d, json: () => JSON.parse(d) })); }); r.on('error', rej); if (body !== undefined) r.write(body); r.end(); });
+    const TOKEN = 'test-token-0123456789';
+    const hdir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-web-'));
+    await assert.rejects(startServer({ dataDir: hdir, host: '0.0.0.0', port: 0, auth: false, startCore: false }), /without authentication/, 'non-loopback bind without auth refused');
+    await assert.rejects(startServer({ dataDir: hdir, host: '192.168.1.5', port: 0, auth: false, startCore: false }), /loopback/);
+    const AUTH = require('../src/server/auth'); const t1 = AUTH.loadToken(path.join(hdir, 'tk'), {}); assert(t1.source === 'generated' && t1.token.length >= 30); const t2 = AUTH.loadToken(path.join(hdir, 'tk'), {}); eq([t2.source, t2.token], ['file', t1.token]); if (process.platform !== 'win32') assert.strictEqual(fs.statSync(path.join(hdir, 'tk', 'web-token')).mode & 0o777, 0o600); assert.strictEqual(AUTH.loadToken(hdir, { NODEGSM_TOKEN: 'abcdefghijkl' }).source, 'env'); assert.throws(() => AUTH.loadToken(hdir, { NODEGSM_TOKEN: 'short' }));
+    assert(AUTH.safeEqual('a', 'a') && !AUTH.safeEqual('a', 'b') && !AUTH.safeEqual('a', 'aa'));
+    const S = await startServer({ dataDir: hdir, port: 0, token: TOKEN, maxFailures: 50, maxBody: 2048 }); const port = S.port; const origin = `http://127.0.0.1:${port}`;
+    const J = { 'Content-Type': 'application/json' };
+    let r = await rq(port, 'GET', '/healthz'); eq([r.status, r.json()], [200, { ok: true }], '/healthz is open and returns only {ok:true}');
+    r = await rq(port, 'POST', '/api/list', { headers: J, body: '{"args":[]}' }); assert.strictEqual(r.status, 401, 'unauthenticated API call');
+    r = await rq(port, 'GET', '/'); assert(r.status === 302 && r.headers.location === '/login.html', 'index redirects to the login page'); assert.strictEqual((await rq(port, 'GET', '/app.js')).status, 401, 'app files need a login');
+    r = await rq(port, 'GET', '/login.html'); assert(r.status === 200 && /connect-src 'self'/.test(r.headers['content-security-policy']) && !/<script>/.test(r.text) && /login\.js/.test(r.text), 'login page: CSP header, no inline script');
+    assert.strictEqual((await rq(port, 'GET', '/login.js')).status, 200);
+    const idx = fs.readFileSync(path.join(R, 'src', 'renderer', 'index.html'), 'utf8'); assert(!/<script>/.test(idx) && idx.indexOf('transport-web.js') < idx.indexOf('app.js') && !/onclick=/.test(idx), 'index.html: no inline scripts, transport before app');
+    const login = (t, h = {}) => rq(port, 'POST', '/login', { headers: { ...J, Origin: origin, ...h }, body: JSON.stringify({ token: t }) });
+    r = await login('wrong-token-xxxxx'); assert.strictEqual(r.status, 401);
+    r = await rq(port, 'POST', '/login', { headers: J, body: JSON.stringify({ token: TOKEN }) }); assert.strictEqual(r.status, 403, 'login without Origin rejected');
+    r = await login(TOKEN, { Origin: 'http://evil.example' }); assert.strictEqual(r.status, 403, 'cross-origin login rejected');
+    r = await rq(port, 'POST', '/login', { headers: { 'Content-Type': 'text/plain', Origin: origin }, body: TOKEN }); assert.strictEqual(r.status, 415, 'JSON content type only');
+    r = await login(TOKEN); assert.strictEqual(r.status, 200); const sc = r.headers['set-cookie'][0]; assert(/HttpOnly/.test(sc) && /SameSite=Strict/.test(sc) && !/Secure/.test(sc) && /Path=\//.test(sc), 'session cookie flags');
+    const cookie = sc.split(';')[0]; assert(!sc.includes(TOKEN), 'the token is never put in the cookie');
+    assert(/Secure/.test((await login(TOKEN, { 'X-Forwarded-Proto': 'https' })).headers['set-cookie'][0]), 'Secure behind an https proxy');
+    const withCookie = { ...J, Cookie: cookie, Origin: origin };
+    r = await rq(port, 'POST', '/api/list', { headers: withCookie, body: '{"args":[]}' }); assert(r.status === 200 && r.json().ok && Array.isArray(r.json().data), 'API round trip with the session cookie');
+    r = await rq(port, 'POST', '/api/games', { headers: withCookie, body: '{}' }); assert(r.json().data.length >= 46 && r.json().data.some((x) => x.id === 'csgo' && x.platforms.includes('linux') && typeof x.supported === 'boolean'), 'games over HTTP with platforms');
+    r = await rq(port, 'POST', '/api/settings', { headers: withCookie, body: '{"args":[]}' }); assert(r.json().ok && r.json().data.theme && !('botToken' in r.json().data.discord), 'settings never carry the bot token');
+    r = await rq(port, 'POST', '/api/saveSettings', { headers: withCookie, body: JSON.stringify({ args: [{ theme: 'light' }] }) }); assert(r.json().ok && r.json().data.theme === 'light', 'saveSettings works headless (no Electron members)');
+    r = await rq(port, 'POST', '/api/platformInfo', { headers: withCookie, body: '{"args":[]}' }); const pinfo = r.json().data; assert(pinfo.mode === 'web' && pinfo.platform === PL.current() && pinfo.features.pickFolder === false && pinfo.features.backupDownload === true, 'platformInfo in web mode');
+    r = await rq(port, 'POST', '/api/pickFolder', { headers: withCookie, body: '{"args":[]}' }); assert(r.json().ok === false && /web mode/.test(r.json().error), 'pickFolder -> unsupported error'); assert(/restart/i.test((await rq(port, 'POST', '/api/relaunch', { headers: withCookie, body: '{}' })).json().error), 'relaunch -> restart hint');
+    r = await rq(port, 'POST', '/api/get', { headers: withCookie, body: '{"args":["999"]}' }); assert.strictEqual(r.json().data, null, 'null results survive JSON');
+    r = await rq(port, 'POST', '/api/nope', { headers: withCookie, body: '{}' }); assert.strictEqual(r.status, 404); assert.strictEqual((await rq(port, 'POST', '/api/constructor', { headers: withCookie, body: '{}' })).status, 404, 'prototype names are not channels'); assert.strictEqual((await rq(port, 'POST', '/api/__proto__', { headers: withCookie, body: '{}' })).status, 404);
+    r = await rq(port, 'POST', '/api/list', { headers: { ...withCookie, Origin: 'http://evil.example' }, body: '{}' }); assert.strictEqual(r.status, 403, 'cross-origin POST rejected');
+    r = await rq(port, 'POST', '/api/list', { headers: { ...J, Cookie: cookie }, body: '{}' }); assert.strictEqual(r.status, 403, 'POST without Origin rejected for cookie sessions');
+    r = await rq(port, 'POST', '/api/list', { headers: { 'Content-Type': 'text/plain', Cookie: cookie, Origin: origin }, body: '{}' }); assert.strictEqual(r.status, 415);
+    r = await rq(port, 'POST', '/api/list', { headers: withCookie, body: '{not json' }); assert.strictEqual(r.status, 400); r = await rq(port, 'POST', '/api/list', { headers: withCookie, body: '{"args":5}' }); assert.strictEqual(r.status, 400); assert.strictEqual((await rq(port, 'GET', '/api/list', { headers: withCookie })).status, 405);
+    r = await rq(port, 'POST', '/api/list', { headers: withCookie, body: JSON.stringify({ args: ['x'.repeat(5000)] }) }); assert.strictEqual(r.status, 413, 'request body limit');
+    r = await rq(port, 'POST', '/api/list', { headers: { ...J, Authorization: 'Bearer ' + TOKEN }, body: '{"args":[]}' }); assert(r.status === 200 && r.json().ok, 'bearer token accepted (no Origin needed)');
+    assert.strictEqual((await rq(port, 'POST', '/api/list', { headers: { ...J, Authorization: 'Bearer nope-nope-nope' }, body: '{}' })).status, 401);
+    r = await rq(port, 'GET', '/', { headers: { Cookie: cookie } }); assert(r.status === 200 && /<title>NodeGSM/.test(r.text) && /connect-src/.test(r.headers['content-security-policy']) && r.headers['x-frame-options'] === 'DENY', 'index served after login');
+    assert.strictEqual((await rq(port, 'GET', '/assets/logo.svg')).status, 200, 'logo is public (login page)');
+    for (const p of ['/../package.json', '/%2e%2e/package.json', '/..%5Cpackage.json', '/assets/../package.json', '/assets/%2e%2e/package.json', '/.git/config', '/app.js%00.png', '/%00', '/main.js/../../main/main.js', '//etc/passwd', '/index.html/../../../package.json', '/..%2fpackage.json']) { r = await rq(port, 'GET', p, { headers: { Cookie: cookie } }); assert(r.status === 404 || r.status === 400, 'traversal rejected: ' + p + ' -> ' + r.status); assert(!/"name": "nodegsm"/.test(r.text)); }
+    assert.strictEqual(resolveStatic('/../package.json'), null); assert.strictEqual(resolveStatic('/assets/../src/main/main.js'), null); assert(resolveStatic('/app.js') && resolveStatic('/assets/logo.svg')); assert.strictEqual(resolveStatic('/secret.txt'), null);
+    // backup download: authenticated and confined
+    fs.mkdirSync(path.join(hdir, 'backups', '1'), { recursive: true }); fs.writeFileSync(path.join(hdir, 'backups', '1', 'x.zip'), 'ZIPDATA'); fs.writeFileSync(path.join(hdir, 'outside.zip'), 'SECRET');
+    assert.strictEqual((await rq(port, 'GET', '/download/backup?folder=1&file=x.zip')).status, 401, 'download needs auth');
+    r = await rq(port, 'GET', '/download/backup?folder=1&file=x.zip', { headers: { Cookie: cookie } }); assert(r.status === 200 && r.text === 'ZIPDATA' && /attachment; filename="x\.zip"/.test(r.headers['content-disposition']) && r.headers['content-type'] === 'application/zip');
+    for (const q of ['folder=..&file=outside.zip', 'folder=1&file=../../outside.zip', 'folder=1&file=..%2f..%2foutside.zip', 'folder=1%2f..&file=x.zip', 'folder=1&file=nothere.zip', 'folder=&file=', 'folder=1&file=x.txt']) { r = await rq(port, 'GET', '/download/backup?' + q, { headers: { Cookie: cookie } }); assert(r.status >= 400 && !/SECRET|ZIPDATA/.test(r.text), 'download confined: ' + q + ' -> ' + r.status); }
+    // WebSocket: auth + origin checks, then events from a fake game server
+    const wsUrl = `ws://127.0.0.1:${port}/ws`;
+    const wsFail = (opts) => new Promise((res) => { const w = new WS(wsUrl, opts); w.on('unexpected-response', (_q, x) => { res(x.statusCode); w.terminate(); }); w.on('open', () => { res(101); w.close(); }); w.on('error', () => {}); });
+    assert.strictEqual(await wsFail({ headers: { Origin: origin } }), 401, 'WebSocket needs auth'); assert.strictEqual(await wsFail({ headers: { Cookie: cookie, Origin: 'http://evil.example' } }), 403, 'cross-origin WebSocket rejected');
+    const msgs = []; const ws1 = new WS(wsUrl, { headers: { Cookie: cookie, Origin: origin } }); ws1.on('message', (d) => msgs.push(JSON.parse(String(d)))); await new Promise((res, rej) => { ws1.on('open', res); ws1.on('error', rej); });
+    const wfake = path.join(hdir, 'fakegame'); fs.mkdirSync(wfake); fs.copyFileSync(process.execPath, path.join(wfake, P.byId('sw').exe));
+    const sv = S.core.mgr.importServer('sw', 'WebFake', wfake); S.core.mgr.saveConfig(sv.id, { param: '-e "console.log(\'web-hello\');process.stdin.on(\'data\',d=>{if(/quit/.test(d))process.exit(0)});setInterval(()=>{},1000)"' });
+    r = await rq(port, 'POST', '/api/start', { headers: withCookie, body: JSON.stringify({ args: [sv.id] }) }); assert(r.json().ok, 'start through the API: ' + r.text); await sleep(1500);
+    assert(msgs.some((x) => x.ch === 'status' && x.payload.id === sv.id && x.payload.status === 'Started'), 'status event over WebSocket'); assert(msgs.some((x) => x.ch === 'console' && x.payload.id === sv.id && /web-hello/.test(x.payload.line)), 'console event over WebSocket');
+    assert(msgs.some((x) => x.ch === 'status' && x.payload.pid), 'status carries the pid');
+    r = await rq(port, 'POST', '/api/stop', { headers: withCookie, body: JSON.stringify({ args: [sv.id] }) }); await sleep(500); assert(msgs.some((x) => x.ch === 'status' && x.payload.status === 'Stopped'), 'stop event');
+    // logout + session expiry
+    r = await rq(port, 'POST', '/logout', { headers: withCookie, body: '{}' }); assert.strictEqual(r.status, 200); assert.strictEqual((await rq(port, 'POST', '/api/list', { headers: withCookie, body: '{}' })).status, 401, 'logged-out cookie is dead');
+    const sess = new AUTH.Sessions({ ttlMs: 1000, now: () => sess._t }); sess._t = 0; const ck = sess.create(); assert(sess.valid(ck)); sess._t = 999; assert(sess.valid(ck)); sess._t = 1001; assert(!sess.valid(ck), 'sessions expire'); assert(!sess.valid(ck.slice(0, -2) + 'xx') && !sess.valid('abc'));
+    ws1.close(); await S.close();
+    // rate limit on failed logins
+    const S2 = await startServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-web2-')), port: 0, token: TOKEN, maxFailures: 3, startCore: false }); const o2 = `http://127.0.0.1:${S2.port}`;
+    const l2 = (t) => rq(S2.port, 'POST', '/login', { headers: { ...J, Origin: o2 }, body: JSON.stringify({ token: t }) });
+    assert.strictEqual((await l2('bad-token-aaaaa')).status, 401); assert.strictEqual((await l2('bad-token-bbbbb')).status, 401); r = await l2('bad-token-ccccc'); assert(r.status === 429 && +r.headers['retry-after'] > 0, 'locked after repeated failures');
+    assert.strictEqual((await l2(TOKEN)).status, 429, 'even the right token is refused while locked'); assert.strictEqual((await rq(S2.port, 'POST', '/api/list', { headers: { ...J, Authorization: 'Bearer ' + TOKEN }, body: '{}' })).status, 429, 'bearer is locked too');
+    assert.strictEqual((await rq(S2.port, 'GET', '/healthz')).status, 200, 'healthz stays open'); await S2.close();
+    // auth disabled is loopback only and still enforces same-origin
+    const S3 = await startServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-web3-')), port: 0, auth: false, startCore: false });
+    assert.strictEqual((await rq(S3.port, 'POST', '/api/list', { headers: { ...J, Origin: 'http://evil.example' }, body: '{}' })).status, 403, 'no-auth mode still rejects cross-origin posts'); assert.strictEqual((await rq(S3.port, 'POST', '/api/list', { headers: { ...J, Origin: `http://127.0.0.1:${S3.port}` }, body: '{}' })).status, 200); await S3.close();
+    const ha = require('../src/server/headless').parseArgs(['--port', '9000', '--host', '127.0.0.1', '--https'], {}); eq([ha.port, ha.https, ha.auth], [9000, true, true]); assert.throws(() => require('../src/server/headless').parseArgs(['--bogus'], {}));
+    // files and docs exist
+    for (const f of ['Dockerfile', '.dockerignore', 'docker-compose.example.yml', 'deploy/nodegsm.service', 'deploy/nginx.conf.example', 'docs/GUIDE-web-linux.md', 'src/renderer/transport-web.js', 'src/renderer/login.html', 'src/renderer/login.js']) assert(fs.existsSync(path.join(R, f)), f + ' exists');
+    const df = fs.readFileSync(path.join(R, 'Dockerfile'), 'utf8'); assert(/node:20-slim/.test(df) && /USER /.test(df) && /VOLUME/.test(df) && /8730/.test(df) && /healthz/.test(df), 'Dockerfile basics');
+    const pj9 = JSON.parse(fs.readFileSync(path.join(R, 'package.json'), 'utf8')); assert(pj9.scripts.serve && pj9.scripts['serve:dev'] && pj9.bin.nodegsm && /^\d+\.\d+\.\d+$/.test(pj9.dependencies.ws), 'package.json: serve scripts, bin and a pinned ws');
+    fs.rmSync(hdir, { recursive: true, force: true });
+  }
+
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);

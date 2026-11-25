@@ -104,6 +104,29 @@ Or a list of **steps**, run in order. Everything happens inside the server's fil
 - `stdin: false` for srcds/hlds (a redirected console input breaks them). Console commands are disabled for those.
 - `stopCommand` is written to the console to stop gracefully; NodeGSM then sends a soft `taskkill`, and force-kills after 15 s.
 
+#### Platforms and Linux
+Plugins are **Windows only** unless they declare otherwise. All of these fields are optional:
+```json
+"platforms": ["windows", "linux"],
+"run": {
+  "exe": "srcds.exe",
+  "stdin": false,
+  "linux": { "exe": "srcds_run", "env": { "LD_LIBRARY_PATH": "{serverFiles}/bin" } },
+  "args": ["-console", ["-game", "csgo"]]
+},
+"install": {
+  "type": "steamcmd", "appId": "740",
+  "linux": { "steps": [ { "type": "steamcmd", "appId": "740", "platform": "linux" } ] }
+}
+```
+- `platforms` - `windows` and / or `linux` (default `["windows"]`). NodeGSM refuses to create or import a server of a game that does not list the current OS, and shows a **not available on this platform** badge in the game browser and *Add Server*. Only declare `linux` when the game has a Linux server build you checked; say in the plugin README what you tested.
+- `run.linux` - overrides on Linux: `exe`, `command`, `workingDir`, `args`, `stdin`, `stopCommand`, `env`. Keys you leave out fall back to the plain `run` values; setting `exe` without `command` drops the plain `command`.
+- `run.env` - extra environment variables for the server process (any OS; `{serverFiles}` is replaced by the files folder).
+- `install.linux` - same shape as `install` (`{ "steps": [...] }` or a shorthand), used instead of it on Linux.
+- A `steamcmd` step may set `"platform": "linux"` (or `"windows"`): NodeGSM then adds `+@sSteamCmdForcePlatformType <platform>` as the first SteamCMD argument, but only when it differs from the host OS (for depots that exist for one platform only).
+- On Linux NodeGSM makes the executable runnable (`chmod 755`) before it starts it and starts the server in its own process group (stop = console command, `SIGTERM`, then `SIGKILL`).
+- `registry.json` lists `platforms` for every plugin. Currently declared for Linux (**declared, untested**): `mc`, `csgo`, `rust`, `palworld`.
+
 #### Argument templates (`run.args`)
 Each list item becomes one command-line argument.
 | Item | Meaning |

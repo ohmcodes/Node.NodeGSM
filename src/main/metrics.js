@@ -4,7 +4,7 @@
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const platform = require('./platform');
 const { EventEmitter } = require('events');
 const { byId } = require('./plugins');
 const { LogTail } = require('./logTail');
@@ -14,23 +14,7 @@ const HISTORY = 360;              // points kept (5 s apart = 30 minutes)
 const DEFAULT_STALE_MS = 120000;
 const LATENCY_FRESH_MS = 60000;   // the query round trip counts as 'latency' for this long after the last poll
 
-/** One PowerShell call returns every process; we sum each server's process tree. */
-function readProcesses() {
-  return new Promise((resolve) => {
-    const cmd = 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,WorkingSetSize,KernelModeTime,UserModeTime,ThreadCount | ConvertTo-Csv -NoTypeInformation';
-    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { windowsHide: true, maxBuffer: 32 * 1024 * 1024, timeout: 20000 }, (err, out) => {
-      if (err) return resolve(null);
-      const rows = [];
-      for (const line of String(out).split(/\r?\n/).slice(1)) {
-        const f = line.match(/"([^"]*)"/g);
-        if (!f || f.length < 6) continue;
-        const n = f.map((x) => Number(x.slice(1, -1)) || 0);
-        rows.push({ pid: n[0], ppid: n[1], mem: n[2], cpuTime: n[3] + n[4], threads: n[5] });
-      }
-      resolve(rows);
-    });
-  });
-}
+const readProcesses = () => platform.readProcesses();   // win32: PowerShell CIM, Linux: /proc (see platform.js)
 
 function treeTotals(rows, rootPid) {
   const kids = new Map();

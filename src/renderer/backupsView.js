@@ -31,12 +31,18 @@ function bkRowHtml(r, withServer) {
     <td><span class="mbadge ${esc(r.mode)}">${bkMode(r)}</span></td><td class="bk-cont" title="${esc(c.title)}">${esc(c.text)}${r.pluginMissing ? ' <span class="badge bk-del">plugin missing</span>' : ''}</td>
     <td class="bk-act"><button data-a="restore" ${srvOk ? '' : 'disabled'} title="${srvOk ? 'Restore into this server' : 'The server no longer exists'}">Restore</button>
       <button data-a="new" ${r.pluginMissing ? 'disabled' : ''} title="Create a new server from this backup">Restore as new server</button>
-      <button data-a="open" title="Show the file in its folder">Open folder</button><button data-a="del" class="danger">Delete</button></td></tr>`;
+      <button data-a="open" title="${bkWeb() ? 'Download the zip' : 'Show the file in its folder'}">${bkWeb() ? 'Download' : 'Open folder'}</button><button data-a="del" class="danger">Delete</button></td></tr>`;
 }
+
+const bkWeb = () => typeof isWeb === 'function' && isWeb();
 
 /** Actions shared by both screens. row = the listing object; done = refresh callback. */
 async function bkAct(act, r, done) {
-  if (act === 'open') return run('backupDownload', r.folder, r.file);
+  if (act === 'open') {
+    // web mode: real download through the authenticated HTTP endpoint; desktop: reveal the zip in Explorer
+    if (typeof isWeb === 'function' && isWeb()) { window.location.href = `/download/backup?folder=${encodeURIComponent(r.folder)}&file=${encodeURIComponent(r.file)}`; return; }
+    return run('backupDownload', r.folder, r.file);
+  }
   if (act === 'del') {
     if (!confirm(`Delete ${r.file}?This cannot be undone.`)) return;
     if ((await run('deleteBackup', r.folder, r.file)) !== undefined) { toast('Backup deleted'); done(); }

@@ -1,0 +1,52 @@
+# systemd unit for the NodeGSM headless server (web mode).
+# Install:  sudo useradd --system --create-home --home-dir /var/lib/nodegsm nodegsm
+#           sudo cp deploy/nodegsm.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now nodegsm
+# First token:  sudo journalctl -u nodegsm | grep -A2 "access token"   (or read /var/lib/nodegsm/web-token)
+[Unit]
+Description=NodeGSM game server manager (web mode)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nodegsm
+Group=nodegsm
+WorkingDirectory=/opt/nodegsm
+Environment=NODE_ENV=production
+Environment=NODEGSM_DATA=/var/lib/nodegsm
+Environment=NODEGSM_HOST=127.0.0.1
+Environment=NODEGSM_PORT=8730
+# Behind a TLS reverse proxy:
+#Environment=NODEGSM_HTTPS=1
+#Environment=NODEGSM_TRUST_PROXY=1
+# Optional fixed token instead of /var/lib/nodegsm/web-token (put secrets in an EnvironmentFile with mode 0600):
+#EnvironmentFile=/etc/nodegsm.env
+ExecStart=/usr/bin/node /opt/nodegsm/src/server/headless.js
+Restart=on-failure
+RestartSec=5
+# SIGTERM stops the game servers gracefully; give them time
+TimeoutStopSec=90
+KillMode=control-group
+
+# ---- hardening (game servers run as children, so keep what they need writable) ----
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nodegsm
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Game servers listen on high ports: no privileged ports, no raw sockets
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

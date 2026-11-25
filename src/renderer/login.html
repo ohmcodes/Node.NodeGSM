@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>NodeGSM - Sign in</title>
+<link rel="icon" type="image/png" href="/assets/icon-32.png">
+<script src="theme-boot.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-page" style="display:flex;align-items:center;justify-content:center;min-height:100vh">
+<form id="loginForm" autocomplete="off" style="width:min(380px,92vw);padding:28px;border:1px solid var(--line);border-radius:12px;background:var(--panel)">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><img src="/assets/logo.svg" alt="" width="34" height="34"><h2 style="margin:0">Node<b>GSM</b></h2></div>
+  <p class="muted" style="margin:0 0 16px">Enter the access token printed on first start (or set in <code>NODEGSM_TOKEN</code>).</p>
+  <label for="loginToken" class="small">Access token</label>
+  <input id="loginToken" type="password" autocomplete="current-password" required style="width:100%;margin:6px 0 14px">
+  <button id="loginBtn" type="submit" class="primary" style="width:100%">Sign in</button>
+  <p id="loginMsg" role="alert" style="color:var(--bad);min-height:1.2em;margin:12px 0 0"></p>
+</form>
+<script src="login.js"></script>
+</body>
+</html>

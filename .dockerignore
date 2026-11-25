@@ -1,0 +1,16 @@
+node_modules
+.git
+.github
+.claude
+dist
+build
+website
+docs
+test
+scripts
+*.md
+!README.md
+docker-compose*.yml
+deploy
+.env
+**/*.log

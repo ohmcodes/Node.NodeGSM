@@ -13,6 +13,17 @@ npm start
 npm test        # tests + plugin validation
 ```
 
+## Run in a browser (web mode, Linux)
+NodeGSM also runs without Electron as a headless server you control from a browser, on Windows or Linux:
+```
+npm ci --omit=dev      # no Electron needed
+npm run serve          # http://127.0.0.1:8730 - the first start prints the access token once
+```
+- Login with the access token (`NODEGSM_TOKEN`, or generated into `<data>/web-token`), session cookie, rate-limited. Binds `127.0.0.1` by default; it refuses a public bind without authentication. There is **no built-in TLS**: put a reverse proxy in front (`deploy/nginx.conf.example`).
+- Docker: `docker compose -f docker-compose.example.yml up -d --build` (see `Dockerfile`); systemd: `deploy/nodegsm.service`.
+- **Security notes:** the token gives full control of your game servers (files, console, RCON) - use a long token, TLS, a dedicated unprivileged user and publish only the game ports. Desktop-only features (folder picker, open in Explorer, tray, start on login, restart) are hidden in web mode.
+- **Linux is declared but untested:** the platform layer is unit-tested only and the games `mc`, `csgo`, `rust`, `palworld` are *declared, untested* for Linux. Everything else stays Windows only. Full guide: [docs/GUIDE-web-linux.md](docs/GUIDE-web-linux.md).
+
 ## Build an exe
 ```
 npm run dist    # installer + portable exe in dist/
@@ -49,6 +60,7 @@ The logo is hand-written SVG in [`assets/`](assets) (`logo.svg` mark, `logo-word
 | [docs/GUIDE-backups.md](docs/GUIDE-backups.md) | full / neat-pick backups, retention, restore, restore as new server, the Backups screen |
 | [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md) | clusters: create, update, config sync (protected keys, `NGSM:ignore`), clear folders |
 | [docs/GUIDE-logging.md](docs/GUIDE-logging.md) | the NGSM event log: where it is, the format, retention, plugin patterns, the Logs screen |
+| [docs/GUIDE-web-linux.md](docs/GUIDE-web-linux.md) | web mode and Linux: install on Ubuntu / Debian, systemd, Docker, nginx + TLS, first login, hardening checklist, what does not work in web mode, per-game Linux caveats |
 | [docs/GUIDE-discord.md](docs/GUIDE-discord.md) | Discord webhook alerts, the embed editor, per-server overrides, the slash-command bot (setup, permissions, token warning) |
 | [docs/README.md](docs/README.md) | index of all guides and technical documents |
 | [docs/TECH-architecture.md](docs/TECH-architecture.md) | event bus, services, log format, data files (for contributors) |
@@ -62,12 +74,12 @@ The logo is hand-written SVG in [`assets/`](assets) (`logo.svg` mark, `logo-word
 | [website/](website) | the NodeGSM website with its own community backend (ratings, comments, editable game info). Reads a plugin catalog (`npm run catalog`); `npm run site` then `npm run site:serve`. See [website/README.md](website/README.md) |
 
 ## Data location
-Servers, backups, user plugins and SteamCMD live in `%APPDATA%\NodeGSM` (override with the `NODEGSM_DATA` env var).
+Servers, backups, user plugins and SteamCMD live in `%APPDATA%\NodeGSM` on Windows and in `$XDG_DATA_HOME/NodeGSM` (default `~/.local/share/NodeGSM`) on Linux (override with the `NODEGSM_DATA` env var).
 If you ran the app before the rename, the old folder `%APPDATA%\node-wgsm2026\WGSM` is still used.
 
 ## Not done yet
 Planned or open (see [FEATURES.md](FEATURES.md) and [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md)):
-- **Web / Linux version** (headless server, Linux platform layer, Docker / systemd): planned, built last - not started.
+- **Web / Linux version:** built (🧪): the headless server, login, Docker / systemd / nginx files and the Linux platform layer exist, but nothing was run on a real Linux machine and only four games are declared for Linux. See [docs/GUIDE-web-linux.md](docs/GUIDE-web-linux.md).
 - **Scheduled (cron) backups**, scanning of `logging.logFiles`, a mod manager, Steam account login, a converter for WindowsGSM C# plugins, an online plugin repository, published releases.
 - **Untested against the real thing** (marked 🧪 in FEATURES.md): clusters, config sync, the Discord bot and webhooks, RCON and tick patterns, large backups, auto-clear on live servers. Use [docs/TESTING-CHECKLIST.md](docs/TESTING-CHECKLIST.md).
 

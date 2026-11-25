@@ -90,8 +90,8 @@
     </div>
     <div class="gb-right">
       <div class="row wrap">
-        <button type="button" id="plZip" class="primary">Install plugin (ZIP)</button><button type="button" id="plFolder">Install plugin (folder)</button>
-        <button type="button" id="plReload">Reload</button><button type="button" id="plOpen">Plugins folder</button>
+        <button type="button" id="plZip" class="primary desktop-only">Install plugin (ZIP)</button><button type="button" id="plFolder" class="desktop-only">Install plugin (folder)</button>
+        <button type="button" id="plReload">Reload</button><button type="button" id="plOpen" class="desktop-only">Plugins folder</button>
         
       </div>
       <div id="gbErr"></div>
@@ -114,13 +114,13 @@
     <p class="muted small" style="margin:0">Used by the <b>Table</b> and <b>Dashboard</b> views. Columns from game plugins (FPS, tick rate ...) show up when your games declare them.</p>
     <div id="setCols" class="colgrid"></div>
     <div class="row"><button type="button" id="setColsReset">Reset to default</button></div>
-    <h4>Performance</h4>
-    <label class="srow"><span>Hardware acceleration<small>Turn off if the window flickers or the GPU misbehaves. Applies after a restart.</small></span><input type="checkbox" class="switch" id="setHw"></label>
-    <div class="srow" id="hwNote" hidden><span class="muted">Restart NodeGSM to apply the hardware acceleration change. Running servers are stopped first.</span><button type="button" id="setRestart" class="primary">Restart now</button></div>
-    <h4>Startup</h4>
-    <label class="srow"><span>Start NodeGSM on Windows login<small>Servers flagged Auto Start will launch.</small></span><input type="checkbox" class="switch" id="setLogin"></label>
-    <label class="srow"><span>Minimize to tray on close</span><input type="checkbox" class="switch" id="setTray"></label>
-    <label class="srow"><span>Auto restart NodeGSM on crash<small>Relaunches at most 3 times in 10 minutes. Crashes are logged to logs/crash.log.</small></span><input type="checkbox" class="switch" id="setCrash"></label>
+    <h4 class="desktop-only">Performance</h4>
+    <label class="srow desktop-only"><span>Hardware acceleration<small>Turn off if the window flickers or the GPU misbehaves. Applies after a restart.</small></span><input type="checkbox" class="switch" id="setHw"></label>
+    <div class="srow desktop-only" id="hwNote" hidden><span class="muted">Restart NodeGSM to apply the hardware acceleration change. Running servers are stopped first.</span><button type="button" id="setRestart" class="primary">Restart now</button></div>
+    <h4 class="desktop-only">Startup</h4>
+    <label class="srow desktop-only"><span>Start NodeGSM on Windows login<small>Servers flagged Auto Start will launch.</small></span><input type="checkbox" class="switch" id="setLogin"></label>
+    <label class="srow desktop-only"><span>Minimize to tray on close</span><input type="checkbox" class="switch" id="setTray"></label>
+    <label class="srow desktop-only"><span>Auto restart NodeGSM on crash<small>Relaunches at most 3 times in 10 minutes. Crashes are logged to logs/crash.log.</small></span><input type="checkbox" class="switch" id="setCrash"></label>
     <p class="muted small">Changes are saved immediately. NodeGSM sends no statistics or telemetry.</p>
   </div>
 </section>
@@ -228,7 +228,7 @@
     <div id="gamePick" class="gamepick"></div>
     <label>Server name <input id="addName" placeholder="My server"></label>
     <label id="addDirRow" hidden>Existing folder
-      <div class="row"><input id="addDir" readonly><button type="button" id="addBrowse">Browse</button></div>
+      <div class="row"><input id="addDir" readonly><button type="button" id="addBrowse" class="desktop-only">Browse</button></div>
     </label>
     <div class="row end">
       <button type="button" id="addCancel">Cancel</button>
@@ -279,6 +279,7 @@
 </dialog>
 
 <div id="toast"></div>
+<script src="transport-web.js"></script>
 <script src="links.js"></script>
 <script src="tick.js"></script>
 <script src="app.js"></script>

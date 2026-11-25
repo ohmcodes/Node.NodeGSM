@@ -1,29 +1,18 @@
 'use strict';
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, nativeTheme } = require('electron');
 const path = require('path');
-const { ServerManager } = require('./serverManager');
-const { GAMES, detail: pluginDetail } = require('./plugins');
+const platform = require('./platform');
 const appSettings = require('./settings');
-const { MetricsCollector } = require('./metrics');
 const { shouldRestart } = require('./crash');
-const { buildApi } = require('./api');
-const { EventLog } = require('./services/eventLog');
-const { Discord } = require('./services/discord');
-const { DiscordBot } = require('./services/discordBot');
-const { BackupService } = require('./services/backup');
-const { Cluster } = require('./services/cluster');
-const { AutoClear } = require('./services/autoClear');
-const { Consoles } = require('./services/consoles');
+const { createCore } = require('./core');
 
-// Keep using the pre-rename data folder if it exists so existing servers/downloads are not orphaned.
-const legacyDir = path.join(app.getPath('appData'), 'node-wgsm2026', 'WGSM');
-const dataDir = process.env.NODEGSM_DATA || process.env.WGSM_DATA ||
-  (require('fs').existsSync(legacyDir) ? legacyDir : path.join(app.getPath('appData'), 'NodeGSM'));
+// Keep using the pre-rename data folder if it exists so existing servers/downloads are not orphaned (platform.defaultDataDir).
+const dataDir = platform.defaultDataDir({ appData: app.getPath('appData') });
 const earlySettings = appSettings.read(dataDir);
 if (!earlySettings.hardwareAcceleration) app.disableHardwareAcceleration();
 nativeTheme.themeSource = earlySettings.theme; // dialogs / menus follow the chosen theme
 
-let mgr; let win; let tray; let quitting = false; let collector; let services = [];
+let core; let mgr; let win; let tray; let quitting = false;
 const BG = { dark: '#14161c', light: '#f3f5f9' };
 const currentBg = () => BG[appSettings.resolveTheme(mgr ? mgr.settings.theme : earlySettings.theme, nativeTheme.shouldUseDarkColors)];
 
@@ -47,11 +36,6 @@ async function onCrash(kind, err) {
 }
 process.on('uncaughtException', (e) => onCrash('uncaughtException', e));
 process.on('unhandledRejection', (e) => onCrash('unhandledRejection', e));
-
-function publicGames() {
-  return GAMES.map(({ id, name, icon, description, tags, port, queryPort, map, maxPlayers, additional, appId, query, gslt, source, author, version, overrides }) =>
-    ({ id, name, icon, description, tags, port, queryPort, map, maxPlayers, additional, appId, query, gslt: !!gslt, source, author, version, overrides: !!overrides }));
-}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -79,39 +63,18 @@ function handle(name, fn) {
 }
 
 app.whenReady().then(() => {
-  mgr = new ServerManager(dataDir);
-  mgr.on('status', (v) => send('status', v));
-  mgr.on('console', (m) => send('console', m));
-  mgr.on('removed', (id) => send('removed', id));
-  mgr.on('logLines', (m) => send('logLines', m));
-  mgr.on('consoleOut', (m) => send('consoleOut', m));
-  collector = new MetricsCollector(mgr);
-  collector.on('metrics', (m) => send('metrics', m));
-
-  // Services subscribe to mgr.events (see services/*.js)
-  const instances = [EventLog, Discord, DiscordBot, BackupService, Cluster, AutoClear, Consoles].map((S) => new S(mgr, require('./plugins'), mgr.settings, dataDir));
-  services = instances;
-  const [eventLog, discord] = instances;
-  const cluster = instances.find((x) => x instanceof Cluster);
-  const autoClear = instances.find((x) => x instanceof AutoClear);
-  const consoles = instances.find((x) => x instanceof Consoles);
-  const discordBot = instances.find((x) => x instanceof DiscordBot);
-  discordBot.collector = collector;
-  discordBot.onStatus = (st) => send('discordBot', st);
-  cluster.onProgress = (p) => send('cluster:progress', p);
-
-  const api = buildApi({
-    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord, discordBot, cluster, autoClear, consoles,
+  core = createCore({ dataDir, mode: 'desktop' });
+  mgr = core.mgr;
+  core.hub.on(send);
+  const api = core.buildApi({
+    shell, dialog, app, nativeTheme, currentBg,
     getWin: () => win,
     beforeRelaunch: () => { quitting = 'done'; },
   });
   for (const [name, fn] of Object.entries(api)) handle(name, fn);
-  services.forEach((s) => s.start());
 
   createWindow();
-  mgr.startScheduler();
-  collector.start();
-  mgr.autoStartAll();
+  core.start();
 
   // tray: 16 px image + 32 px representation for high-DPI screens (falls back to resizing the 256 px icon)
   const assetsDir = path.join(__dirname, '..', '..', 'assets');
@@ -131,8 +94,8 @@ app.on('before-quit', async (e) => {
   if (quitting === 'done') return;
   e.preventDefault();
   quitting = true;
-  try { collector.stop(); await Promise.all(services.map((x) => Promise.resolve(x.stop()).catch(() => {}))); await mgr.shutdown(); } catch {}
+  try { await core.stop(); } catch {}
   quitting = 'done';
   app.quit();
 });
-app.on('window-all-closed', () => { if (!mgr.settings.minimizeToTray) app.quit(); });
+app.on('window-all-closed', () => { if (!mgr || !mgr.settings.minimizeToTray) app.quit(); });

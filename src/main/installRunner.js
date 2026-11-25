@@ -6,6 +6,7 @@ const https = require('https');
 const http = require('http');
 const { spawn, spawnSync } = require('child_process');
 const AdmZip = require('adm-zip');
+const platform = require('./platform');
 
 const UA = { 'User-Agent': 'NodeGSM' };
 
@@ -47,9 +48,10 @@ async function download(url, dest, onProgress) {
 function extract(file, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
   if (/\.zip$/i.test(file)) { new AdmZip(file).extractAllTo(destDir, true); return; }
-  // 7z, tar.gz, ... : Windows 10/11 ships bsdtar which reads these
-  const r = spawnSync('tar', ['-xf', file, '-C', destDir], { windowsHide: true });
-  if (r.status !== 0) throw new Error(`Could not extract ${path.basename(file)} (needs Windows tar, or install 7-Zip): ${String(r.stderr || '').trim()}`);
+  // 7z, tar.gz, ... : Windows 10/11 ships bsdtar which reads these; Linux uses GNU tar (gzip is detected from the name)
+  const win = platform.isWindows();
+  const r = spawnSync('tar', win ? ['-xf', file, '-C', destDir] : platform.tarArgs(file, destDir), { windowsHide: true });
+  if (r.status !== 0) throw new Error(`Could not extract ${path.basename(file)} (needs ${win ? 'Windows tar, or install 7-Zip' : 'tar'}): ${String(r.stderr || '').trim()}`);
 }
 
 /** Resolve a plugin-relative path inside the server files folder; refuses to escape it. */
@@ -83,7 +85,7 @@ async function runInstall(game, env) {
     i += 1;
     log(`[step ${i}/${steps.length}] ${s.type}${s.appId ? ' ' + s.appId : s.url ? ' ' + fill(s.url, vars) : ''}`);
     if (s.type === 'steamcmd') {
-      const code = await steam.install(dir, s.appId, { validate: s.validate !== false, validateArgs: validateArgs.steamcmd, mod: s.mod, repeat: s.repeat, beta: s.beta, onProgress }, log);
+      const code = await steam.install(dir, s.appId, { forcePlatform: s.platform, validate: s.validate !== false, validateArgs: validateArgs.steamcmd, mod: s.mod, repeat: s.repeat, beta: s.beta, onProgress }, log);
       if (code !== 0) throw new Error(`SteamCMD exited with code ${code} - the download did not complete`);
     } else if (s.type === 'download') {
       const to = inside(dir, fill(s.to, vars));
@@ -97,6 +99,7 @@ async function runInstall(game, env) {
     } else if (s.type === 'run') {
       const exe = path.isAbsolute(s.exe) ? s.exe : inside(dir, fill(s.exe, vars));
       await new Promise((resolve, reject) => {
+        platform.makeExecutable(exe);
         const p = spawn(exe, (s.args || []).map((a) => fill(a, vars)), { cwd: s.cwd ? inside(dir, s.cwd) : dir, windowsHide: true });
         const pipe = (st) => st.on('data', (d) => d.toString().split(/\r?\n/).filter(Boolean).forEach(log));
         pipe(p.stdout); pipe(p.stderr);

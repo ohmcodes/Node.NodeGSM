@@ -102,6 +102,24 @@ Follow [GUIDE-discord.md](GUIDE-discord.md) > "Set it up".
 - [ ] Settings > columns: add / remove / reset. *Table and Dashboard follow.*
 - [ ] Dashboard: leave it open for 5 minutes with a server running. *CPU / memory / players update every 5 s; the history chart fills; follows the theme.*
 
+## 12. Web mode and Linux (needs a Linux box or VM; web mode alone also works on Windows)
+Web mode (any OS):
+- [ ] `NODEGSM_DATA=<temp> npm run serve`; note the token printed on first start. Open `http://127.0.0.1:8730`. *Redirected to the login page; a wrong token shows an error; after 5 wrong tries "Too many failed attempts".*
+- [ ] Log in. *The normal UI loads; start / stop a server and watch the status and console update live without reloading (WebSocket).* Restart the service. *You are sent back to the login page.*
+- [ ] Check what is hidden: Folder button, Browse (Import: type the path instead), Install plugin (ZIP / folder), Plugins folder, hardware acceleration / start on login / tray / auto restart. *All hidden. Backups show Download instead of Open folder and the zip downloads.*
+- [ ] `curl -s http://127.0.0.1:8730/healthz`. *`{"ok":true}`.* `curl -X POST http://127.0.0.1:8730/api/list -H "Content-Type: application/json" -d "{}"`. *401.* The same with `-H "Authorization: Bearer <token>"`. *Server list.*
+- [ ] Behind nginx with TLS (`deploy/nginx.conf.example`, `NODEGSM_HTTPS=1`). *Login works, the cookie is `Secure`, live updates keep working (WebSocket upgrade).*
+- [ ] Ctrl+C / `systemctl stop nodegsm` with a running server. *The game server stops gracefully.*
+
+Linux only (everything here is **untested**):
+- [ ] Fresh Ubuntu / Debian, Node 20, `lib32gcc-s1` installed. *`npm ci --omit=dev` and `npm run serve` start without Electron.*
+- [ ] Add a **Minecraft Java** server (needs Java) and install. *server.jar downloads, Start works, stop sends `stop`.* Add a **Counter-Strike: GO** server. *SteamCMD downloads from `steamcmd_linux.tar.gz`, `srcds_run` starts (needs `lib32stdc++6`).* Try **Rust** and **Palworld** the same way and note what fails.
+- [ ] A plugin that is not declared for Linux (for example `cs`) in Add Server. *Badge "not available on this platform", cannot be created.*
+- [ ] Dashboard CPU / memory of a running server (read from `/proc`). *Plausible values, children are counted.* Kill. *No orphan processes left (`ps`).*
+- [ ] Set CPU affinity on a server (`taskset` installed). *`taskset -p <pid>` shows the mask.*
+- [ ] Firewall button. *Message with a ufw hint, nothing changed.*
+- [ ] `docker compose up -d --build`; `docker ps` shows healthy; `deploy/nodegsm.service` starts and survives a reboot.
+
 ## 11. Website and docs
 - [ ] `npm run site` then `npm run site:serve`, open the printed address. *Header shows the N mark; the browser tab shows the favicon; Features page lists the tables and the changelog newest first.*
 - [ ] Open [docs/README.md](README.md) on GitHub. *Every link works.*

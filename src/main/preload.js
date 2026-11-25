@@ -9,5 +9,5 @@ const call = async (name, ...args) => {
 const on = (ch, cb) => { const h = (_e, p) => cb(p); ipcRenderer.on(ch, h); return () => ipcRenderer.removeListener(ch, h); };
 
 contextBridge.exposeInMainWorld('wgsm', {
-  call, on,
+  call, on, mode: 'desktop',
 });

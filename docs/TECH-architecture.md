@@ -3,10 +3,44 @@
 This document grows with each release. It describes what exists today.
 
 ## Process layout
-- `src/main/main.js` - Electron main process: creates the window/tray, builds the services, mounts the API table on `ipcMain`.
+- `src/main/core.js` - **transport-agnostic bootstrap**: `createCore({ dataDir, mode })` builds the `ServerManager`, the services (event log, Discord, bot, backups, clusters, auto-clear, consoles), the `MetricsCollector` and a push-event hub (`core.hub.on((channel, payload) => ...)`), and offers `core.buildApi(extraCtx)`, `core.start()` and `core.stop()`. It never loads `electron`.
+- `src/main/main.js` - Electron main process: creates the window/tray, calls `createCore({ mode: 'desktop' })`, subscribes the window to the hub and mounts the API table on `ipcMain` (behaviour unchanged).
+- `src/server/headless.js` + `auth.js` - the web server (see [Web mode](#web-mode-headless-server)). Uses `core.js` with `headlessHost()` stand-ins for the Electron-only ctx members.
+- `src/main/platform.js` - the OS layer (see [Platform layer](#platform-layer)).
 - `src/main/api.js` - **transport-agnostic API table** `{ name: fn }` (`buildApi(ctx)`). Functions return data or throw; the transport wraps the result as `{ ok, data }` / `{ ok: false, error }`. A future HTTP/WebSocket server mounts the same table.
 - `src/main/preload.js` - exposes `window.wgsm.call(name, ...args)` / `on(channel, cb)`.
 - `src/renderer/` - plain JS/HTML/CSS, no framework, no inline scripts (CSP).
+
+## Web mode (headless server)
+`npm run serve` runs `src/server/headless.js`: Node `http` + `ws`, no Electron. One process = one `createCore({ mode: 'web' })`.
+
+- **Mounting:** `POST /api/<channel>` calls `api[channel](...args)` from the same table the IPC uses (own properties only; the name must match `^[A-Za-z][A-Za-z0-9:]*$`). The hub's events are broadcast as `{ ch, payload }` over `/ws`. Protocol: [TECH-api.md](TECH-api.md#http-and-websocket-transport-web-mode).
+- **Electron stand-ins** (`headlessHost()` in `core.js`): `shell` / `dialog` throw "not available in web mode" (folder picker, open in Explorer, plugin install dialogs), `app` / `nativeTheme` are no-ops, `beforeRelaunch` throws a restart hint. The renderer learns what to hide from the `platformInfo` channel and `window.wgsm.mode`.
+- **Auth model** (`auth.js`): a single shared **token** (env `NODEGSM_TOKEN`, else `<data>/web-token` generated on first start, mode 0600, printed once). `POST /login` compares it in constant time (both sides hashed with SHA-256, `timingSafeEqual`) and issues a session: a random 24-byte id kept **in memory** with an expiry; the cookie is `id.HMAC-SHA256(secret, id)` with a per-process secret, `HttpOnly; SameSite=Strict; Path=/`, `Secure` when `--https` or `X-Forwarded-Proto: https`. Scripts send `Authorization: Bearer <token>`. Failed logins and failed bearer attempts count per client address (5 failures -> 15 minute lock, 429 + `Retry-After`). There are no accounts, roles or per-user audit (see OPEN-QUESTIONS).
+- **CSRF / cross-site:** no CORS headers. Cookie and no-auth requests must carry an `Origin` equal to `Host` (403 otherwise), also for the WebSocket upgrade; `Content-Type: application/json` is required; bearer requests are exempt (not ambient credentials).
+- **Static files:** only `src/renderer/*` and `assets/*`, known extensions, no dot segments / `..` / backslashes / NUL, `realpath` must stay inside the root. Everything except the login page, `styles.css`, `theme-boot.js` and the logo needs a session. The CSP header is the app's policy plus `connect-src 'self' ws://host wss://host`, `frame-ancestors 'none'`.
+- **Bind rule:** a non-loopback `--host` is refused when authentication is off (`--no-auth` is loopback only).
+- **Limits:** request body 4 MiB (configurable), 50 WebSocket clients, 8 MiB WebSocket send buffer per client (frames are dropped above it), 30 s heartbeat.
+- **Shutdown:** SIGINT / SIGTERM -> close sockets and HTTP server -> `core.stop()` (collector, services, `mgr.shutdown()` = the same path as quitting the desktop app). A second signal forces exit.
+- **Logging:** tokens and cookies are never logged; there is no access log. Crashes go to `<data>/logs/crash.log`.
+
+## Platform layer
+`src/main/platform.js` isolates everything OS specific; the other modules call it instead of `taskkill` / PowerShell / `.exe` paths. Windows behaviour is unchanged; Linux is unit-tested with injected fakes only.
+
+| Concern | Windows | Linux |
+|---|---|---|
+| Data folder | legacy `%APPDATA%\node-wgsm2026\WGSM` if it exists, else `%APPDATA%\NodeGSM` | `$XDG_DATA_HOME/NodeGSM` or `~/.local/share/NodeGSM` |
+| Spawn | `windowsHide` | `detached: true` (own process group) |
+| Stop / kill tree | `taskkill /T` then `/T /F` | `kill(-pgid, SIGTERM)` then `SIGKILL` (falls back to the pid) |
+| CPU / RAM / threads | one PowerShell CIM call | `/proc/<pid>/stat` (+ `status` VmRSS) scan, clock ticks from `getconf CLK_TCK`, summed through ppid |
+| CPU affinity | PowerShell `ProcessorAffinity` | `taskset -a -p <hexmask> <pid>` |
+| Priority | `os.setPriority` | `os.setPriority` |
+| SteamCMD | `steamcmd.zip` -> `steamcmd.exe` | `steamcmd_linux.tar.gz` (tar) -> `steamcmd.sh`; `+@sSteamCmdForcePlatformType` first when a step asks for another platform |
+| Extract | AdmZip / Windows `tar` | AdmZip / GNU `tar` (`-xzf` for gzip) |
+| Executable | - | `chmod 755` before start |
+| Firewall | `netsh advfirewall` | not managed: returns `{ ok: false, unsupported: true, message }` with a `ufw` hint |
+
+Plugins: `toGame(manifest, dir, source, platform)` resolves `exe` / `command` / `args` / `env` / install steps for one platform (`run.linux`, `install.linux`) and sets `platforms` / `supported`; `ServerManager.create` / `importServer` refuse unsupported games.
 
 ## Event bus
 `ServerManager` owns `mgr.events` (an `EventEmitter`). `mgr.emitEvent(type, id, detail)` emits `{ id, name, game, ts, detail }` and never throws into the caller.

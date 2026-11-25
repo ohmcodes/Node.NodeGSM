@@ -5,6 +5,7 @@
   "description": "Dedicated server support for Rust. Install, run, configure and monitor it from NodeGSM.",
   "author": "WindowsGSM contributors (ported to NodeGSM)",
   "version": "1.0.0",
+  "platforms": ["windows", "linux"],
   "url": "https://steamdb.info/app/258550/info/",
   "tags": ["unity", "steamcmd"],
   "docs": [
@@ -23,6 +24,7 @@
   },
   "run": {
     "exe": "RustDedicated.exe",
+    "linux": { "exe": "RustDedicated", "env": { "LD_LIBRARY_PATH": "{serverFiles}/RustDedicated_Data/Plugins/x86_64" } },
     "args": [
       "-nographics",
       "-batchmode",

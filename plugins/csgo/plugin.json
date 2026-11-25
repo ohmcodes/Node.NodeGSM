@@ -5,6 +5,7 @@
   "description": "Dedicated server support for Counter-Strike: Global Offensive. Install, run, configure and monitor it from NodeGSM.",
   "author": "WindowsGSM contributors (ported to NodeGSM)",
   "version": "1.0.0",
+  "platforms": ["windows", "linux"],
   "url": "https://steamdb.info/app/740/info/",
   "tags": ["source", "steamcmd"],
   "docs": [
@@ -27,6 +28,7 @@
   "run": {
     "exe": "srcds.exe",
     "stdin": false,
+    "linux": { "exe": "srcds_run" },
     "args": [
       "-console",
       ["-game", "csgo"],
