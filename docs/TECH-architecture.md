@@ -75,7 +75,7 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 | `cluster.js` (+ `clusterMerge.js`) | **done** - clusters, cluster update, config sync, clear folders |
 | `autoClear.js` | **done** - per-server rules, seeding from the plugin, scheduler tick, preview / run |
 | `consoles.js` (+ `../rcon.js`, `../configEdit.js`) | **done** - injected consoles (log tail, RCON), structured config helpers |
-| `discordBot.js` + `discordCommands.js` | **done** (not tested against real Discord) - slash-command bot: discord.js client wiring + pure command handlers |
+| `discordBot.js` + `discordCommands.js` + `discordPermissions.js` | **done** (not tested against real Discord) - slash-command bot: discord.js client wiring + pure command handlers + the per-user per-server permission rules (parse / sanitise / match) |
 
 ### Event log (`eventLog.js`)
 - `log({ level, event, serverId, serverName, message, detail })` - fills `ts`, validates `level` (`info|warn|error`), caps message (1000 chars) and detail (4000 chars), appends to today's file and emits `ngsm:log`. Never throws.
@@ -92,7 +92,7 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 
 ### Discord bot (`discordBot.js`, `discordCommands.js`)
 - `discordCommands.js` has no discord.js import. `COMMANDS` / `registrationJson()` are plain JSON in Discord's API shape (option types 3 string, 5 boolean; names lowercase <= 32, descriptions <= 100). `createHandlers({ mgr, getSettings, getCollector, version, now, bootTime })` returns `{ handle(interaction), autocomplete(interaction) }`; an interaction only needs `commandName`, `user{id,tag}`, `member.roles`, `options.getString / getBoolean / getFocused`, `reply / deferReply / editReply / followUp / deleteReply`, `respond`. Tests use fakes.
-- Order inside `handle`: rate limit (per user id, 5 / 10 s) -> `authorize()` (allowed user id or admin role; default deny) -> per-server `discordAllowedUserIds` -> the action. Pre-validation refusals (unknown id, busy, wrong state, `/send` off) are ephemeral replies before any defer; after a defer an error deletes the placeholder and follows up ephemerally. Each attempt calls `mgr.eventLog.log({ event: 'discord:command', detail: { userId, userTag, command, serverId, result } })` and emits `discord:command` on `mgr.events`.
+- Order inside `handle`: rate limit (per user id, 5 / 10 s) -> `authorize()` (who the bot knows: admin role, deprecated `allowedUserIds`, or at least one permission rule; default deny) -> `authorizeAction()` for the command -> the action. `authorizeAction`: admin = everything; else a rule of the user (`settings.discord.permissions`, from `discordPermissions.js`) decides: `check` / `list` / `stats` need any rule listing that action, `start` / `stop` / `restart` / `update` / `send` / `backup` need a rule for that server id **or for 0 (all)** (rules for one server and for 0 are a union); else a legacy `allowedUserIds` user may do everything, narrowed by the per-server `discordAllowedUserIds` (the narrowing never applies to rule users: rules are authoritative); else deny. `/list` and `/stats` show only the servers a rules-only user has any permission for (`ctx.canSee`); `autocomplete()` offers only servers `authorizeAction` allows for that command. `/send` additionally needs `settings.discord.allowRawCommands` (checked inside the action, after the permission). Denials are ephemeral ("You do not have permission to use /restart on server 4.", no rule list) and logged with `detail.required` (the action) and `serverId`; successful attempts log `detail.via` (`admin` / `rule` / `legacy`). The rules are read live through `getSettings`; the bot's reconnect signature does not include them. Pre-validation refusals (unknown id, busy, wrong state, `/send` off) are ephemeral replies before any defer; after a defer an error deletes the placeholder and follows up ephemerally. Each attempt calls `mgr.eventLog.log({ event: 'discord:command', detail: { userId, userTag, command, serverId, result } })` and emits `discord:command` on `mgr.events`.
 - `discordBot.js` owns the client: lazy `require('discord.js')` (injectable `loadDiscord` for tests), Guilds intent, `apply()` compares a signature of `botEnabled | token | applicationId | guildId` and only then reconnects; registration uses `buildCommands()` (SlashCommandBuilder from the same definitions) with `application.commands.set(payload, guildId?)`; `status()` / `onStatus` feed IPC `discordBotStatus` and the pushed `discordBot` event; `stop()` destroys the client. `main.js` sets `bot.collector` (for `/stats`) and `bot.onStatus`.
 - The token lives in `settings.discord.botToken` (plain text). `api.js` masks it: `settings` / `saveSettings` return `discord.botTokenSet` only; a blank token in a patch keeps the saved one, `clearBotToken: true` clears it.
 
@@ -137,7 +137,7 @@ Pure functions: `parse(format, text) -> { ok, reason?, entries[{ id, path, key, 
 ## Data files (`<data>` = `%APPDATA%\NodeGSM`, or the legacy `%APPDATA%\node-wgsm2026\WGSM`)
 | Path | Content |
 |---|---|
-| `settings.json` | app settings (sanitised on read and write by `settings.js`): theme, `ui`, `headerStats`, `discord{ webhookUrl, botEnabled, botToken (plain text!), applicationId, guildId, allowedUserIds, adminRoleIds, allowRawCommands, events, templates }`, `logging{ retentionDays }` |
+| `settings.json` | app settings (sanitised on read and write by `settings.js`): theme, `ui`, `headerStats`, `discord{ webhookUrl, botEnabled, botToken (plain text!), applicationId, guildId, allowedUserIds (deprecated), adminRoleIds, permissions[{ userId, serverId, actions[] }], allowRawCommands, events, templates }`, `logging{ retentionDays }` |
 | `servers/<id>/configs/wgsm.json` | per-server config incl. `discordWebhook`, `discordAlert`, `discordEvents`, `discordAllowedUserIds` (bot: restrict who may control this server), old alert flags, `backupKeep`, `autoClear` (rules), `autoClearSeeded` |
 | `logs/ngsm-YYYY-MM-DD.log` | NGSM event log, JSONL |
 | `logs/crash.log`, `logs/crash-history.json` | app crash handling |
@@ -150,9 +150,9 @@ Pure functions: `parse(format, text) -> { ok, reason?, entries[{ id, path, key, 
 ```
 
 ## IPC added in this release
-The complete channel list (all 81, with arguments, results and push events) is in [TECH-api.md](TECH-api.md); the summary below only lists what was added with the services.
+The complete channel list (all 84, with arguments, results and push events) is in [TECH-api.md](TECH-api.md); the summary below only lists what was added with the services.
 
-`eventLogQuery(filters)`, `eventLogExport(filters)` (text), `eventLogClear()`, `discordInfo()`, `discordTest(kind, template?)`, `discordPreview(template, sampleVars, event)`.
+`eventLogQuery(filters)`, `eventLogExport(filters)` (text), `eventLogClear()`, `discordInfo()`, `discordTest(kind, template?)`, `discordPreview(template, sampleVars, event)`, `discordPermParse(text)`, `discordPermFormat(rules)`.
 
 Backups: `backups()` (all) / `backups(folder)`, `backup(id, opts)`, `backupInfo(id)`, `backupPreview(id, opts)`, `restore(id, file, opts)`, `restoreNew(folder, file, opts)`, `deleteBackup(id, file)`, `backupDownload(folder, file)`, `backupOpenFolder(folder)`.
 

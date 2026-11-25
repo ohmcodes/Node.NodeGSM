@@ -62,6 +62,10 @@ Follow [GUIDE-discord.md](GUIDE-discord.md) > "Set it up".
 - [ ] `/check`, `/list`, `/stats`. *Embeds with version / uptime, server table, CPU / RAM / tick; `/stats` may say "no metrics yet" in the first seconds.*
 - [ ] `/start`, `/stop`, `/restart`, `/update`, `/backup` with the autocomplete (`id - name`). *The server changes state; long ones show "thinking", then an embed. Wrong state (stop a stopped server) gives a private refusal.*
 - [ ] Use the bot from an account that is **not** on the allow list. *"You are not authorised" (only visible to that user); the Logs screen has a `discord:command` entry with the result.*
+- [ ] Add a permission rule for a second account: `<its user id> 3 restart` (use a real server id), **Save bot settings** (no reconnect needed). *The preview table shows the rule with the server name; a wrong line is listed with its number and blocks saving; an unknown server id is only a warning.*
+- [ ] With that account: `/restart` on server 3, then `/restart` on another server, `/stop` on server 3, `/check`, `/list`. *Only the first works; the others give a private "You do not have permission to use ..." naming the action and server; the autocomplete of `/restart` offers only server 3; the Logs screen shows `denied: missing permission` with the required action.*
+- [ ] Change the rule to `<id> 0 read`. *`/check`, `/list`, `/stats` work and list every server; `/stop` is denied.* Change it to `<id> 3 list`: `/list` shows only server 3.
+- [ ] Rule `<id> 0 all` with **Allow raw console commands** off, then `/send`. *Refused ("switched off"); with the switch on it works.* Remove the rule again: the account is "not authorised".
 - [ ] Spam 6 commands in 10 s. *The 6th is rate limited.*
 - [ ] `/send` with the switch off. *Refused.* Turn **Allow raw console commands** on and send `say hi`. *Runs on the server; the bot reply does not echo the text.*
 - [ ] Disable the bot / **Remove saved token**. *Badge goes Off; after **Remove saved token** the token is gone from `settings.json` (open the file and check).*

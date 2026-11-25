@@ -112,7 +112,7 @@ async function dcSendTest(kind, tpl) {
 function dcFillMissingTemplates() { for (const e of dc.info.events) if (!dc.templates[e.key]) dc.templates[e.key] = JSON.parse(JSON.stringify(dc.info.templates[e.key] || dcDefault(e.key))); }
 
 // ---------- Bot (slash commands) ----------
-const bt = { st: { state: 'off' }, tokenSet: false, clearToken: false, cmds: [] };
+const bt = { st: { state: 'off' }, tokenSet: false, clearToken: false, cmds: [], perm: { rules: [], errors: [], warnings: [], servers: [] }, permSeq: 0, permTimer: null };
 const NL = String.fromCharCode(10);
 const BT_ID =/^\d{15,25}$/;
 const btList = (el) => el.value.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
@@ -135,8 +135,8 @@ function btListMsg(el, msgEl) {
 }
 function btPaintForm() {
   btListMsg($('#dcBotUsers'), $('#dcBotUsersMsg')); btListMsg($('#dcBotRoles'), $('#dcBotRolesMsg'));
-  const none = !btList($('#dcBotUsers')).length && !btList($('#dcBotRoles')).length;
-  $('#dcBotWarn').textContent = none ? 'Nobody is allowed to use the bot yet: add at least one user ID or admin role ID. Every command is refused until then.' : '';
+  const none = !btList($('#dcBotUsers')).length && !btList($('#dcBotRoles')).length && !bt.perm.rules.length;
+  $('#dcBotWarn').textContent = none ? 'Nobody is allowed to use the bot yet: add at least one permission rule or admin role ID. Every command is refused until then.' : '';
   const ts = bt.clearToken ? 'The saved token will be removed when you save.' : bt.tokenSet ? 'A token is saved (hidden). Leave the field blank to keep it.' : 'No token saved.';
   $('#dcBotTokState').textContent = ts; $('#dcBotTokClear').hidden = !bt.tokenSet || bt.clearToken;
 }
@@ -144,15 +144,42 @@ function btInvite() { const id = $('#dcBotApp').value.trim(); return /^\d{15,25}
 function btPaintCmds() {
   $('#dcBotCmds').innerHTML = bt.cmds.map((c) => `<code>/${esc(c.name)}${(c.options || []).map((o) => ` ${o.required ? '&lt;' : '['}${esc(o.name)}${o.required ? '&gt;' : ']'}`).join('')}</code><span>${esc(c.description)}</span>`).join('');
 }
+// ---------- permission rules (parsed by the main process so the editor and the bot use the same parser) ----------
+function btPermPaint() {
+  const p = bt.perm; const raw = $('#dcBotPermsErr');
+  const names = {}; for (const x of p.servers || []) names[x.id] = x.name;
+  $('#dcBotPermsMsg').textContent = p.errors.length ? `${p.errors.length} line${p.errors.length === 1 ? '' : 's'} with errors: fix them to save` : `${p.rules.length} rule${p.rules.length === 1 ? '' : 's'}${p.warnings.length ? ', ' + p.warnings.length + ' warning' + (p.warnings.length === 1 ? '' : 's') : ''}`;
+  $('#dcBotPermsMsg').className = 'small ' + (p.errors.length ? 'dc-bad' : 'muted');
+  raw.innerHTML = p.errors.map((e) => `<li class="e">${e.line ? 'Line ' + e.line + ': ' : ''}${esc(e.message)}</li>`).join('') + p.warnings.map((e) => `<li class="w">Line ${e.line}: ${esc(e.message)}</li>`).join('');
+  const rawOn = $('#dcBotRaw').checked;
+  const tb = $('#dcBotPermsTable'); tb.hidden = !p.rules.length;
+  tb.querySelector('tbody').innerHTML = p.rules.map((r) => {
+    const srv = r.serverId === '0' ? 'All servers' : `#${esc(r.serverId)} ${names[r.serverId] ? esc(names[r.serverId]) : '(not found)'}`;
+    const acts = r.actions.map((a) => esc(a) + (a === 'send' && !rawOn ? ' (switched off below)' : '')).join(', ');
+    return `<tr><td>${esc(r.userId)}</td><td>${srv}</td><td>${acts}</td></tr>`;
+  }).join('');
+  btPaintForm();
+}
+async function btPermParse() {
+  const seq = ++bt.permSeq; const r = await run('discordPermParse', $('#dcBotPerms').value);
+  if (!r || seq !== bt.permSeq) return r;
+  bt.perm = r; btPermPaint(); return r;
+}
+$('#dcBotPerms').oninput = () => { clearTimeout(bt.permTimer); bt.permTimer = setTimeout(btPermParse, 150); };
+$('#dcBotRaw').onchange = btPermPaint;
+async function btPermFill(rules) { const t = await run('discordPermFormat', rules || []); $('#dcBotPerms').value = t || ''; await btPermParse(); }
+
 function btFill(d) {
   $('#dcBotOn').checked = !!d.botEnabled; $('#dcBotToken').value = ''; $('#dcBotApp').value = d.applicationId || ''; $('#dcBotGuild').value = d.guildId || '';
-  $('#dcBotUsers').value = (d.allowedUserIds || []).join(NL); $('#dcBotRoles').value = (d.adminRoleIds || []).join(NL); $('#dcBotRaw').checked = !!d.allowRawCommands;
+  $('#dcBotUsers').value = (d.allowedUserIds || []).join(NL); $('#dcBotRoles').value = (d.adminRoleIds || []).join(NL); $('#dcBotRaw').checked = !!d.allowRawCommands; btPermFill(d.permissions);
   bt.tokenSet = !!d.botTokenSet; bt.clearToken = false; btPaintForm();
 }
 async function btSave() {
   if (!btListMsg($('#dcBotUsers'), $('#dcBotUsersMsg')) || !btListMsg($('#dcBotRoles'), $('#dcBotRolesMsg'))) { toast('Fix the invalid Discord IDs first', true); return false; }
+  const pr = await btPermParse(); if (!pr) return false;
+  if (pr.errors.length) { toast('Fix the permission rules first', true); return false; }
   const token = $('#dcBotToken').value.trim();
-  const patch = { botEnabled: $('#dcBotOn').checked, applicationId: $('#dcBotApp').value.trim(), guildId: $('#dcBotGuild').value.trim(), allowedUserIds: btList($('#dcBotUsers')), adminRoleIds: btList($('#dcBotRoles')), allowRawCommands: $('#dcBotRaw').checked };
+  const patch = { botEnabled: $('#dcBotOn').checked, applicationId: $('#dcBotApp').value.trim(), guildId: $('#dcBotGuild').value.trim(), allowedUserIds: btList($('#dcBotUsers')), adminRoleIds: btList($('#dcBotRoles')), permissions: pr.rules, allowRawCommands: $('#dcBotRaw').checked };
   if (token) patch.botToken = token; else if (bt.clearToken) patch.clearBotToken = true;
   if (token) { const t = await run('discordBotTest', token); if (t && !t.ok) { toast(t.error, true); return false; } }
   const s = await run('saveSettings', { discord: patch });

@@ -150,9 +150,19 @@
     </div>
     <p class="muted small" style="margin:6px 0 0">The token is stored in plain text in <code>settings.json</code> in the NodeGSM data folder and is never shown here again. Treat that file like a password.</p>
     <div class="dc-form" style="margin-top:10px">
-      <label>Allowed user IDs (one per line)<textarea id="dcBotUsers" rows="4" spellcheck="false" placeholder="123456789012345678"></textarea><span id="dcBotUsersMsg" class="small muted"></span></label>
+      <label>Allowed user IDs (one per line, deprecated: full access, use the rules below)<textarea id="dcBotUsers" rows="4" spellcheck="false" placeholder="123456789012345678"></textarea><span id="dcBotUsersMsg" class="small muted"></span></label>
       <label>Admin role IDs (one per line)<textarea id="dcBotRoles" rows="4" spellcheck="false" placeholder="123456789012345678"></textarea><span id="dcBotRolesMsg" class="small muted"></span></label>
     </div>
+    <h4>Permissions per user and server</h4>
+    <p class="muted small" style="margin:0 0 6px">One rule per line: <code>&lt;user id&gt; &lt;server id&gt; &lt;actions&gt;</code>. Server <code>0</code> (or <code>*</code>) means all servers. Actions, separated by commas: <code>check list start stop restart update send backup stats</code>; <code>all</code> = every action, <code>read</code> = check, list, stats. Nobody can do anything that no rule (or the legacy list / an admin role) allows. <code>#</code> starts a comment.</p>
+    <pre class="bt-ex">123456789012345678 3 restart          # may only restart server 3
+123456789012345678 0 read             # read-only on every server
+234567890123456789 0 all              # everything, everywhere (send also needs the switch below)
+345678901234567890 1 start,stop,backup</pre>
+    <label class="bt-perm">Rules<textarea id="dcBotPerms" rows="6" spellcheck="false" placeholder="123456789012345678 3 start,stop,restart,backup"></textarea></label>
+    <div id="dcBotPermsMsg" class="small muted"></div>
+    <ul id="dcBotPermsErr" class="bt-errs"></ul>
+    <div class="tablewrap"><table id="dcBotPermsTable" class="bt-ptab" hidden><thead><tr><th>User</th><th>Servers</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
     <div id="dcBotWarn" class="small dc-bad" style="margin-top:6px"></div>
     <label class="srow"><span>Allow raw console commands (<code>/send</code>)<small class="dc-bad">Dangerous: anyone allowed above can run any console command on any server, including ones that kick, ban or change passwords. Off by default.</small></span><input type="checkbox" class="switch" id="dcBotRaw"></label>
     <div class="row end"><button type="button" id="dcBotSave" class="primary">Save bot settings</button></div>

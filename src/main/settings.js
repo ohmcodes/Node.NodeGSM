@@ -21,12 +21,13 @@ const DEFAULTS = {
   dashboardChart: 'players',  // players | cpu | memory | tick | latency
   ui: { leftCollapsed: false, rightCollapsed: false, bottomCollapsed: false, navCollapsed: false }, // panel collapse state
   headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
-  discord: { webhookUrl: '', botEnabled: false, botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], allowRawCommands: false, events: {}, templates: {} },
+  discord: { webhookUrl: '', botEnabled: false, botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], permissions: [], allowRawCommands: false, events: {}, templates: {} },
   logging: { retentionDays: 30 }, // NGSM event log retention
 };
 const VIEWS = ['servers', 'table', 'dashboard'];
 const CHARTS = ['players', 'cpu', 'memory', 'tick', 'latency'];
 
+const { sanitizeRules: sanitizePermissions } = require('./services/discordPermissions');
 const SNOWFLAKE = /^\d{1,25}$/;
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const bools = (v, keys) => { const o = {}; if (v && typeof v === 'object') for (const k of keys) if (k in v) o[k] = !!v[k]; return o; };
@@ -153,7 +154,7 @@ function sanitizeDiscord(v) {
   v = v && typeof v === 'object' ? v : {};
   return {
     webhookUrl: webhook(v.webhookUrl), botEnabled: v.botEnabled === true, botToken: str(v.botToken, 200).replace(/^Bot\s+/i, ''), applicationId: str(v.applicationId, 30), guildId: str(v.guildId, 30),
-    allowedUserIds: idList(v.allowedUserIds), adminRoleIds: idList(v.adminRoleIds), allowRawCommands: v.allowRawCommands === true,
+    allowedUserIds: idList(v.allowedUserIds), adminRoleIds: idList(v.adminRoleIds), permissions: sanitizePermissions(v.permissions), allowRawCommands: v.allowRawCommands === true,
     events: sanitizeEventToggles(v.events), templates: sanitizeTemplates(v.templates),
   };
 }

@@ -6,6 +6,7 @@ const { detail: pluginDetail } = require('./plugins');
 const appSettings = require('./settings');
 const configEdit = require('./configEdit');
 const { tokenFormatOk, registrationJson } = require('./services/discordCommands');
+const discordPerms = require('./services/discordPermissions');
 
 /**
  * @param {object} ctx
@@ -129,6 +130,13 @@ function buildApi(ctx) {
       return tokenFormatOk(t) ? { ok: true } : { ok: false, error: t ? 'This does not look like a bot token (three parts separated by dots).' : 'No bot token is saved.' };
     },
     discordBotCommands: () => registrationJson(),
+    // permission editor: parses the text (pure, nothing is saved) and reports per-line errors, unknown-server warnings and the server names for the preview
+    discordPermParse: (text) => {
+      const servers = mgr.list().map((v) => ({ id: String(v.id), name: v.name }));
+      const r = discordPerms.parseRules(text, { knownServerIds: servers.map((x) => x.id) });
+      return { ...r, servers, actions: discordPerms.ACTIONS };
+    },
+    discordPermFormat: (rules) => discordPerms.formatRules(rules),
     settings: () => publicSettings(mgr.settings),
     saveSettings: (p) => {
       const s = mgr.saveSettings(cleanSettingsPatch(p));

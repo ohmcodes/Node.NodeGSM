@@ -1262,6 +1262,103 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const el6 = new (require('../src/main/services/eventLog').EventLog)(m, P, m.settings, dir); el6.start(); const real = DC.createHandlers({ mgr: Object.assign(Object.create(fmgr), { eventLog: el6, events: m.events }), getSettings: () => fmgr.settings, now: () => Date.now() });
     const ri = fi('list', '111'); await real.handle(ri); const qr = el6.query({ event: 'discord:command' }); assert(qr.length === 1 && qr[0].detail.userTag === 'u111#0' && qr[0].message.includes('/list'), 'real EventLog.query finds the entry'); el6.stop();
 
+    // ---- per-user, per-server permission rules ----
+    {
+      const go2 = (...a) => { t6 += 11000; return go(...a); };
+      const PM = require('../src/main/services/discordPermissions');
+      const U = (n) => '10000000000000000' + n;   // 18 digit ids
+      // parser
+      let pr = PM.parseRules(`${U(1)} 3 start,stop,restart,backup\n\n# comment\n  ${U(2)}   *   Read   # trailing comment\n${U(3)} 0 ALL\n${U(4)} 007 Start , STOP ,restart`);
+      eq(pr.errors, [], 'valid lines parse without errors');
+      eq(pr.rules, [{ userId: U(1), serverId: '3', actions: ['start', 'stop', 'restart', 'backup'] }, { userId: U(2), serverId: '0', actions: ['check', 'list', 'stats'] }, { userId: U(3), serverId: '0', actions: PM.ACTIONS }, { userId: U(4), serverId: '7', actions: ['start', 'stop', 'restart'] }], 'rules: * = 0 = all servers, read / all shortcuts, case and space tolerance, leading zeros');
+      pr = PM.parseRules(`${U(1)} 3 start\n${U(1)} 3 stop,start\n${U(1)} 4 backup\n${U(1)} 0 list`); eq(pr.rules.length, 3, 'same user + server merged'); eq(pr.rules[0].actions, ['start', 'stop'], 'union of actions in canonical order');
+      pr = PM.parseRules(`abc 3 start\n${U(1)} x start\n${U(1)} 3\n${U(1)} 3 start,fly,dance\n${U(1)} 3 ,\n${U(1)} -1 start\n12345 3 start`);
+      eq(pr.rules, [], 'invalid lines produce no rule'); eq(pr.errors.map((e) => e.line), [1, 2, 3, 4, 5, 6, 7], 'one error per bad line with its line number'); assert(/Unknown actions: fly, dance/.test(pr.errors[3].message) && /user id/.test(pr.errors[0].message) && /server id/.test(pr.errors[1].message), 'error messages: ' + JSON.stringify(pr.errors.map((e) => e.message)));
+      pr = PM.parseRules(`${U(1)} 3 start\n${U(1)} 9 stop\n${U(1)} 0 stop`, { knownServerIds: ['1', '3'] }); eq(pr.errors, [], 'unknown server is not an error'); eq(pr.warnings.map((w) => w.line), [2], 'unknown server id is a warning (server 0 never)');
+      eq(PM.parseRules('# only a comment\n\n').rules, [], 'blank / comment lines'); eq(PM.parseRules(null).rules, [], 'null text');
+      const big = PM.parseRules(Array.from({ length: 600 }, (_, k) => `${U(1)} ${k + 1} start`).join('\n')); eq(big.rules.length, 500, 'capped at 500 rules'); eq(big.errors.length, 1, 'cap is reported');
+      eq(PM.formatRules([{ userId: U(1), serverId: '3', actions: ['stop', 'start'] }, { userId: U(2), serverId: '0', actions: PM.ACTIONS }, { userId: U(3), serverId: '*', actions: ['stats', 'check', 'list'] }]), `${U(1)} 3 start,stop\n${U(2)} 0 all\n${U(3)} 0 read`, 'format uses the all / read shortcuts');
+      pr = PM.parseRules(`${U(1)} 3 start,stop\n${U(2)} 0 all\n${U(3)} 0 read`); eq(PM.parseRules(PM.formatRules(pr.rules)).rules, pr.rules, 'format -> parse round trip');
+      // strict sanitiser (settings.json / IPC)
+      eq(S6.sanitize({ discord: { permissions: [{ userId: U(1), serverId: 3, actions: ['START', 'bogus', 'read'] }, { userId: U(1), serverId: '3', actions: ['stop'] }, { userId: 'x', serverId: 1, actions: ['start'] }, { userId: U(2), serverId: 'y', actions: ['start'] }, { userId: U(2), serverId: '*', actions: [] }, { userId: U(2), serverId: '0', actions: 'start' }, null, 'str', { userId: 12345, serverId: 1, actions: ['all'] }] } }).discord.permissions,
+        [{ userId: U(1), serverId: '3', actions: ['check', 'list', 'start', 'stop', 'stats'] }], 'settings sanitiser: bad ids / unknown actions / empty / non-objects dropped, merged, shortcuts expanded');
+      eq(S6.sanitize({ discord: { permissions: 'nope' } }).discord.permissions, [], 'non-list -> []'); eq(S6.sanitize({ discord: { permissions: Array.from({ length: 1200 }, (_, k) => ({ userId: U(1), serverId: k + 1, actions: ['start'] })) } }).discord.permissions.length, 500, 'cap 500 in settings');
+      eq(S6.DEFAULTS.discord.permissions, [], 'default: no rules'); eq(S6.sanitize({ discord: { botEnabled: true } }).discord.permissions, [], 'missing -> []');
+
+      // authorisation matrix with rules (legacy list and admin role emptied unless a case needs them)
+      const savedCfg = fmgr.settings.discord; st6.pending[3] = null; st6.running = { 1: true };
+      const withCfg = (extra) => { fmgr.settings.discord = { ...S6.DEFAULTS.discord, botToken: TOKEN, allowRawCommands: false, ...extra }; H = mk(); logs6.length = 0; calls6.length = 0; };
+      const rules = (text) => PM.parseRules(text).rules;
+      const denied = (x) => eph(x.replies[0]) && /permission|not authorised/.test(txt(x.replies[0])) && !x.deferred;
+      withCfg({ permissions: rules(`${U(1)} 3 start,restart`) });
+      r = await go2('start', U(1), { serverid: '3' }); assert(r.deferred && /Server started/.test(txt(r.edits[0])), 'rule on server 3: may start 3'); eq(lastLog().detail.via, 'rule', 'logged via rule'); st6.running[3] = true;
+      r = await go2('restart', U(1), { serverid: '3' }); assert(r.deferred, 'restart listed'); calls6.length = 0;
+      r = await go2('stop', U(1), { serverid: '3' }); assert(denied(r) && /permission to use \/stop on server 3/.test(txt(r.replies[0])), 'action not listed: denied, message names the action and server'); assert(!txt(r.replies[0]).includes(U(1)) && !/restart/.test(txt(r.replies[0])), 'denial does not leak the rule list');
+      eq([lastLog().detail.result, lastLog().detail.required, lastLog().detail.serverId, lastLog().level, lastLog().detail.userId], ['denied: missing permission', 'stop', '3', 'warn', U(1)], 'event log: missing action + server');
+      r = await go2('start', U(1), { serverid: '1' }); assert(denied(r) && /on server 1/.test(txt(r.replies[0])), 'rule on 3 only cannot act on 1'); r = await go2('start', U(1), { serverid: '404' }); assert(denied(r) && /server 404/.test(txt(r.replies[0])), 'nonexistent server: same denial (no existence leak)');
+      r = await go2('start', U(1), { serverid: '3`x' }); assert(!txt(r.replies[0]).includes('`x'), 'server id is cleaned in the message');
+      calls6.length = 0;
+      for (const c of ['update', 'backup', 'send']) { r = await go2(c, U(1), { serverid: '3', command: 'say' }); assert(denied(r), c + ' not listed: denied'); } eq(calls6, [], 'nothing ran when denied');
+      r = await go2('check', U(1)); assert(denied(r) && /permission to use \/check\./.test(txt(r.replies[0])), 'check needs a rule that lists check'); r = await go2('list', U(1)); assert(denied(r), 'list needs a rule that lists list'); r = await go2('stats', U(1)); assert(denied(r), 'stats needs stats');
+      eq([lastLog().detail.required, lastLog().detail.serverId], ['stats', ''], 'global action: no server in the log');
+      r = await go2('start', '999999999999999999', { serverid: '3' }); assert(denied(r) && /not authorised/.test(txt(r.replies[0])), 'a user without any rule: "not authorised"'); eq(lastLog().detail.required, 'start');
+      // 0 = all servers, read shortcut
+      withCfg({ permissions: rules(`${U(2)} 0 read\n${U(3)} * start,stop`) }); st6.running = { 1: true };
+      r = await go2('check', U(2)); assert(!eph(r.replies[0]), 'read -> check'); r = await go2('stats', U(2)); assert(!eph(r.replies[0]), 'read -> stats'); r = await go2('list', U(2)); assert(!eph(r.replies[0]) && /Alpha/.test(txt(r.replies[0])) && /Beta Server/.test(txt(r.replies[0])) && /Gamma/.test(txt(r.replies[0])), 'rule with server 0: /list shows all servers');
+      r = await go2('stop', U(2), { serverid: '1' }); assert(denied(r), 'read does not include stop');
+      r = await go2('stop', U(3), { serverid: '1' }); assert(r.deferred && /Server stopped/.test(txt(r.edits[0])), 'server 0 / * covers server 1'); st6.running[1] = true; r = await go2('start', U(3), { serverid: '2' }); assert(r.deferred, 'rule on all servers beats the per-server restriction of server 2 (rules are authoritative)'); eq(lastLog().detail.via, 'rule'); delete st6.running[2]; st6.running[1] = true;
+      r = await go2('check', U(3)); assert(denied(r), 'start,stop does not give check');
+      // 0 + specific are combined (union)
+      withCfg({ permissions: rules(`${U(4)} 0 list,stop\n${U(4)} 3 start`) });
+      r = await go2('start', U(4), { serverid: '3' }); assert(r.deferred, 'specific rule adds start on 3'); delete st6.running[3]; r = await go2('stop', U(4), { serverid: '1' }); assert(r.deferred, 'all-servers rule adds stop everywhere'); st6.running[1] = true; r = await go2('start', U(4), { serverid: '1' }); assert(denied(r), 'start only on 3'); calls6.length = 0;
+      // all + /send gate
+      withCfg({ permissions: rules(`${U(5)} 0 all`), allowRawCommands: false });
+      r = await go2('send', U(5), { serverid: '1', command: 'say hi' }); assert(eph(r.replies[0]) && /switched off/.test(txt(r.replies[0])) && !calls6.length, 'all includes send but the allowRawCommands switch still gates it'); assert(/^refused/.test(lastLog().detail.result));
+      withCfg({ permissions: rules(`${U(5)} 0 all`), allowRawCommands: true }); r = await go2('send', U(5), { serverid: '1', command: 'say hi' }); eq(calls6, [['send', '1', 'say hi']], 'all + switch on: /send runs'); calls6.length = 0;
+      withCfg({ permissions: rules(`${U(5)} 0 start,stop`), allowRawCommands: true }); r = await go2('send', U(5), { serverid: '1', command: 'say hi' }); assert(denied(r) && !calls6.length, 'switch on but send not in the rule: denied');
+      // list is filtered to servers with any permission
+      withCfg({ permissions: rules(`${U(6)} 3 list\n${U(6)} 1 start`) });
+      r = await go2('list', U(6)); assert(/Gamma/.test(txt(r.replies[0])) && /Alpha/.test(txt(r.replies[0])) && !/Beta/.test(txt(r.replies[0])), '/list: only servers with any rule');
+      withCfg({ permissions: rules(`${U(6)} 4 list`) }); r = await go2('list', U(6)); assert(!eph(r.replies[0]) && !/Alpha|Beta|Gamma/.test(txt(r.replies[0])) && /none are available/.test(txt(r.replies[0])), '/list: nothing visible');
+      withCfg({ permissions: rules(`${U(6)} 1 stats`) }); r = await go2('stats', U(6)); assert(/Alpha/.test(txt(r.replies[0])), '/stats shows servers the user may see'); withCfg({ permissions: rules(`${U(6)} 2 stats`) }); r = await go2('stats', U(6)); assert(!/Alpha/.test(txt(r.replies[0])) && /No server is running/.test(txt(r.replies[0])), '/stats hides servers outside the rules');
+      // autocomplete is filtered per command
+      withCfg({ permissions: rules(`${U(7)} 3 start,backup\n${U(7)} 1 stop`) });
+      const ac = async (cmd, who, q = '') => { const i = fi(cmd, who, { focused: { name: 'serverid', value: q } }); await H.autocomplete(i); return i.choices.map((c) => c.value); };
+      eq(await ac('start', U(7)), ['3'], 'autocomplete /start: only server 3'); eq(await ac('stop', U(7)), ['1'], 'autocomplete /stop: only server 1'); eq(await ac('backup', U(7)), ['3']); eq(await ac('restart', U(7)), [], 'no restart permission anywhere'); eq(await ac('list', U(7)), [], 'commands without serverid do not autocomplete');
+      withCfg({ permissions: rules(`${U(7)} 0 start`) }); eq(await ac('start', U(7)), ['1', '2', '3'], 'server 0: all servers offered (incl. one with a per-server restriction)'); eq(await ac('stop', U(7)), [], 'other actions: none');
+      eq(await ac('start', '999999999999999999'), [], 'no standing: nothing');
+      // admin role keeps full rights; legacy list unchanged; narrowing applies to legacy only
+      withCfg({ adminRoleIds: ['900'], permissions: rules(`${U(1)} 1 start`) });
+      r = await go2('list', '555', {}, roleMember(new Map([['900', {}]]))); assert(!eph(r.replies[0]) && /Beta/.test(txt(r.replies[0])), 'admin role: everything'); eq(lastLog().detail.via, 'admin');
+      r = await go2('restart', '555', { serverid: '2' }, roleMember(new Map([['900', {}]]))); assert(!/permission/.test(txt(r.replies[0] || {})), 'admin role: any server any action (refused only because the server is stopped)');
+      withCfg({ allowedUserIds: ['111'], permissions: [] });
+      r = await go2('list', '111'); assert(!eph(r.replies[0]) && /Beta/.test(txt(r.replies[0])), 'legacy user: unchanged (list shows all)'); r = await go2('check', '111'); assert(!eph(r.replies[0]), 'legacy: check'); eq(lastLog().detail.via, 'legacy');
+      r = await go2('start', '111', { serverid: '2' }); assert(eph(r.replies[0]) && /not authorised to control this server/.test(txt(r.replies[0])), 'legacy user is narrowed by the per-server list');
+      withCfg({ allowedUserIds: ['111'], permissions: rules(`${U(1)} 2 start`) });
+      r = await go2('start', '111', { serverid: '2' }); assert(eph(r.replies[0]), 'a rule for another user does not help');
+      withCfg({ allowedUserIds: ['111'], permissions: [{ userId: '111', serverId: '2', actions: ['start'] }] }); // programmatic rule with a short id: handlers compare ids as strings
+      r = await go2('start', '111', { serverid: '2' }); assert(r.deferred, 'an explicit rule overrides the per-server narrowing for that user'); delete st6.running[2]; calls6.length = 0;
+      withCfg({ allowedUserIds: ['111'], permissions: rules(`${U(1)} 0 all`) }); r = await go2('start', U(1), { serverid: '2' }); assert(r.deferred, 'rule user is not narrowed'); delete st6.running[2];
+      // empty everything = nobody
+      withCfg({ allowedUserIds: [], adminRoleIds: [], permissions: [] });
+      for (const c of ['check', 'list', 'stats']) { r = await go2(c, U(1)); assert(denied(r), 'empty: ' + c + ' denied'); } r = await go2('start', U(1), { serverid: '1' }); assert(denied(r), 'empty: start denied'); eq(calls6, []);
+      // live read: no reconnect, the handler reads settings on every call
+      withCfg({ permissions: [] }); r = await go2('check', U(1)); assert(denied(r), 'before'); fmgr.settings.discord = { ...fmgr.settings.discord, permissions: rules(`${U(1)} 0 check`) }; r = await go2('check', U(1)); assert(!eph(r.replies[0]), 'same handler instance sees new rules at once');
+      fmgr.settings.discord = { ...fmgr.settings.discord, permissions: [] }; r = await go2('check', U(1)); assert(eph(r.replies[0]), 'and their removal');
+      // registration unchanged
+      eq(DC.registrationJson().map((c) => c.name), ['check', 'list', 'start', 'stop', 'restart', 'update', 'send', 'backup', 'stats'], 'registration JSON unchanged'); eq(JSON.stringify(DC.registrationJson()), JSON.stringify(reg), 'registration payload identical');
+      // bot signature does not include permissions (no reconnect)
+      const sigBot = new DiscordBot(fmgr, null, fmgr.settings, dir, { loadDiscord: () => { throw new Error('no'); } }); const sig0 = sigBot.signature(); fmgr.settings.discord = { ...fmgr.settings.discord, permissions: rules(`${U(1)} 0 all`) }; eq(sigBot.signature(), sig0, 'changing permissions does not trigger a reconnect');
+      // IPC
+      const apP = buildApi6({ mgr: Object.assign(Object.create(m), { list: () => [{ id: '1', name: 'Alpha' }, { id: '3', name: 'Gamma' }] }), collector: { state: () => ({}) }, publicGames: () => [], shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {} });
+      const ip = apP.discordPermParse(`${U(1)} 3 start\n${U(1)} 8 start\nbad`); eq([ip.rules.length, ip.errors.length, ip.warnings.length, ip.servers.map((x) => x.name)], [2, 1, 1, ['Alpha', 'Gamma']], 'discordPermParse: rules + line errors + unknown-server warnings + server names');
+      eq(apP.discordPermFormat(ip.rules), `${U(1)} 3 start\n${U(1)} 8 start`, 'discordPermFormat');
+      m.settings = S6.read(dir); const apS = buildApi6({ mgr: m, collector: { state: () => ({}) }, publicGames: () => [], shell: {}, dialog: {}, app: { setLoginItemSettings() {} }, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {} });
+      const savePub = apS.saveSettings({ discord: { permissions: [{ userId: U(1), serverId: '*', actions: ['read', 'x'] }, { userId: 'bad', serverId: 1, actions: ['all'] }] } });
+      eq(savePub.discord.permissions, [{ userId: U(1), serverId: '0', actions: ['check', 'list', 'stats'] }], 'saveSettings sanitises the rules and returns them'); eq(S6.read(dir).discord.permissions, savePub.discord.permissions, 'persisted to settings.json'); apS.saveSettings({ discord: { applicationId: '1' } }); eq(S6.read(dir).discord.permissions.length, 1, 'a patch without permissions keeps them'); apS.saveSettings({ discord: { permissions: [] } }); eq(S6.read(dir).discord.permissions, [], 'empty list clears them');
+      fmgr.settings.discord = savedCfg; st6.pending[3] = 'Updating'; st6.running = { 1: true }; H = mk();
+    }
+
     // token redaction helpers
     assert(!DC.redact('login failed for ' + TOKEN + ' / Authorization: Bot ' + TOKEN).includes('MTIzNDU2'), 'redact removes tokens'); assert(!DC.redact('x abc.def.ghi', 'abc.def.ghi').includes('abc.def.ghi'), 'redact removes the exact configured value even when it is not token-shaped');
     assert(DC.tokenFormatOk(TOKEN) && !DC.tokenFormatOk('nope') && !DC.tokenFormatOk('') && !DC.tokenFormatOk(null), 'token format check');

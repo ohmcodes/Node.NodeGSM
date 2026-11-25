@@ -98,6 +98,8 @@ Every function of the app backend is one entry of the table returned by `buildAp
 | `discordBotRestart` | - | status | Disconnects and reconnects (re-registers commands) |
 | `discordBotTest` | `candidate?` | `{ ok, error? }` | Token **format** check only (no network); without an argument checks the saved token |
 | `discordBotCommands` | - | command JSON[] | The slash-command definitions in Discord's API shape (for the preview list) |
+| `discordPermParse` | `text` | `{ rules[], errors[], warnings[], servers[], actions[] }` | Parses the permission editor text (`<userId> <serverId> <action,...>` per line); pure, saves nothing. `errors` / `warnings` are `{ line, text, message }` (unknown server ids are warnings); `servers` is `{ id, name }[]` for the preview |
+| `discordPermFormat` | `rules` | text | Rules -> editor text (`all` / `read` shortcuts, one rule per line) |
 
 ## Plugins and settings
 | Channel | Args | Returns | Notes |
@@ -108,7 +110,7 @@ Every function of the app backend is one entry of the table returned by `buildAp
 | `pluginsInstallZip` / `pluginsInstallFolder` | - | plugin id or `null` | Opens a file / folder dialog; `null` = cancelled |
 | `pluginsFolder` | - | - | Opens the user plugins folder |
 | `settings` | - | settings | Sanitised settings (bot token masked: `discord.botTokenSet`) |
-| `saveSettings` | `patch` | settings | Validates, merges (nested objects merge key-wise), applies theme / login item / bot. A blank `botToken` keeps the saved token, `discord.clearBotToken: true` removes it |
+| `saveSettings` | `patch` | settings | Validates, merges (nested objects merge key-wise; `discord.permissions` is replaced as a whole list and sanitised), applies theme / login item / bot. A blank `botToken` keeps the saved token, `discord.clearBotToken: true` removes it |
 | `settingsDefaults` | - | settings | `DEFAULTS` of `settings.js` (reset buttons) |
 | `openExternal` | `url` | - | Opens an `http(s)` link in the default browser; anything else throws |
 | `pickFolder` | - | path or `null` | Folder dialog. Web mode: throws ("not available in web mode"); the UI hides the button and lets the user type the path |

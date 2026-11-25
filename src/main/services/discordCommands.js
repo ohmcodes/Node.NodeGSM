@@ -5,6 +5,8 @@
 //                   reply, deferReply, editReply, followUp, deleteReply?, respond? (autocomplete) }
 // Every attempt (allowed, denied, rate limited, failed) is written to the NGSM event log as "discord:command".
 
+const P = require('./discordPermissions');
+
 const EPHEMERAL = 64;                 // MessageFlags.Ephemeral
 const OPT = { STRING: 3, BOOLEAN: 5 };// ApplicationCommandOptionType
 const MAX_SEND = 500;                 // /send command length cap
@@ -79,23 +81,44 @@ function memberRoleIds(member) {
 const asList = (v) => (Array.isArray(v) ? v.map(String) : []);
 
 /**
- * Who may use the bot. Default deny: an empty allowlist and no admin role means nobody.
- * @returns {{ok:boolean, admin:boolean, reason?:string}}
+ * Who is known to the bot. Default deny: no admin role, no legacy allowed id and no permission rule means nobody.
+ *   admin   member has one of settings.discord.adminRoleIds: full rights
+ *   legacy  user id is in the deprecated settings.discord.allowedUserIds: every command, subject to the per-server restriction
+ *   rules   the user's permission rules (settings.discord.permissions): authoritative for exactly what they list
+ * @returns {{ok:boolean, admin:boolean, legacy:boolean, rules:object[], reason?:string}}
  */
 function authorize(discordCfg, user, member) {
   const cfg = discordCfg || {};
   const id = user && user.id != null ? String(user.id) : '';
   const adminRoles = asList(cfg.adminRoleIds);
   const admin = adminRoles.length > 0 && memberRoleIds(member).some((r) => adminRoles.includes(r));
-  if (admin) return { ok: true, admin: true };
-  if (id && asList(cfg.allowedUserIds).includes(id)) return { ok: true, admin: false };
-  return { ok: false, admin: false, reason: 'not authorised' };
+  const legacy = !!id && asList(cfg.allowedUserIds).includes(id);
+  const rules = id ? P.rulesOf(cfg.permissions, id) : [];
+  if (admin || legacy || rules.length) return { ok: true, admin, legacy, rules };
+  return { ok: false, admin: false, legacy: false, rules: [], reason: 'not authorised' };
 }
-/** Per-server restriction: when wgsm.json has a non-empty discordAllowedUserIds only those users (and admins) may act on that server. */
+/** Per-server restriction: when wgsm.json has a non-empty discordAllowedUserIds only those users (and admins) may act on that server. It narrows legacy allowed users only; permission rules are authoritative. */
 function serverAllows(serverCfg, user, auth) {
   const list = asList(serverCfg && serverCfg.discordAllowedUserIds);
   return !list.length || auth.admin || list.includes(String(user.id));
 }
+/**
+ * May this (already known) user run `action`? serverCfg is the server's config when it exists (for the per-server restriction).
+ * Order: admin -> permission rule -> legacy allowed user (narrowed by discordAllowedUserIds) -> deny.
+ * Global actions (check, list, stats) need any rule that lists them; server actions need a rule for that server or for 0 (all).
+ * @returns {{ok:boolean, via?:'admin'|'rule'|'legacy', restricted?:boolean}}
+ */
+function authorizeAction(auth, user, action, serverId, serverCfg) {
+  if (auth.admin) return { ok: true, via: 'admin' };
+  const global = P.GLOBAL_ACTIONS.includes(action);
+  if (global ? P.hasAction(auth.rules, action) : P.permits(auth.rules, action, serverId)) return { ok: true, via: 'rule' };
+  if (auth.legacy) {
+    if (global || serverAllows(serverCfg, user, auth)) return { ok: true, via: 'legacy' };
+    return { ok: false, restricted: true };
+  }
+  return { ok: false };
+}
+const safeId = (v) => String(v == null ? '' : v).trim().replace(/[^\w.-]/g, '').slice(0, 40);
 
 // ---------- rate limit ----------
 class RateLimiter {
@@ -164,8 +187,8 @@ function createHandlers(deps) {
     },
 
     async list(c) {
-      const v = views();
-      if (!v.length) return c.reply({ embeds: [embed('Servers', 'No servers are installed yet.', COLORS.info)] });
+      const v = views().filter((x) => c.canSee(x.id));
+      if (!v.length) return c.reply({ embeds: [embed('Servers', 'No servers are installed yet, or none are available to you.', COLORS.info)] });
       const lines = v.slice(0, 40).map((x) => {
         const max = x.maxPlayersLive || x.maxPlayers;
         const pl = x.players != null ? ` - ${x.players}${max ? '/' + max : ''} players` : '';
@@ -228,7 +251,7 @@ function createHandlers(deps) {
         { name: 'RAM', value: `${fmtBytes(sys.memUsed)} / ${fmtBytes(sys.memTotal)}`, inline: true },
         { name: 'Disk', value: sys.disk ? `${fmtBytes(sys.disk.used)} / ${fmtBytes(sys.disk.total)} (${sys.disk.drive})` : 'n/a', inline: true },
       ];
-      const run = (snap.servers || []).filter((r) => r.pid);
+      const run = (snap.servers || []).filter((r) => r.pid && c.canSee(r.id));
       const lines = run.slice(0, 25).map((r) => {
         const tick = r.tick ? `${Math.round(r.tick.value * 10) / 10} ${r.tick.unit || ''}`.trim() : r.metrics && r.metrics.latency ? `${Math.round(r.metrics.latency.value)} ms latency` : 'n/a';
         return `\`${r.id}\` **${clip(r.name, 40)}** - CPU ${pct(r.cpu)}, RAM ${r.mem != null ? fmtBytes(r.mem) : 'n/a'}, players ${r.players != null ? r.players + (r.maxPlayers ? '/' + r.maxPlayers : '') : 'n/a'}, tick ${tick}`;
@@ -245,7 +268,7 @@ function createHandlers(deps) {
     const noMentions = { allowedMentions: { parse: [] } };
     let deferred = false;
     const ctx = {
-      serverId: '', extra: {},
+      serverId: '', extra: {}, canSee: () => true,
       str: (n) => (interaction.options && interaction.options.getString ? interaction.options.getString(n) : null),
       bool: (n) => (interaction.options && interaction.options.getBoolean ? interaction.options.getBoolean(n) : null),
       reply: (body, ephemeral = false) => interaction.reply({ ...body, ...noMentions, ...(ephemeral ? { flags: EPHEMERAL } : {}) }),
@@ -276,23 +299,27 @@ function createHandlers(deps) {
     }
 
     const auth = authorize(dcfg(), user, interaction.member);
-    if (!auth.ok) {
-      logAttempt(user, name, '', 'denied: not authorised', 'warn');
-      await sayNo('You are not authorised to use NodeGSM commands.');
+    const deny = async (text, result, serverId) => {
+      logAttempt(user, name, serverId, 'denied: ' + result, 'warn', { required: name });
+      await sayNo(text);
       return { result: 'denied' };
-    }
+    };
+    if (!auth.ok) return deny('You are not authorised to use NodeGSM commands.', 'not authorised', def.mutating ? safeId(ctx.str('serverid')) : '');
 
     try {
-      // per-server restriction (mutating commands only; the server id is validated inside the action first)
-      if (def.mutating) {
-        const raw = ctx.str('serverid');
-        const cfg = raw ? mgr.getConfig(String(raw).trim()) : null;
-        if (cfg && !serverAllows(cfg, user, auth)) {
-          logAttempt(user, name, String(raw).trim(), 'denied: server restricted', 'warn');
-          await sayNo('You are not authorised to control this server.');
-          return { result: 'denied' };
-        }
+      // permission check before the action runs. For servers it uses the raw id, so a missing permission is reported the same way
+      // whether or not the server exists (the rule list is never revealed).
+      const rawId = def.mutating ? safeId(ctx.str('serverid')) : '';
+      const cfg = rawId ? mgr.getConfig(rawId) : null;
+      const dec = authorizeAction(auth, user, name, rawId, cfg);
+      if (!dec.ok) {
+        if (dec.restricted) return await deny('You are not authorised to control this server.', 'server restricted', rawId);
+        return await deny(def.mutating ? 'You do not have permission to use /' + name + ' on server ' + (rawId || '?') + '.' : 'You do not have permission to use /' + name + '.', 'missing permission', rawId);
       }
+      ctx.extra.via = dec.via;
+      // /list and /stats only show the servers a rules-only user has any permission for (admins and legacy users see all)
+      const vis = auth.admin || auth.legacy ? 'all' : P.visibleServers(auth.rules);
+      ctx.canSee = (id) => vis === 'all' || vis.has(String(id));
       await actions[name](ctx);
       logAttempt(user, name, ctx.serverId, 'ok', 'info', ctx.extra);
       return { result: 'ok' };
@@ -315,10 +342,12 @@ function createHandlers(deps) {
       const f = focused && typeof focused === 'object' ? focused : { name: 'serverid', value: String(focused || '') };
       if (f.name !== 'serverid') return respond([]);
       const q = String(f.value || '').toLowerCase().trim();
+      const cmd = BY_NAME[interaction.commandName];
+      if (!cmd || !cmd.mutating) return respond([]);   // only commands with a serverid option autocomplete
       const out = [];
       for (const v of views()) {
-        const cfg = { discordAllowedUserIds: v.discordAllowedUserIds };
-        if (!serverAllows(cfg, interaction.user || {}, auth)) continue;
+        const dec = authorizeAction(auth, interaction.user || {}, cmd.name, String(v.id), { discordAllowedUserIds: v.discordAllowedUserIds });
+        if (!dec.ok) continue;
         const text = `${v.id} ${DASH} ${v.name}`;
         if (!q || String(v.id).toLowerCase().includes(q) || String(v.name).toLowerCase().includes(q)) out.push({ name: clip(text, 100), value: String(v.id) });
       }
@@ -331,6 +360,6 @@ function createHandlers(deps) {
 
 module.exports = {
   COMMANDS, BY_NAME, OPT, EPHEMERAL, MAX_SEND, RATE, DASH,
-  registrationJson, createHandlers, authorize, serverAllows, memberRoleIds, RateLimiter, Refusal,
+  registrationJson, createHandlers, authorize, authorizeAction, serverAllows, memberRoleIds, RateLimiter, Refusal,
   redact, safeError, tokenFormatOk, fmtBytes, fmtDuration,
 };

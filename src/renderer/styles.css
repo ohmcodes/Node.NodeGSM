@@ -314,3 +314,6 @@ body:not([data-view=configs]) #vConfigs{display:none}
 :root[data-mode=web] .desktop-only{display:none !important}
 .badge.nap{background:var(--bad);color:#fff}.badge.plat{background:var(--badge);color:var(--muted)}.badge.plat.here{color:var(--text);border:1px solid var(--accent)}
 .gamepick div.unsupported{opacity:.5;cursor:not-allowed}
+.bt-ex{margin:0 0 8px;padding:8px 10px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;font-size:12px;overflow:auto}
+.bt-perm{display:flex;flex-direction:column;gap:4px}.bt-errs{margin:4px 0;padding-left:18px;font-size:12px}.bt-errs .w{color:var(--warn)}.bt-errs .e{color:var(--bad)}
+.bt-ptab{font-size:13px;margin-top:6px}.bt-ptab[hidden]{display:none}.bt-ptab td:first-child{font-family:var(--mono,Consolas,monospace)}

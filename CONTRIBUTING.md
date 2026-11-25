@@ -99,7 +99,7 @@ src/main/              Electron main process
   crash.js             crash-restart policy
   services/            event-driven services, constructed in main.js, subscribe to mgr.events:
                        eventLog.js (NGSM log), discord.js (webhook alerts), discordBot.js (discord.js wiring) +
-                       discordCommands.js (pure command handlers, tested with fake interactions),
+                       discordCommands.js (pure command handlers, tested with fake interactions), discordPermissions.js (per-user per-server permission rules: parse / sanitise / match),
                        backup.js + zip.js (streaming zip64), cluster.js + clusterMerge.js, autoClear.js, consoles.js
 src/server/            headless web server: headless.js (HTTP + WebSocket, `npm run serve`), auth.js (token, sessions, rate limit)
 src/renderer/          UI (plain JS / CSS, no framework, no inline scripts):
