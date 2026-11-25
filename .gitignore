@@ -4,3 +4,8 @@ backups/
 bin/
 logs/
 dist/
+
+website/catalog/
+website/data/
+website/server/data/
+catalog/

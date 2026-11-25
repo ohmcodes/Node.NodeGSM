@@ -9,7 +9,11 @@
     "dist": "electron-builder --win",
     "pack": "electron-builder --win --dir",
     "validate:plugins": "node scripts/validate-plugins.js",
-    "registry": "node scripts/build-registry.js"
+    "registry": "node scripts/build-registry.js",
+    "site": "node scripts/build-site.js",
+    "catalog": "node scripts/build-catalog.js",
+    "site:serve": "node website/server/server.js",
+    "test:site": "node website/server/test.js"
   },
   "license": "MIT",
   "dependencies": {
