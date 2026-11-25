@@ -126,6 +126,23 @@
         "readme": "plugins/arkse/README.md",
         "screenshots": []
       },
+      "cluster": {
+        "protectedConfigKeys": [
+          "SessionName",
+          "ServerAdminPassword",
+          "RCONPort"
+        ],
+        "preserve": [
+          "ShooterGame/Saved"
+        ],
+        "clearFolders": [
+          {
+            "path": "ShooterGame/Saved/Logs",
+            "pattern": "*.log",
+            "olderThanDays": 7
+          }
+        ]
+      },
       "backup": {
         "presets": [
           {
@@ -1628,6 +1645,35 @@
         "readme": "plugins/mc/README.md",
         "screenshots": []
       },
+      "cluster": {
+        "protectedConfigKeys": [
+          "server-port",
+          "query.port",
+          "rcon.*"
+        ],
+        "preserve": [
+          "world",
+          "world_nether",
+          "world_the_end",
+          "ops.json",
+          "whitelist.json",
+          "banned-players.json",
+          "banned-ips.json",
+          "usercache.json"
+        ],
+        "clearFolders": [
+          {
+            "path": "logs",
+            "pattern": "*.log*",
+            "olderThanDays": 14
+          },
+          {
+            "path": "crash-reports",
+            "pattern": "*.txt",
+            "olderThanDays": 30
+          }
+        ]
+      },
       "backup": {
         "presets": [
           {
@@ -2262,6 +2308,24 @@
         "banner": null,
         "readme": "plugins/rust/README.md",
         "screenshots": []
+      },
+      "cluster": {
+        "protectedConfigKeys": [
+          "server.port",
+          "server.identity",
+          "rcon.*"
+        ],
+        "preserve": [
+          "server",
+          "oxide/data"
+        ],
+        "clearFolders": [
+          {
+            "path": "oxide/logs",
+            "pattern": "*.txt",
+            "olderThanDays": 14
+          }
+        ]
       },
       "backup": {
         "presets": [

@@ -199,6 +199,7 @@ function validateExtensions(m, e) {
     num(r.olderThanDays, `${at}.olderThanDays`, 0);
     num(r.intervalMin, `${at}.intervalMin`, 1);
     if (r.default !== undefined && typeof r.default !== 'boolean') e(`${at}.default must be true or false`);
+    if (r.recursive !== undefined && typeof r.recursive !== 'boolean') e(`${at}.recursive must be true or false`);
   };
   const list = (v, name, each) => { if (v === undefined) return; if (!Array.isArray(v)) e(`"${name}" must be an array`); else v.forEach((x, i) => each(x, `${name}[${i}]`)); };
   const uniqueId = (x, at, seen) => {

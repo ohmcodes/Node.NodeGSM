@@ -90,9 +90,11 @@ app.whenReady().then(() => {
   const instances = [EventLog, Discord, DiscordBot, BackupService, Cluster, AutoClear].map((S) => new S(mgr, require('./plugins'), mgr.settings, dataDir));
   services = instances;
   const [eventLog, discord] = instances;
+  const cluster = instances.find((x) => x instanceof Cluster);
+  cluster.onProgress = (p) => send('cluster:progress', p);
 
   const api = buildApi({
-    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord,
+    mgr, collector, publicGames, shell, dialog, app, nativeTheme, currentBg, eventLog, discord, cluster,
     getWin: () => win,
     beforeRelaunch: () => { quitting = 'done'; },
   });

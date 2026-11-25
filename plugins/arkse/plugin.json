@@ -39,7 +39,8 @@
       "name": "GameUserSettings.ini",
       "path": "ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini",
       "format": "ini",
-      "description": "Server settings, passwords, rates"
+      "description": "Server settings, passwords, rates",
+      "protect": ["SessionName", "ServerPassword", "ServerAdminPassword", "RCONPort", "RCONEnabled", "Port", "QueryPort"]
     },
     {
       "id": "game-ini",
@@ -56,6 +57,13 @@
       "path": "ShooterGame/Saved/Logs/ShooterGame.log"
     }
   ],
+  "cluster": {
+    "protectedConfigKeys": ["SessionName", "ServerAdminPassword", "RCONPort"],
+    "preserve": ["ShooterGame/Saved"],
+    "clearFolders": [
+      { "path": "ShooterGame/Saved/Logs", "pattern": "*.log", "olderThanDays": 7 }
+    ]
+  },
   "backup": {
     "presets": [
       {

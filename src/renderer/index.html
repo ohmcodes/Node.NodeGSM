@@ -29,6 +29,7 @@
         <button class="nav-item sub" data-view="table" title="Horizontal table, multi-select"><span class="ico">&#9638;</span><span class="lbl">Table</span></button>
         <button class="nav-item sub" data-view="logs" title="NodeGSM event log"><span class="ico">&#9776;</span><span class="lbl">Logs</span></button>
         <button class="nav-item sub" data-view="backups" title="Backups of all servers"><span class="ico">&#9729;</span><span class="lbl">Backups</span></button>
+        <button class="nav-item sub" data-view="clusters" title="Clusters: update, config sync, clear folders"><span class="ico">&#9741;</span><span class="lbl">Clusters</span></button>
       </div>
     </div>
     <button class="nav-item" data-view="dashboard" title="System Metrics"><span class="ico">&#9684;</span><span class="lbl">System Metrics</span></button>
@@ -161,6 +162,13 @@
     <div class="tablewrap"><table id="bvTable"></table></div>
     <div id="bvEmpty" class="muted pad" hidden>No backups match. Create one in a server's <b>Backups</b> tab or with the Backup button in the Table view.</div>
   </section>
+  <section id="vClusters">
+    <div class="toolbar lg-bar"><button type="button" id="clNew" class="primary">Create cluster</button><span class="spacer"></span><button type="button" id="clRefresh">Refresh</button></div>
+    <div class="cl-grid">
+      <div class="cl-left"><ul id="clList"></ul><div id="clEmpty" class="muted pad" hidden>No clusters yet. A cluster groups servers of the same game so you can update them together, sync configs and clear folders.</div></div>
+      <div id="clDetail" class="cl-detail"></div>
+    </div>
+  </section>
   </div>
   <aside id="rightPanel">
     <div class="list-title">Details</div>
@@ -214,6 +222,21 @@
   </form>
 </dialog>
 
+<dialog id="dlgClNew">
+  <form method="dialog" id="cnForm">
+    <h3>Create cluster</h3>
+    <p id="cnNone" class="muted" hidden>You need at least 2 installed servers of the same game that are not in a cluster yet.</p>
+    <div id="cnBody">
+      <label>Game <select id="cnGame"></select></label>
+      <label>Cluster name <input id="cnName" maxlength="60" autocomplete="off"></label>
+      <h4>Servers (tick at least 2) and the parent</h4>
+      <div id="cnServers" class="cl-picks"></div>
+      <p class="muted small">The parent is updated first; its game files are copied to the other servers. Configs and saves of the members are not overwritten.</p>
+    </div>
+    <div class="row end"><button type="button" id="cnCancel">Cancel</button><button type="submit" id="cnOk" class="primary">Create</button></div>
+  </form>
+</dialog>
+
 <div id="toast"></div>
 <script src="links.js"></script>
 <script src="app.js"></script>
@@ -222,5 +245,6 @@
 <script src="discordView.js"></script>
 <script src="logsView.js"></script>
 <script src="backupsView.js"></script>
+<script src="clustersView.js"></script>
 </body>
 </html>

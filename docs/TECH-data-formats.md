@@ -48,9 +48,41 @@ Entries are the server files with paths relative to the server folder (`/`, UTF-
 ```
 `level` is `info | warn | error`; `message` is capped at 1000 characters and `detail` at 4000. See [GUIDE-logging.md](GUIDE-logging.md).
 
-## `clusters.json` (placeholder - clusters are not implemented yet)
-Planned location `<data>/clusters.json`; the shape below is the plan's draft and may change before release:
+## `clusters.json`
+`<data>/clusters.json`, written atomically by `services/cluster.js`. Servers are referenced by id (the number of `servers/<id>`).
 ```json
-{ "clusters": [ { "id": "1", "name": "My cluster", "game": "arkse", "parentId": "1", "memberIds": ["1", "2", "3"], "options": {} } ] }
+{
+  "version": 1,
+  "clusters": [
+    {
+      "id": "1",
+      "name": "Minecraft network",
+      "game": "mc",
+      "parentId": "1",
+      "memberIds": ["1", "2", "3"],
+      "createdAt": "2026-11-24T18:50:33.120Z",
+      "options": {
+        "protect": ["motd"],
+        "preserve": ["data/keep.dat"],
+        "clearFolders": [{ "path": "logs", "pattern": "*.log", "olderThanDays": 7, "recursive": false }],
+        "onlyChanged": false
+      }
+    }
+  ]
+}
 ```
-Nothing reads or writes this file yet.
+| Field | Meaning |
+|---|---|
+| `id` | cluster id (string, lowest free number) |
+| `game` | plugin id; all members have this game |
+| `parentId` | a member; it is updated first and is the source of file / config copies |
+| `memberIds` | at least 2 servers (including the parent); a server is in at most one cluster |
+| `options.protect` | extra protected config key globs (on top of `configs[].protect` and `cluster.protectedConfigKeys`) |
+| `options.preserve` | extra relative paths never overwritten by a cluster update |
+| `options.clearFolders` | extra clear rules `{ path, pattern, olderThanDays, recursive? }`, added to the plugin's |
+| `options.onlyChanged` | default of the "copy only changed files" option |
+
+All paths are relative to the server files folder (`safeRel`: no `..`, drive letters, `:`). A missing or corrupt file starts with no clusters (the corrupt one is kept as `clusters.json.corrupt-<ms>`). Unknown versions are not migrated yet.
+
+### Config merge markers
+`NGSM:ignore` anywhere in a line of a config file (in the parent's or the member's copy) keeps the member's line during config sync, whatever the comment style: `# NGSM:ignore`, `// NGSM:ignore`, `; NGSM:ignore`, `<!-- NGSM:ignore -->`.

@@ -14,7 +14,7 @@ const appSettings = require('./settings');
  *   getWin       () => BrowserWindow | undefined
  *   currentBg    () => string
  *   beforeRelaunch  async () => void   (marks the app as quitting)
- *   eventLog, discord   service instances (services/eventLog.js, services/discord.js)
+ *   eventLog, discord, cluster   service instances (services/eventLog.js, services/discord.js, services/cluster.js)
  */
 function buildApi(ctx) {
   const { mgr, collector, shell, dialog, app, nativeTheme, getWin, currentBg } = ctx;
@@ -64,6 +64,17 @@ function buildApi(ctx) {
     eventLogQuery: (f) => svc('eventLog').query(f),
     eventLogExport: (f) => svc('eventLog').export(f),
     eventLogClear: () => svc('eventLog').clear(),
+    // clusters (services/cluster.js)
+    clusters: () => svc('cluster').list(),
+    clusterCreate: (o) => svc('cluster').create(o),
+    clusterSave: (id, patch) => svc('cluster').save(id, patch),
+    clusterDelete: (id) => svc('cluster').delete(id),
+    clusterUpdatePlan: (id, o) => svc('cluster').updatePlan(id, o),
+    clusterUpdate: (id, o) => svc('cluster').update(id, o),
+    clusterConfigPlan: (id, o) => svc('cluster').configPlan(id, o),
+    clusterConfigApply: (id, o) => svc('cluster').configApply(id, o),
+    clusterClearPlan: (id, o) => svc('cluster').clearPlan(id, o),
+    clusterClear: (id, o) => svc('cluster').clear(id, o),
     discordInfo: () => svc('discord').info(),
     discordTest: (kind, template) => svc('discord').test(kind, template),
     discordPreview: (template, sampleVars, event) => svc('discord').preview(template, sampleVars, event),

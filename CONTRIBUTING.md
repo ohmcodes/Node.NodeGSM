@@ -88,6 +88,6 @@ website/             the website + its community backend (npm run site, npm run 
 test/                npm test
 ```
 Plugins that want game events in the Logs screen / Discord declare `events` + `logging.patterns` (example in [PLUGINS.md](PLUGINS.md)); architecture notes live in [docs/TECH-architecture.md](docs/TECH-architecture.md).
-Plugins should declare `backup.presets` (saves, configs) and `backup.exclude` (logs, temp files) so players can make neat-pick backups - see [docs/GUIDE-backups.md](docs/GUIDE-backups.md). Plugins may declare optional `cluster`, `backup`, `events`, `logging`, `consoles`, `update` and `files.autoClear` fields (see [PLUGINS.md](PLUGINS.md); paths must be relative, regexes must compile).
+Plugins should declare `backup.presets` (saves, configs) and `backup.exclude` (logs, temp files) so players can make neat-pick backups - see [docs/GUIDE-backups.md](docs/GUIDE-backups.md). Declare `cluster.preserve` (saves and per-server data that a cluster update must not overwrite), `cluster.clearFolders` and `configs[].protect` (ports, passwords) so clusters can update and sync safely - see [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md). Plugins may declare optional `cluster`, `backup`, `events`, `logging`, `consoles`, `update` and `files.autoClear` fields (see [PLUGINS.md](PLUGINS.md); paths must be relative, regexes must compile).
 
 App-code changes: run `npm test`, and update [FEATURES.md](FEATURES.md) (changelog + tables) and the README/PLUGINS docs in the same PR.

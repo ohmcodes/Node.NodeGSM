@@ -167,7 +167,7 @@ Every server already gets **CPU, memory (whole process tree), threads, uptime, P
 NodeGSM cannot read FPS from a game by itself - the game has to print it. Check what your server prints (or which console command reports it) and describe it here. Only add metrics you have verified.
 
 ### Optional fields for clusters, backups, events, logging, consoles, update and auto-clear
-All of these are optional. They are validated and carried onto the game object (and exported in `registry.json` when present). `backup`, `events` and `logging` are used by the app today; the others are being built (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
+All of these are optional. They are validated and carried onto the game object (and exported in `registry.json` when present). `backup`, `events`, `logging`, `cluster` and `configs[].protect` are used by the app today; `consoles`, `update.validateArgs` and `files.autoClear` are being built (see [FEATURES.md](FEATURES.md)). **Every path must be relative to the server files folder, without `..`, never absolute.**
 ```json
 "cluster": {
   "protectedConfigKeys": ["Port", "RCONPort"],
@@ -194,9 +194,9 @@ All of these are optional. They are validated and carried onto the game object (
 | Field | Meaning |
 |---|---|
 | `cluster.protectedConfigKeys` | keys never overwritten when a config is synced from a cluster parent to its members (ports, RCON password ...) |
-| `cluster.clearFolders[]` | `{ path, pattern, olderThanDays }` folders cleaned by the cluster "clear folders" action |
-| `cluster.preserve[]` | paths never overwritten by a cluster update (saves, per-server data) |
-| `configs[].protect[]` | keys/lines of that config kept during cluster config sync (lines marked `# NGSM:ignore` are kept too) |
+| `cluster.clearFolders[]` | `{ path, pattern, olderThanDays, recursive? }` folders cleaned by the cluster "clear folders" action: files in `path` whose **name** matches `pattern` (`*` `?`, default `*`) and that were last modified more than `olderThanDays` ago. Only files are deleted, never the folder; sub-folders only with `"recursive": true`; links are never followed |
+| `cluster.preserve[]` | paths never overwritten by a cluster update (saves, per-server data). A folder covers everything below it. Anchored at the server files folder; a pattern without `/` that contains `*` or `?` (for example `*.sav`) matches by name anywhere. All `configs[].path` files are preserved automatically |
+| `configs[].protect[]` | keys of that config kept during cluster config sync. Case-insensitive globs (`port`, `rcon.*`, `Server?Name`); ini keys can be written `Section.Key`, json / yaml keys by path `network.port`; a name without a dot also matches the last part of a longer key. Lines containing `NGSM:ignore` (any comment style) are kept too |
 | `backup.presets[]` | `{ id, name, paths[] }` named "neat-pick" selections shown as tick-boxes in the server's **Backups** tab; `paths` are files or folders relative to the server files folder (missing ones are skipped) |
 | `backup.exclude[]` | patterns left out of **every** backup (full and neat pick): no `/` = any file or folder with that name, with `/` = a path from the server root; `*`, `**`, `?` wildcards, case-insensitive |
 | `events[]` | `{ id, label, default }` extra game-specific events. They show up in the Discord view as `game:<id>` (label shown as "<Game>: <label>", `default` = initial toggle). They fire when a `logging.patterns` entry with the same `id` matches |
@@ -205,6 +205,23 @@ All of these are optional. They are validated and carried onto the game object (
 | `consoles[]` | `{ id, name, type, source }` extra consoles; `type` is `process`, `log` (`source` = id of a declared log) or `rcon` |
 | `update.validateArgs` | per-installer text used for "Validate", e.g. `{ "steamcmd": "validate" }` |
 | `files.autoClear[]` | `{ path, pattern, olderThanDays, intervalMin, default }` rules that delete old files periodically (`olderThanDays` >= 0, `intervalMin` >= 1) |
+
+#### Example: cluster rules (Minecraft Java, `plugins/mc/plugin.json`)
+```json
+"configs": [
+  { "id": "server-properties", "name": "server.properties", "path": "server.properties", "format": "properties",
+    "protect": ["server-port", "server-ip", "query.port", "rcon.*"] }
+],
+"cluster": {
+  "protectedConfigKeys": ["server-port", "query.port", "rcon.*"],
+  "preserve": ["world", "world_nether", "world_the_end", "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json", "usercache.json"],
+  "clearFolders": [
+    { "path": "logs", "pattern": "*.log*", "olderThanDays": 14 },
+    { "path": "crash-reports", "pattern": "*.txt", "olderThanDays": 30 }
+  ]
+}
+```
+`protectedConfigKeys` apply to **every** config file of the game, `configs[].protect` only to that file. During a cluster update every `configs[].path` is skipped automatically, so only list the saves and per-server data in `preserve`. Always declare the config `format` correctly: it decides how the file is merged (`ini`, `properties`, `cfg`, `yaml`, `json` are key-aware; `text` and `xml` are copied whole except `NGSM:ignore` lines). Bundled examples: `mc`, `arkse`, `rust`. See [docs/GUIDE-clusters.md](docs/GUIDE-clusters.md).
 
 #### Example: backup presets (Minecraft Java, `plugins/mc/plugin.json`)
 ```json

@@ -48,7 +48,8 @@
       "name": "server.properties",
       "path": "server.properties",
       "format": "properties",
-      "description": "Ports, difficulty, MOTD, whitelist, ..."
+      "description": "Ports, difficulty, MOTD, whitelist, ...",
+      "protect": ["server-port", "server-ip", "query.port", "rcon.*"]
     },
     {
       "id": "ops",
@@ -71,6 +72,14 @@
       "path": "logs/latest.log"
     }
   ],
+  "cluster": {
+    "protectedConfigKeys": ["server-port", "query.port", "rcon.*"],
+    "preserve": ["world", "world_nether", "world_the_end", "ops.json", "whitelist.json", "banned-players.json", "banned-ips.json", "usercache.json"],
+    "clearFolders": [
+      { "path": "logs", "pattern": "*.log*", "olderThanDays": 14 },
+      { "path": "crash-reports", "pattern": "*.txt", "olderThanDays": 30 }
+    ]
+  },
   "backup": {
     "presets": [
       {

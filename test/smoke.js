@@ -617,6 +617,197 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   belog.stop(); await m.remove(b1, true); P.GAMES.splice(P.GAMES.indexOf(fgame), 1);
   }
 
+  { // Phase 4 block (own scope): clusters
+  const { Cluster, sanitizeOptions, pathMatcher } = require('../src/main/services/cluster');
+  const { mergeConfig, unifiedDiff, keyGlobs } = require('../src/main/services/clusterMerge');
+  const { EventLog: ELog4 } = require('../src/main/services/eventLog');
+
+  // ---- config merge: ini / properties / json / yaml / cfg / text / xml ----
+  const mc = (format, parentText, memberText, protect = []) => mergeConfig({ format, parentText, memberText, protect });
+  assert(keyGlobs(['rcon.*', 'Port'])(['RCON.password']) && keyGlobs(['rcon.*'])(['rcon.password']) && !keyGlobs(['rcon.*'])(['rcons']) && keyGlobs(['Server?ame'])(['servername']), 'key globs are case-insensitive with * and ?');
+  const ini = mc('ini', '[Server]\nName=Parent\nPort=7777\nRCONPassword=parentpw\nMaxPlayers=70\n[Rates]\nXP=2.0\nCustom=1 ; NGSM:ignore\nMissing=1\n', '[Server]\nName=Member\nPort=7778\nRCONPassword=memberpw\nMaxPlayers=10\n[Rates]\nXP=1.0\nCustom=99 ; NGSM:ignore\n[Extra]\nPort=1234\n', ['Port', 'RCON*']);
+  eq(ini.text, '[Server]\nName=Parent\nPort=7778\nRCONPassword=memberpw\nMaxPlayers=70\n[Rates]\nXP=2.0\nCustom=99 ; NGSM:ignore\nMissing=1\n[Extra]\nPort=1234\n', 'ini: protected keys and NGSM:ignore lines keep the member value, member-only protected key survives');
+  assert(ini.warnings.some((w) => /kept member-only line: Extra\.Port/.test(w)), 'ini: member-only key reported');
+  eq(mc('ini', '[A]\nx=1\n[B]\ny=2\n', '[A]\nx=1\nPort=5\n[B]\ny=3\n', ['port']).text, '[A]\nx=1\nPort=5\n[B]\ny=2\n', 'ini: member-only key is inserted into its own section');
+  assert(mc('ini', '[S]\r\nPort=1\r\nName=P\r\n', '[S]\r\nPort=2\r\nName=M\r\n', ['port']).text === '[S]\r\nPort=2\r\nName=P\r\n', 'CRLF of the member is kept');
+  const miss = mc('ini', '[S]\nPort=7777\nName=P\n', null, ['Port']);
+  eq(miss.text, '[S]\nPort=7777\nName=P\n'); assert(miss.warnings.some((w) => /protected key not present in member: S\.Port/.test(w)), 'missing member file: parent value used + warning');
+  eq(mc('properties', 'server-port=25565\nrcon.password=\nrcon.port=1\nmotd=Parent\nlevel-name=world # NGSM:ignore\n# comment\n', 'server-port=25570\nrcon.password=secret\nrcon.port=2\nmotd=Member\nlevel-name=mine # NGSM:ignore\n', ['server-port', 'rcon.*']).text,
+    'server-port=25570\nrcon.password=secret\nrcon.port=2\nmotd=Parent\nlevel-name=mine # NGSM:ignore\n# comment\n', 'properties');
+  const js = mc('json', JSON.stringify({ network: { port: 1, host: 'x' }, rcon: { password: 'p', port: 5 }, name: 'P', list: [1] }), JSON.stringify({ network: { port: 2 }, rcon: { password: 'm', port: 6 }, name: 'M', extra: true }), ['network.port', 'rcon.*']);
+  eq(JSON.parse(js.text), { network: { port: 2, host: 'x' }, rcon: { password: 'm', port: 6 }, name: 'P', list: [1] }, 'json: deep key paths'); assert(js.text.startsWith('{\n  "network"'), 'json: 2-space formatting');
+  assert(mc('json', '{"a":{"b":1}}', '{}', ['a.b']).warnings.length === 1, 'json: protected key missing in member warns');
+  assert.throws(() => mc('json', '{ bad', '{}', []), /not valid JSON/); assert.throws(() => mc('json', '{}', '{ bad', ['a']), /member file is not valid JSON/);
+  eq(mc('yaml', 'name: parent\nnetwork:\n  port: 1\n  host: a\nrcon:\n  password: p\n  port: 5\nmotd: hi # NGSM:ignore\nitems:\n  - a\n', 'name: member\nnetwork:\n  port: 2\n  host: b\nrcon:\n  password: m\n  port: 6\nmotd: custom # NGSM:ignore\n', ['network.port', 'rcon']).text,
+    'name: parent\nnetwork:\n  port: 2\n  host: a\nrcon:\n  password: m\n  port: 6\nmotd: custom # NGSM:ignore\nitems:\n  - a\n', 'yaml: indented keys, protected block keeps its children');
+  eq(mc('cfg', 'hostname "Parent"\nrcon_password "pp"\nsv_cheats 0\n// c\nexec a.cfg\nexec b.cfg\n', 'hostname "Member"\nrcon_password "mm"\nexec x.cfg\nexec y.cfg\n', ['hostname', 'rcon_password']).text,
+    'hostname "Member"\nrcon_password "mm"\nsv_cheats 0\n// c\nexec a.cfg\nexec b.cfg\n', 'cfg (key value) with repeated keys');
+  eq(mc('text', 'Line A\nPort 1 # NGSM:ignore\nLine C\n', 'Zzz\nPort 2\n').text, 'Line A\nPort 2\nLine C\n', 'text: NGSM:ignore line matched by content'); assert(!mc('text', 'a\nPort 1 // NGSM:ignore\n', 'Port 2\n').warnings.some((w) => /nothing in it/.test(w)));
+  assert(mc('text', 'a\nb\n', 'c\n', ['x']).warnings.some((w) => /nothing in it can be protected/.test(w)) && mc('text', 'a\nb\n', 'c\n').text === 'a\nb\n', 'text without markers: whole copy + warning');
+  eq(mc('xml', '<c>\n  <port>7777</port> <!-- NGSM:ignore -->\n  <name>P</name>\n</c>\n', '<c>\n  <port>8888</port>\n  <name>M</name>\n</c>\n').text, '<c>\n  <port>8888</port>\n  <name>P</name>\n</c>\n', 'xml: <!-- NGSM:ignore --> keeps the member line');
+  for (const mark of ['# NGSM:ignore', '// NGSM:ignore', '; NGSM:ignore', '<!-- NGSM:ignore -->']) eq(mc('properties', `k=1 ${mark}\n`, 'k=2\n').text, 'k=2\n', 'marker style ' + mark);
+  const df = unifiedDiff('a\nb\nc\nd\ne\nf\ng\nh\n', 'a\nb\nX\nd\ne\nf\ng\nh\ni\n'); assert(/^@@ -1,8 \+1,9 @@/m.test(df.text) && df.text.includes('-c\n+X') && df.added === 2 && df.removed === 1, 'unified diff: ' + JSON.stringify(df.text)); eq(unifiedDiff('x\n', 'x\n').text, '', 'no diff when equal');
+
+  // ---- sanitising / path matching ----
+  eq(sanitizeOptions({ protect: ['a', 5, ' b '], preserve: ['saves/'], clearFolders: [{ path: 'logs', pattern: '*.log', olderThanDays: 3 }, { path: 'tmp', recursive: true }], onlyChanged: true }), { protect: ['a', 'b'], preserve: ['saves'], clearFolders: [{ path: 'logs', pattern: '*.log', olderThanDays: 3 }, { path: 'tmp', pattern: '*', recursive: true }], onlyChanged: true }, 'options sanitised');
+  assert.throws(() => sanitizeOptions({ clearFolders: [{ path: '../x' }] }), /Invalid path/); assert.throws(() => sanitizeOptions({ preserve: ['C:/win'] }), /Invalid path/);
+  const pm = pathMatcher(['saves', 'cfg/*.ini', '*.sav', 'a/b.txt']);
+  assert(pm('saves') && pm('saves/x/y.dat') && pm('cfg/server.ini') && pm('deep/world.sav') && pm('a/b.txt') && !pm('cfg/server.cfg') && !pm('other/saves') && !pm('savesX'), 'preserve path matcher (anchored, wildcard by name, covers children)');
+
+  // ---- fake plugin game + servers ----
+  const cgDir = path.join(dir, 'clfake-plugin'); fs.mkdirSync(cgDir);
+  const cgame = P.toGame({ id: 'clfake', name: 'Cluster Fake', install: { steps: [{ type: 'write', path: 'game.exe', content: 'EXE' }, { type: 'write', path: 'data/base.txt', content: 'base', overwrite: true }] }, run: { exe: 'game.exe', args: [] },
+    defaults: { port: '31000', queryPort: '31001', map: 'm', maxPlayers: '4' },
+    configs: [{ id: 'ini', name: 'server.ini', path: 'cfg/server.ini', format: 'ini', protect: ['Port', 'RCONPassword'] }, { id: 'props', name: 'server.properties', path: 'server.properties', format: 'properties', protect: ['server-port'] },
+      { id: 'json', name: 'settings.json', path: 'cfg/settings.json', format: 'json', protect: ['network.port'] }, { id: 'yaml', name: 'conf.yml', path: 'cfg/conf.yml', format: 'yaml', protect: ['port'] },
+      { id: 'cfg', name: 'server.cfg', path: 'cfg/server.cfg', format: 'cfg', protect: ['hostname'] }, { id: 'txt', name: 'motd.txt', path: 'cfg/motd.txt', format: 'text' }],
+    cluster: { protectedConfigKeys: ['rcon.*', 'secret'], preserve: ['saves', 'data/keep.dat'], clearFolders: [{ path: 'logs', pattern: '*.log', olderThanDays: 7 }] } }, cgDir, 'user');
+  P.GAMES.push(cgame);
+  const cput = (id, rel, data) => { const f = path.join(m.filesDir(id), rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, data); return f; };
+  const crd = (id, rel) => fs.readFileSync(path.join(m.filesDir(id), rel), 'utf8');
+  const cex = (id, rel) => fs.existsSync(path.join(m.filesDir(id), rel));
+  const p1 = m.create('clfake', 'Alpha').id; const p2 = m.create('clfake', 'Beta').id; const p3 = m.create('clfake', 'Gamma').id; const px = m.create('csgo', 'Other game').id;
+  for (const id of [p1, p2, p3]) await m.install(id);
+  const celog = new ELog4(m, P, m.settings, dir); celog.start();
+  const cl = new Cluster(m, P, m.settings, dir); cl.start(); assert(m._cluster === cl, 'registered as mgr._cluster');
+  const cevs = []; for (const n of ['created', 'deleted', 'update-started', 'update-finished', 'update-failed', 'config-synced', 'cleared']) m.events.on('cluster:' + n, (p) => cevs.push([n, p]));
+
+  // ---- create validation ----
+  assert.throws(() => cl.create({ name: 'x', memberIds: [p1] }), /at least 2/, 'single member rejected');
+  assert.throws(() => cl.create({ name: 'x', memberIds: [p1, p1] }), /at least 2/, 'duplicate ids count once');
+  assert.throws(() => cl.create({ name: 'x', memberIds: [p1, px] }), /same game/, 'mixed games rejected');
+  assert.throws(() => cl.create({ name: 'x', memberIds: [p1, '999'] }), /does not exist/);
+  assert.throws(() => cl.create({ name: 'x', memberIds: [p1, p2], parentId: p3 }), /parent .* member/, 'parent must be a member');
+  eq(cl.list(), [], 'nothing was stored by failed creates');
+  const cv = cl.create({ name: 'Main', memberIds: [p1, p2, p3], parentId: p1 });
+  eq([cv.id, cv.game, cv.parentId, cv.memberIds, cv.gameName, cv.members.map((x) => x.name), cv.members.map((x) => x.isParent)], ['1', 'clfake', p1, [p1, p2, p3], 'Cluster Fake', ['Alpha', 'Beta', 'Gamma'], [true, false, false]], 'cluster created');
+  assert(cv.preserve.includes('cfg/server.ini') && cv.preserve.includes('saves') && cv.preserve.includes('configs/wgsm.json'), 'effective preserve list shows config paths, plugin preserve and wgsm.json'); eq(cv.protectedKeys, ['rcon.*', 'secret']);
+  assert.throws(() => cl.create({ name: 'again', memberIds: [p2, p3] }), /already in the cluster "Main"/, 'a server can be in only one cluster');
+  const disk = JSON.parse(fs.readFileSync(path.join(dir, 'clusters.json'), 'utf8')); eq([disk.version, disk.clusters.length, disk.clusters[0].memberIds], [1, 1, [p1, p2, p3]], 'clusters.json written'); assert(!fs.existsSync(path.join(dir, 'clusters.json.tmp')), 'atomic write leaves no temp file');
+  eq(new Cluster(m, P, m.settings, dir).list().map((x) => x.name), ['Main'], 'a fresh instance reads the file');
+  assert.throws(() => cl.save('1', { memberIds: [p1, px] }), /same game/); assert.throws(() => cl.save('1', { parentId: px }), /parent/);
+  eq(cl.save('1', { name: 'Main cluster' }).name, 'Main cluster', 'rename'); eq(cl.setParent('1', p2).parentId, p2, 'set parent'); eq(cl.setParent('1', p1).parentId, p1);
+  assert.throws(() => cl.save('1', { options: { clearFolders: [{ path: '../outside' }] } }), /Invalid path/, 'path escape rejected when saving rules');
+  eq(cl.save('1', { options: { protect: ['mykey'] } }).protectedKeys, ['rcon.*', 'secret', 'mykey']); cl.save('1', { options: { protect: [] } });
+  assert.throws(() => cl.get('77'), /not found/); assert.throws(() => cl.updatePlan('77'), /not found/);
+
+  // ---- config sync through the service ----
+  const IN = (port, name) => `[Server]\nName=${name}\nPort=${port}\nRCONPassword=${name}pw\nMaxPlayers=${name === 'Alpha' ? 70 : 10}\n`;
+  cput(p1, 'cfg/server.ini', IN(7777, 'Alpha')); cput(p2, 'cfg/server.ini', IN(7778, 'Beta')); // p3 has no file yet
+  cput(p1, 'server.properties', 'server-port=25565\nrcon.password=\nmotd=Alpha\n'); cput(p2, 'server.properties', 'server-port=25566\nrcon.password=betapw\nmotd=Beta\n'); cput(p3, 'server.properties', 'server-port=25567\nrcon.password=gammapw\nmotd=Gamma\n');
+  cput(p1, 'cfg/settings.json', JSON.stringify({ network: { port: 1 }, rcon: { password: 'a' }, name: 'A' })); cput(p2, 'cfg/settings.json', JSON.stringify({ network: { port: 2 }, rcon: { password: 'b' }, name: 'B' }));
+  cput(p1, 'cfg/conf.yml', 'name: A\nport: 1\nsecret: s1\n'); cput(p2, 'cfg/conf.yml', 'name: B\nport: 2\nsecret: s2\n');
+  cput(p1, 'cfg/server.cfg', 'hostname "Alpha"\nsv_cheats 1\n'); cput(p2, 'cfg/server.cfg', 'hostname "Beta"\nsv_cheats 0\n');
+  cput(p1, 'cfg/motd.txt', 'Welcome\n'); cput(p2, 'cfg/motd.txt', 'Old\n');
+  const before2 = crd(p2, 'cfg/server.ini');
+  const plan = cl.configPlan('1', { configIds: ['ini', 'props', 'json', 'yaml', 'cfg', 'txt'] });
+  eq(plan.members.map((x) => x.id), [p2, p3], 'plan covers the members, not the parent'); eq(crd(p2, 'cfg/server.ini'), before2, 'config plan writes nothing'); assert(!cex(p3, 'cfg/server.ini'), 'plan creates no file');
+  const pf = (mid, cid) => plan.members.find((x) => x.id === mid).files.find((x) => x.configId === cid);
+  assert(pf(p2, 'ini').status === 'changed' && /^-MaxPlayers=10$/m.test(pf(p2, 'ini').diff) && /^\+MaxPlayers=70$/m.test(pf(p2, 'ini').diff) && !/Port=7777/.test(pf(p2, 'ini').diff), 'diff shows the change but not the protected port');
+  assert(pf(p3, 'ini').status === 'new' && pf(p3, 'ini').warnings.some((w) => /protected key not present in member/.test(w)), 'missing member file = new, with warning'); assert(pf(p2, 'txt').warnings.some((w) => /nothing in it can be protected/.test(w)), 'text warning surfaced');
+  assert.throws(() => cl.configPlan('1', { configIds: [] }), /at least one/); assert.throws(() => cl.configPlan('1', { configIds: ['nope'] }), /Unknown config/);
+  fs.rmSync(path.join(m.filesDir(p1), 'cfg/motd.txt')); assert.throws(() => cl.configPlan('1', { configIds: ['txt'] }), /parent server has no/); cput(p1, 'cfg/motd.txt', 'Welcome\n');
+  const ap = cl.configApply('1', { configIds: ['ini', 'props', 'json', 'yaml', 'cfg', 'txt'] });
+  assert(ap.errors === 0 && ap.written === 12, 'applied: ' + JSON.stringify([ap.written, ap.errors]));
+  eq(crd(p2, 'cfg/server.ini'), '[Server]\nName=Alpha\nPort=7778\nRCONPassword=Betapw\nMaxPlayers=70\n', 'ini: unique port and rcon kept on the member'); eq(crd(p2, 'cfg/server.ini.bak'), before2, '.bak of the previous member file');
+  eq(crd(p3, 'cfg/server.ini'), IN(7777, 'Alpha'), 'new member file created from the parent'); assert(!cex(p3, 'cfg/server.ini.bak'));
+  eq(crd(p2, 'server.properties'), 'server-port=25566\nrcon.password=betapw\nmotd=Alpha\n', 'properties: port + cluster-wide rcon.* kept'); eq(crd(p3, 'server.properties'), 'server-port=25567\nrcon.password=gammapw\nmotd=Alpha\n');
+  eq(JSON.parse(crd(p2, 'cfg/settings.json')), { network: { port: 2 }, rcon: { password: 'b' }, name: 'A' }, 'json: network.port + rcon.* kept'); eq(crd(p2, 'cfg/conf.yml'), 'name: A\nport: 2\nsecret: s2\n', 'yaml: port and cluster-wide secret kept');
+  eq(crd(p2, 'cfg/server.cfg'), 'hostname "Beta"\nsv_cheats 1\n', 'cfg'); eq(crd(p2, 'cfg/motd.txt'), 'Welcome\n', 'text: whole copy');
+  eq(cl.configApply('1', { configIds: ['ini', 'props'] }).written, 0, 'applying twice changes nothing'); assert(cevs.some(([n, p]) => n === 'config-synced' && p.detail.written === 12), 'config-synced event');
+  const ref = celog.query({ event: 'cluster:config-sync' }); assert(ref.length === 12 && ref.every((r) => /Cluster "Main cluster"/.test(r.message)), 'config syncs are logged');
+  assert(celog.query({ event: 'server:config' }).length >= 12, 'each written member config also emits server:config');
+  cput(p2, 'cfg/settings.json', '{ broken'); const bad = cl.configApply('1', { configIds: ['json'], memberIds: [p2] }); assert(bad.errors === 1 && /not valid JSON/.test(bad.members[0].files[0].error) && crd(p2, 'cfg/settings.json') === '{ broken', 'a broken member file is reported and left alone');
+  eq(cl.configPlan('1', { configIds: ['ini'], memberIds: [p3] }).members.map((x) => x.id), [p3], 'memberIds subset');
+
+  // ---- cluster update: distribution ----
+  cput(p1, 'data/base.txt', 'v2'); cput(p1, 'data/new.bin', 'NEW'); cput(p1, 'data/keep.dat', 'PARENT-KEEP'); cput(p1, 'saves/world.sav', 'PARENT-SAVE'); cput(p1, 'configs/wgsm.json', 'PARENT-WGSM'); cput(p1, 'cfg/server.ini.bak', 'PARENT-BAK');
+  for (const id of [p2, p3]) { cput(id, 'data/keep.dat', `KEEP-${id}`); cput(id, 'saves/world.sav', `SAVE-${id}`); cput(id, 'configs/wgsm.json', `WGSM-${id}`); }
+  const cfgBefore = { [p2]: crd(p2, 'cfg/server.ini'), [p3]: crd(p3, 'cfg/server.ini') }; const wgsmBefore = fs.readFileSync(m.cfgFile(p2), 'utf8');
+  const outside = path.join(dir, 'outside-target'); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, 'secret.txt'), 'OUT');
+  let junction = true; try { fs.symlinkSync(outside, path.join(m.filesDir(p1), 'linkdir'), 'junction'); } catch { junction = false; }
+  const up = cl.updatePlan('1', { onlyChanged: false });
+  eq(up.members.map((x) => x.id), [p2, p3]); assert(up.members.every((x) => x.files >= 3 && x.bytes > 0 && x.skippedPreserved >= 4 && !x.error) && up.preserve.includes('saves') && up.files === up.members[0].files * 2, 'update plan: counts, sizes, preserve list');
+  assert(['saves', 'data/keep.dat', 'cfg/server.ini', 'configs/wgsm.json'].every((x) => up.members[0].preservedPaths.includes(x)), 'configs, plugin preserve and wgsm.json are in the preserved paths'); eq(crd(p2, 'data/base.txt'), 'base', 'plan writes nothing');
+  if (junction) assert(up.members[0].skippedLinks === 1, 'plan counts links as skipped');
+  const prog = []; cl.onProgress = (x) => prog.push(x);
+  const r1 = await cl.update('1', { skipParentUpdate: true });
+  assert(r1.ok && r1.members.length === 2 && r1.members.every((x) => x.ok && x.files > 0 && x.failed === 0), 'update ok: ' + JSON.stringify(r1.members));
+  for (const id of [p2, p3]) {
+    eq([crd(id, 'data/base.txt'), crd(id, 'data/new.bin'), crd(id, 'game.exe')], ['v2', 'NEW', 'EXE'], 'game files distributed to ' + id);
+    eq([crd(id, 'data/keep.dat'), crd(id, 'saves/world.sav'), crd(id, 'configs/wgsm.json')], [`KEEP-${id}`, `SAVE-${id}`, `WGSM-${id}`], 'preserve paths + wgsm.json untouched on ' + id);
+    eq(crd(id, 'cfg/server.ini'), cfgBefore[id], 'plugin config files untouched on ' + id); assert(!cex(id, 'cfg/server.ini.bak') || crd(id, 'cfg/server.ini.bak') !== 'PARENT-BAK', 'config .bak untouched'); assert(!cex(id, 'linkdir'), 'links are not followed or copied');
+  }
+  eq(fs.readFileSync(m.cfgFile(p2), 'utf8'), wgsmBefore, 'configs/wgsm.json of the member untouched'); eq(fs.readdirSync(outside), ['secret.txt'], 'nothing written outside');
+  assert(prog.length >= 3 && prog[prog.length - 1].phase === 'done' && prog[prog.length - 1].percent === 100 && prog.some((x) => x.phase === 'member' && x.memberId === p3 && x.memberName === 'Gamma') && prog.every((x, i) => !i || x.percent >= prog[i - 1].percent), 'progress events: monotonic, per member, ends at 100');
+  assert(!fs.readdirSync(path.join(m.filesDir(p2), 'data')).some((f) => f.endsWith('.ngsm-tmp')), 'no temp files left');
+  // onlyChanged
+  const oc0 = cl.updatePlan('1', { onlyChanged: true }); assert(oc0.members.every((x) => x.files === 0 && x.skippedIdentical > 0), 'onlyChanged plan: everything identical after a copy');
+  const r2 = await cl.update('1', { skipParentUpdate: true, onlyChanged: true }); assert(r2.ok && r2.members.every((x) => x.files === 0 && x.skippedIdentical > 0), 'onlyChanged copies nothing');
+  cput(p1, 'data/base.txt', 'v3-longer'); const r3 = await cl.update('1', { skipParentUpdate: true, onlyChanged: true }); assert(r3.members.every((x) => x.files === 1) && crd(p3, 'data/base.txt') === 'v3-longer', 'onlyChanged copies just the changed file');
+  eq((await cl.update('1', { skipParentUpdate: true, onlyChanged: false })).members.map((x) => x.files > 1), [true, true], 'without onlyChanged everything is copied again');
+  cl.save('1', { options: { onlyChanged: true } }); assert(cl.updatePlan('1').onlyChanged === true && cl.updatePlan('1', { onlyChanged: false }).onlyChanged === false, 'onlyChanged cluster default'); cl.save('1', { options: { onlyChanged: false } });
+  // user preserve rule
+  cl.save('1', { options: { preserve: ['data/new.bin'] } }); cput(p1, 'data/new.bin', 'NEW2'); await cl.update('1', { skipParentUpdate: true }); eq(crd(p2, 'data/new.bin'), 'NEW', 'cluster preserve rule honoured'); cl.save('1', { options: { preserve: [] } });
+  // parent update goes through mgr.update (validate option) and emits server:updated
+  const upd = []; m.events.on('server:updated', (p) => upd.push(p)); await cl.update('1', { validate: true }); assert(upd.length === 1 && upd[0].id === p1 && upd[0].detail.validate === true && upd[0].detail.cluster === '1', 'parent updated via mgr.update(validate)');
+  eq(crd(p2, 'data/base.txt'), 'base', 'files were distributed after the parent update (steps rewrote base.txt)');
+  assert(cevs.filter(([n]) => n === 'update-started').length >= 5 && cevs.some(([n, p]) => n === 'update-finished' && p.detail.ok === true), 'cluster:update-started / finished events');
+  assert(celog.query({ event: 'cluster:update-started' }).length >= 5 && celog.query({ event: 'cluster:update-finished' })[0].level === 'info', 'update logged');
+  // failures: one member failing does not stop the others
+  const evBefore = cevs.length; m.rt(p2).busy = 'Installing'; cput(p1, 'data/base.txt', 'v9');
+  const rf = await cl.update('1', { skipParentUpdate: true }); m.rt(p2).busy = null;
+  assert(rf.ok === false && rf.members[0].id === p2 && rf.members[0].ok === false && /Busy: Installing/.test(rf.members[0].error) && rf.members[1].ok === true && crd(p3, 'data/base.txt') === 'v9' && crd(p2, 'data/base.txt') === 'base', 'busy member fails, the next one is still updated');
+  assert(celog.query({ event: 'cluster:update-member-failed' }).length === 1 && cevs.slice(evBefore).some(([n, p]) => n === 'update-finished' && p.detail.ok === false), 'member failure logged, run finished');
+  if (junction) { fs.symlinkSync(outside, path.join(m.filesDir(p3), 'data', 'linked'), 'junction'); cput(p1, 'data/linked/x.txt', 'X'); const rj = await cl.update('1', { skipParentUpdate: true, memberIds: [p3] }); assert(!rj.ok && rj.members[0].failed === 1 && /link/.test(rj.members[0].failures[0]) && rj.members[0].files > 0 && fs.readdirSync(outside).join() === 'secret.txt', 'a link inside a member is not followed (that file fails, the rest is copied)'); }
+  const fmember = path.join(m.filesDir(p3), 'data', 'base.txt'); fs.rmSync(fmember); fs.mkdirSync(fmember); cput(p1, 'data/base.txt', 'v10'); const rd2 = await cl.update('1', { skipParentUpdate: true, memberIds: [p3] }); assert(!rd2.ok && rd2.members[0].failed >= 1 && rd2.members[0].failures.some((f) => /folder/.test(f)), 'a file that cannot be written is reported per member'); fs.rmSync(fmember, { recursive: true });
+  // running members are stopped before and restarted after the copy
+  { const calls = []; const real = { isRunning: m.isRunning, stop: m.stop, start: m.start }; let running = true;
+    cput(p3, 'data/base.txt', 'old3');
+    m.isRunning = (id) => (String(id) === p3 ? running : real.isRunning.call(m, id)); m.stop = async (id) => { if (String(id) === p3) { calls.push(['stop', crd(p3, 'data/base.txt')]); running = false; return; } return real.stop.call(m, id); }; m.start = async (id) => { if (String(id) === p3) { calls.push(['start', crd(p3, 'data/base.txt')]); running = true; return; } return real.start.call(m, id); };
+    cput(p1, 'data/base.txt', 'v11'); const rr = await cl.update('1', { skipParentUpdate: true, memberIds: [p3] }); m.isRunning = real.isRunning; m.stop = real.stop; m.start = real.start;
+    eq(calls, [['stop', 'old3'], ['start', 'v11']], 'stop happens before the copy, start after'); assert(rr.members[0].wasRunning && rr.members[0].restarted, 'member restarted because it was running'); }
+  eq(cl.updatePlan('1', { memberIds: ['999'] }).members, [], 'ids that are not members are ignored');
+  // busy cluster
+  { const pend = cl.update('1', { skipParentUpdate: true }); await assert.rejects(cl.update('1', { skipParentUpdate: true }), /already busy/, 'one operation per cluster at a time'); assert.throws(() => cl.save('1', { name: 'busy' }), /busy/); assert.throws(() => cl.delete('1'), /busy/); await pend; }
+
+  // ---- clear folders ----
+  const ago = (days) => new Date(Date.now() - days * 86400000);
+  for (const id of [p1, p2, p3]) { for (const [f, d] of [['logs/old.log', 10], ['logs/new.log', 1], ['logs/old.txt', 30], ['logs/sub/deep.log', 30]]) { const fp = cput(id, f, 'x'.repeat(100)); fs.utimesSync(fp, ago(d), ago(d)); } }
+  const cp = cl.clearPlan('1'); eq([cp.members.map((x) => x.id), cp.files, cp.bytes], [[p1, p2, p3], 3, 300], 'clear plan: only old *.log files, parent included'); eq(cp.members[0].sample, ['logs/old.log']); assert(cp.members[0].rules[0].exists && cp.members[0].rules[0].files === 1);
+  assert(cex(p1, 'logs/old.log'), 'plan deletes nothing');
+  const cr = cl.clear('1'); eq([cr.files, cr.bytes, cr.locked], [3, 300, 0], 'cleared'); for (const id of [p1, p2, p3]) { assert(!cex(id, 'logs/old.log') && cex(id, 'logs/new.log') && cex(id, 'logs/old.txt') && cex(id, 'logs/sub/deep.log') && cex(id, 'logs'), 'only matching old files in the folder are deleted (pattern, age, no sub-folders, folder kept) on ' + id); }
+  assert(celog.query({ event: 'cluster:clear' }).length === 3 && cevs.some(([n, p]) => n === 'cleared' && p.detail.files === 3), 'clear is logged and emitted');
+  cl.save('1', { options: { clearFolders: [{ path: 'logs', pattern: 'old.*', olderThanDays: 20, recursive: true }] } });
+  const cp2 = cl.clearPlan('1', { memberIds: [p2] }); eq([cp2.files, cp2.members.length], [1, 1], 'cluster rules are merged with the plugin rules for a member subset (old.txt, 30 days)');
+  assert.throws(() => cl.save('1', { options: { clearFolders: [{ path: 'logs/../../x' }] } }), /Invalid path/);
+  cl.save('1', { options: { clearFolders: [] } });
+  // escape through a plugin rule that bypassed validation + links
+  cgame.cluster.clearFolders.push({ path: '..', pattern: '*' }, { path: 'cfg/../../outside-target', pattern: '*' }, { path: 'C:/Windows', pattern: '*' }, { path: 'data/linked', pattern: '*' });
+  const ce = cl.clearPlan('1'); assert(ce.members.every((x) => x.errors.length >= 3 && x.rules.filter((r) => r.error).length >= 3), 'escaping rules are rejected: ' + JSON.stringify(ce.members[0].errors));
+  cl.clear('1'); eq(fs.readdirSync(outside), ['secret.txt'], 'nothing outside the server folder is deleted, links not followed'); cgame.cluster.clearFolders.length = 1;
+  const savedRules = cgame.cluster.clearFolders.splice(0); assert.throws(() => cl.clearPlan('1'), /No folders to clear/); cgame.cluster.clearFolders.push(...savedRules);
+
+  // ---- IPC table ----
+  const apc = buildApi({ mgr: m, collector: { state: () => ({}) }, publicGames: () => [], shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {}, cluster: cl });
+  for (const k of ['clusters', 'clusterCreate', 'clusterSave', 'clusterDelete', 'clusterUpdatePlan', 'clusterUpdate', 'clusterConfigPlan', 'clusterConfigApply', 'clusterClearPlan', 'clusterClear']) assert.strictEqual(typeof apc[k], 'function', 'api.' + k);
+  eq(apc.clusters().map((x) => x.id), ['1']); assert((await apc.clusterUpdate('1', { skipParentUpdate: true })).ok); assert.throws(() => buildApi({ mgr: m, collector: {}, publicGames: () => [], shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin: () => null, currentBg: () => '#000', beforeRelaunch() {} }).clusters(), /Service not available/);
+
+  // ---- member removal cleanup ----
+  await m.remove(p3, true); eq(cl.get('1').memberIds, [p1, p2], 'a removed member leaves the cluster'); assert(celog.query({ event: 'cluster:member-removed' }).length === 1 && fs.existsSync(m.filesDir(p1)), 'logged, other servers untouched');
+  const p4 = m.create('clfake', 'Delta').id; await m.install(p4); cl.addMember('1', p4); eq(cl.get('1').memberIds, [p1, p2, p4], 'addMember'); eq(cl.removeMember('1', p4).memberIds, [p1, p2], 'removeMember'); await m.remove(p4, true);
+  await m.remove(p1, true); assert(cl.list().length === 0, 'removing a member that leaves one server dissolves the cluster'); assert(cex(p2, 'game.exe') && m.getConfig(p2), 'the remaining server is untouched'); assert(celog.query({ event: 'cluster:dissolved' }).length === 1 && cevs.some(([n]) => n === 'deleted'), 'dissolve logged and emitted');
+  eq(JSON.parse(fs.readFileSync(path.join(dir, 'clusters.json'), 'utf8')).clusters, [], 'clusters.json updated');
+  // parent removal promotes another member; delete never deletes servers
+  const q1 = m.create('clfake', 'Q1').id; const q2 = m.create('clfake', 'Q2').id; const q3 = m.create('clfake', 'Q3').id; const qc = cl.create({ name: 'Q', memberIds: [q1, q2, q3], parentId: q1 });
+  await m.remove(q1, true); eq([cl.get(qc.id).parentId, cl.get(qc.id).memberIds], [q2, [q2, q3]], 'deleting the parent promotes the first remaining member');
+  cl.delete(qc.id); eq(cl.list(), [], 'cluster deleted'); assert(m.getConfig(q2) && m.getConfig(q3), 'delete keeps the servers'); assert.throws(() => cl.delete(qc.id), /not found/);
+  // corrupt file is set aside
+  cl.stop(); fs.writeFileSync(path.join(dir, 'clusters.json'), '{ nope'); eq(new Cluster(m, P, m.settings, dir).list(), [], 'corrupt clusters.json starts empty'); assert(fs.readdirSync(dir).some((f) => /^clusters\.json\.corrupt-/.test(f)), 'corrupt file kept aside');
+  for (const id of [p2, q2, q3, px]) await m.remove(id, true);
+  celog.stop(); P.GAMES.splice(P.GAMES.indexOf(cgame), 1);
+  }
+
   // ---- Phase 1: app shell (settings round trip, footer links, static HTML checks) ----
   m.saveSettings({ ui: { rightCollapsed: true, bottomCollapsed: true } }); m.saveSettings({ headerStats: { disk: true, tick: true } });
   const sh = S.read(dir);
@@ -627,12 +818,16 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   const RD = path.join(__dirname, '..', 'src', 'renderer'); const html = fs.readFileSync(path.join(RD, 'index.html'), 'utf8');
   assert(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(html) && !/\son\w+\s*=/i.test(html), 'index.html has no inline scripts / handlers (CSP)');
   for (const f of [...html.matchAll(/<script src="([^"]+)"/g)].map((x) => x[1])) assert(fs.existsSync(path.join(RD, f)), 'script exists: ' + f);
-  for (const v of ['servers', 'table', 'dashboard', 'plugins', 'settings', 'discord', 'logs', 'backups']) assert(html.includes('data-view="' + v + '"'), 'nav entry for view ' + v);
-  for (const id of ['leftPanel', 'rightPanel', 'bottomPanel', 'metrics', 'setStats', 'tgLeft', 'tgRight', 'tgBottom', 'tgNav', 'vPlugins', 'vSettings', 'vDiscord', 'vLogs', 'dcWebhook', 'dcTest', 'dcEvents', 'dcEditor', 'dcPreview', 'lgTable', 'vBackups', 'bvTable', 'bvServer', 'dlgBkNew', 'bnForm']) assert(html.includes('id="' + id + '"'), 'element #' + id);
+  for (const v of ['servers', 'table', 'dashboard', 'plugins', 'settings', 'discord', 'logs', 'backups', 'clusters']) assert(html.includes('data-view="' + v + '"'), 'nav entry for view ' + v);
+  for (const id of ['leftPanel', 'rightPanel', 'bottomPanel', 'metrics', 'setStats', 'tgLeft', 'tgRight', 'tgBottom', 'tgNav', 'vPlugins', 'vSettings', 'vDiscord', 'vLogs', 'dcWebhook', 'dcTest', 'dcEvents', 'dcEditor', 'dcPreview', 'lgTable', 'vBackups', 'bvTable', 'bvServer', 'dlgBkNew', 'bnForm', 'vClusters', 'clList', 'clDetail', 'clNew', 'dlgClNew', 'cnForm', 'cnServers']) assert(html.includes('id="' + id + '"'), 'element #' + id);
   for (const k of ['website', 'discord', 'patreon', 'paypal', 'buymeacoffee']) assert(html.includes('data-link="' + k + '"'), 'footer link ' + k);
   const boot = fs.readFileSync(path.join(RD, 'theme-boot.js'), 'utf8');
   assert(/nodegsm\.ui/.test(boot) && /leftCollapsed/.test(boot), 'theme-boot applies the panel layout before first paint');
 
+  // bundled plugins that ship cluster rules
+  for (const id of ['mc', 'arkse', 'rust']) { const g = P.byId(id); assert(g.cluster.preserve.length && g.cluster.clearFolders.length && g.cluster.protectedConfigKeys.length, 'bundled ' + id + ' declares cluster rules'); }
+  assert(P.byId('mc').configs[0].protect.includes('server-port') && P.byId('arkse').configs[0].protect.includes('ServerAdminPassword'), 'configs[].protect shipped for mc and arkse');
+  assert(P.validate({ id: 'cl1', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' }, cluster: { clearFolders: [{ path: 'logs', recursive: 'yes' }] } }, null).errors.some((x) => /recursive/.test(x)), 'clearFolders.recursive must be boolean');
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);

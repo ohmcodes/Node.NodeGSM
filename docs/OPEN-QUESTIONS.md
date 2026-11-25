@@ -33,3 +33,19 @@ Decisions deferred while implementing, to confirm with the project owner.
 - No scheduled (cron) backups yet - only manual, bulk, backup-on-start and retention. Add a per-server schedule?
 - "Open folder" reveals the zip in Explorer (the desktop app has no browser-style download). A web build will need a real download endpoint.
 - Empty directories are stored; NTFS ACLs, file attributes and alternate data streams are not.
+
+## Phase 4 - clusters
+- **Real-world testing:** clusters were tested with fake servers (copy, merge, clear, removal cleanup, running-member stop / start by a stub). A real SteamCMD parent update, a real multi-GB copy and locked files of running servers were not exercised. Please try a small real cluster (and back up first).
+- Update distribution copies **everything** in the parent's files folder except the preserved paths, so a plugin without `cluster.preserve` (only `mc`, `arkse` and `rust` ship one) would overwrite per-server data that is not a config file. Should clusters refuse to update (or require a confirmation) when the plugin declares no `cluster.preserve`? Currently the preview lists the preserved paths and the guide says to add them.
+- Files that exist only on a member are never deleted (the distribution is additive). Should there be a "mirror" option that removes extra files (mods removed from the parent)?
+- `cluster.preserve` / `configs[].path` matching is path based; a pattern without `/` that has `*` / `?` matches by name anywhere. `**` is supported. Is that enough or should plugin authors get explicit `exclude` globs?
+- Config sync of `text` / `xml` files replaces the whole file (only `NGSM:ignore` lines are kept, matched by their first word or tag). Real XML / structured merge (attributes, nested tags) is not implemented; the preview shows a warning.
+- YAML merge is line based (no YAML library): multi-line strings, anchors and flow style (`{a: 1}`) are only matched line by line. JSON files with comments (JSONC) are rejected as invalid.
+- Protected keys that exist only in the member are **kept** (appended at the end, or inside the same ini section); a key that exists only in the parent is added. Member-only keys that are not protected are dropped (the parent file wins). OK?
+- A new member (no config file yet) receives the parent's protected values (ports, passwords) with a warning, not defaults. Should new members get an automatic port offset?
+- `clearFolders` is non-recursive by default (`recursive: true` per rule opts in) and only matches file names; folders are never removed. Locked files are skipped and counted, but a running server's open log is not rotated first.
+- Cluster actions refuse to start while another cluster action runs on the same cluster; they do not block normal single-server actions on the members except that a member that is busy (installing, backing up) is reported as failed for that run.
+- Progress is byte based over all members; the parent update (SteamCMD) has no percentage inside the cluster bar yet (it shows "Updating the parent ...").
+- The UI edits the cluster clear rules as `path | pattern | days` lines (no `recursive` toggle).
+- Clusters of different game versions or branches are not supported (same game only); there is no cluster-level schedule yet (for example "update every Tuesday 04:00").
+- The NGSM log shows cluster entries per member server id; there is no cluster filter on the Logs screen yet.

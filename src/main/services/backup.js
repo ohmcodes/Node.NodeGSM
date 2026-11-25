@@ -440,4 +440,4 @@ class BackupService {
   }
 }
 
-module.exports = { BackupService, safeRel, inside, compileExclude, MANIFEST_VERSION, META_SETTINGS };
+module.exports = { BackupService, safeRel, inside, realInside, compileExclude, MANIFEST_VERSION, META_SETTINGS };

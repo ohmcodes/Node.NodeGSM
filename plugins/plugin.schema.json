@@ -177,6 +177,7 @@
         "path": { "$ref": "#/definitions/relPath" },
         "pattern": { "type": "string", "description": "File name wildcard, e.g. *.log" },
         "olderThanDays": { "type": "number", "minimum": 0 },
+        "recursive": { "type": "boolean", "description": "Also clean sub-folders (cluster clear folders). Default false." },
         "intervalMin": { "type": "number", "minimum": 1 },
         "default": { "type": "boolean", "description": "Enabled by default." }
       }

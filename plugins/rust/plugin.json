@@ -44,6 +44,13 @@
     "additional": ""
   },
   "query": "a2s",
+  "cluster": {
+    "protectedConfigKeys": ["server.port", "server.identity", "rcon.*"],
+    "preserve": ["server", "oxide/data"],
+    "clearFolders": [
+      { "path": "oxide/logs", "pattern": "*.txt", "olderThanDays": 14 }
+    ]
+  },
   "backup": {
     "presets": [
       {
