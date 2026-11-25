@@ -7,6 +7,9 @@
   "version": "1.0.0",
   "url": "",
   "tags": ["download"],
+  "docs": [
+    { "title": "Vintage Story: dedicated server guide", "url": "https://wiki.vintagestory.at/Guide:Dedicated_Server", "type": "official", "description": "Official wiki" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

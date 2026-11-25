@@ -14,6 +14,20 @@
     "version": { "type": "string", "description": "Plugin version (semver)." },
     "url": { "type": "string", "description": "Homepage, docs or repository of the plugin/game." },
     "color": { "type": "string", "description": "Accent colour, e.g. #1E8449." },
+    "docs": {
+      "type": "array",
+      "description": "Documentation links: official and unofficial guides for creating/running this server. Shown in the in-app game browser and on the website.",
+      "items": {
+        "type": "object",
+        "required": ["title", "url", "type"],
+        "properties": {
+          "title": { "type": "string", "description": "Link text, e.g. Dedicated server guide." },
+          "url": { "type": "string", "pattern": "^https?://", "description": "http(s) link." },
+          "type": { "enum": ["official", "unofficial"], "description": "official = published by the game/server developer; unofficial = community wiki, guide, forum, video ..." },
+          "description": { "type": "string", "description": "Optional one-liner about what the page covers." }
+        }
+      }
+    },
     "tags": { "type": "array", "items": { "type": "string" }, "description": "Search tags, e.g. survival, steamcmd." },
     "media": {
       "type": "object",
@@ -71,6 +85,25 @@
           "format": { "enum": ["ini", "json", "xml", "properties", "cfg", "yaml", "text"] },
           "description": { "type": "string" },
           "template": { "type": "string", "description": "File in the plugin folder copied when the user clicks Create." }
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "description": "Extra live numbers (FPS, tick rate, entities ...) shown as selectable columns on the Dashboard. Each is read with a regex from the console or a declared log, optionally by sending a console command on a timer.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "source", "pattern"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string", "description": "Column title, e.g. Server FPS." },
+          "unit": { "type": "string", "description": "e.g. fps, ms, %" },
+          "source": { "type": "string", "description": "console, or log:<id of a declared log>" },
+          "pattern": { "type": "string", "description": "JavaScript regex with ONE capture group holding the number, e.g. fps[:= ]+([0-9.]+). The newest match wins." },
+          "command": { "type": "string", "description": "Console command sent every intervalSec so the game prints the value (needs run.stdin)." },
+          "intervalSec": { "type": "number", "minimum": 2, "default": 10 },
+          "staleSec": { "type": "number", "default": 120, "description": "Show - when no new value arrived for this long." },
+          "description": { "type": "string" }
         }
       }
     },

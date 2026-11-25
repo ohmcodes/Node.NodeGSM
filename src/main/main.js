@@ -1,14 +1,44 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, nativeTheme } = require('electron');
 const path = require('path');
 const { ServerManager } = require('./serverManager');
 const { GAMES, detail: pluginDetail } = require('./plugins');
+const appSettings = require('./settings');
+const { MetricsCollector } = require('./metrics');
+const { shouldRestart } = require('./crash');
 
 // Keep using the pre-rename data folder if it exists so existing servers/downloads are not orphaned.
 const legacyDir = path.join(app.getPath('appData'), 'node-wgsm2026', 'WGSM');
 const dataDir = process.env.NODEGSM_DATA || process.env.WGSM_DATA ||
   (require('fs').existsSync(legacyDir) ? legacyDir : path.join(app.getPath('appData'), 'NodeGSM'));
-let mgr; let win; let tray; let quitting = false;
+const earlySettings = appSettings.read(dataDir);
+if (!earlySettings.hardwareAcceleration) app.disableHardwareAcceleration();
+nativeTheme.themeSource = earlySettings.theme; // dialogs / menus follow the chosen theme
+
+let mgr; let win; let tray; let quitting = false; let collector;
+const BG = { dark: '#14161c', light: '#f3f5f9' };
+const currentBg = () => BG[appSettings.resolveTheme(mgr ? mgr.settings.theme : earlySettings.theme, nativeTheme.shouldUseDarkColors)];
+
+// ---- crash handling: log, and (optionally) relaunch the app, max 3 times per 10 minutes ----
+const fsx = require('fs');
+async function onCrash(kind, err) {
+  try {
+    fsx.mkdirSync(path.join(dataDir, 'logs'), { recursive: true });
+    fsx.appendFileSync(path.join(dataDir, 'logs', 'crash.log'), `[${new Date().toISOString()}] ${kind}: ${err && err.stack ? err.stack : err}\n`);
+  } catch { /* ignore */ }
+  if (!mgr || !mgr.settings.autoRestartApp || quitting) return;
+  const file = path.join(dataDir, 'logs', 'crash-history.json');
+  let hist = []; try { hist = JSON.parse(fsx.readFileSync(file, 'utf8')); } catch { /* none */ }
+  const r = shouldRestart(hist, Date.now());
+  try { fsx.writeFileSync(file, JSON.stringify(r.history)); } catch { /* ignore */ }
+  if (!r.allow) return; // crash loop: stay down so the user can see the problem
+  quitting = 'done';
+  try { await mgr.shutdown(); } catch { /* ignore */ }
+  app.relaunch();
+  app.exit(0);
+}
+process.on('uncaughtException', (e) => onCrash('uncaughtException', e));
+process.on('unhandledRejection', (e) => onCrash('unhandledRejection', e));
 
 function publicGames() {
   return GAMES.map(({ id, name, icon, description, tags, port, queryPort, map, maxPlayers, additional, appId, query, gslt, source, author, version, overrides }) =>
@@ -17,13 +47,17 @@ function publicGames() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: '#14161c', title: 'NodeGSM',
+    width: 1280, height: 800, minWidth: 980, minHeight: 600, backgroundColor: currentBg(), title: 'NodeGSM',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   win.setMenuBarVisibility(false);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  win.webContents.on('render-process-gone', (_e, d) => {
+    onCrash('renderer', d.reason);
+    if (mgr.settings.autoRestartApp && !win.isDestroyed()) win.reload();
+  });
   win.on('close', (e) => { if (!quitting && mgr.settings.minimizeToTray) { e.preventDefault(); win.hide(); } });
 }
 
@@ -42,6 +76,8 @@ app.whenReady().then(() => {
   mgr.on('console', (m) => send('console', m));
   mgr.on('removed', (id) => send('removed', id));
   mgr.on('logLines', (m) => send('logLines', m));
+  collector = new MetricsCollector(mgr);
+  collector.on('metrics', (m) => send('metrics', m));
 
   handle('games', () => publicGames());
   handle('list', () => mgr.list());
@@ -76,6 +112,10 @@ app.whenReady().then(() => {
   handle('logStop', (id, l) => mgr.logStop(id, l));
   handle('pluginDetail', (id) => pluginDetail(id));
   handle('openExternal', (u) => { if (!/^https?:\/\//i.test(String(u))) throw new Error('Only http(s) links can be opened'); return shell.openExternal(String(u)); });
+  handle('bulk', (action, ids) => mgr.bulk(action, ids));
+  handle('kill', (id) => mgr.kill(id));
+  handle('settingsDefaults', () => appSettings.DEFAULTS);
+  handle('metricsState', () => collector.state());
   handle('pluginsInfo', () => mgr.pluginInfo);
   handle('pluginsReload', () => mgr.reloadPlugins());
   handle('pluginsInstallZip', async () => {
@@ -92,7 +132,15 @@ app.whenReady().then(() => {
   handle('saveSettings', (p) => {
     const s = mgr.saveSettings(p);
     app.setLoginItemSettings({ openAtLogin: !!s.startOnLogin });
+    nativeTheme.themeSource = s.theme;
+    if (win && !win.isDestroyed()) win.setBackgroundColor(currentBg());
     return s;
+  });
+  handle('relaunch', async () => {
+    quitting = 'done';
+    try { await mgr.shutdown(); } catch { /* ignore */ }
+    app.relaunch();
+    app.exit(0);
   });
   handle('pickFolder', async () => {
     const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
@@ -101,6 +149,7 @@ app.whenReady().then(() => {
 
   createWindow();
   mgr.startScheduler();
+  collector.start();
   mgr.autoStartAll();
 
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'icon.png')).resize({ width: 16, height: 16 });
@@ -117,7 +166,7 @@ app.on('before-quit', async (e) => {
   if (quitting === 'done') return;
   e.preventDefault();
   quitting = true;
-  try { await mgr.shutdown(); } catch {}
+  try { collector.stop(); await mgr.shutdown(); } catch {}
   quitting = 'done';
   app.quit();
 });

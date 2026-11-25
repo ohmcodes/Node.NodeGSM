@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
 <title>NodeGSM</title>
+<script src="theme-boot.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,6 +12,7 @@
   <div class="brand">Node<b>GSM</b></div>
   <div class="spacer"></div>
   <span id="metrics" class="muted"></span>
+  <div class="seg" id="viewSeg"><button data-v="servers" title="Sidebar list with details">List</button><button data-v="table" title="Horizontal table, multi-select">Table</button><button data-v="dashboard" title="Metrics">Dashboard</button></div>
   <button id="btnAdd" class="primary">+ Add Server</button>
   <button id="btnPlugins">Games</button>
   <button id="btnSettings">Settings</button>
@@ -21,6 +23,38 @@
     <ul id="serverList"></ul>
     <div id="emptyHint" class="muted pad">No servers yet. Click <b>+ Add Server</b> to install one.</div>
   </aside>
+  <section id="tableView">
+    <div class="toolbar">
+      <button id="tbStart" class="b-start" title="Start selected">Start</button>
+      <button id="tbStop" class="b-stop" title="Graceful stop of selected">Stop</button>
+      <button id="tbRestart" class="b-restart" title="Restart selected">Restart</button>
+      <button id="tbKill" class="b-kill" title="Force-kill selected (no save)">Kill</button>
+      <span class="sep"></span>
+      <button id="tbUpdate" title="Update selected, one after another">Update</button>
+      <button id="tbBackup" title="Backup selected, one after another">Backup</button>
+      <button id="tbOpen" title="Open the selected server">Details</button>
+      <span class="spacer"></span><span class="muted small" id="tbSel"></span>
+      <div class="colpick"><button type="button" id="tbCols">Columns &#9662;</button><div id="tbColPanel" class="colpanel" hidden></div></div>
+    </div>
+    <div class="tablewrap"><table id="tTable"></table></div>
+    <div id="tbEmpty" class="muted pad" hidden>No servers yet. Click <b>+ Add Server</b> to install one.</div>
+  </section>
+  <section id="dashboard">
+    <div class="dsec">System metrics</div>
+    <div class="tiles" id="dSys"></div>
+    <div class="dsec">Game servers</div>
+    <div class="tiles" id="dGame"></div>
+    <div class="dpanel">
+      <div class="row"><b>History</b><select id="dChart" class="inline"><option value="players">Players</option><option value="cpu">CPU %</option><option value="memory">Memory (GB)</option></select><span class="muted small" id="dChartNote"></span></div>
+      <canvas id="dashChart" height="240"></canvas>
+      <div id="dLegend" class="legend"></div>
+    </div>
+    <div class="dpanel">
+      <div class="row wrap"><b>Servers</b><label class="check"><input type="checkbox" id="dStopped"> Show stopped</label><span class="spacer"></span>
+        <div class="colpick"><button type="button" id="dCols">Columns &#9662;</button><div id="dColPanel" class="colpanel" hidden></div></div></div>
+      <div class="tablewrap"><table id="dTable"></table></div>
+    </div>
+  </section>
   <section id="detail"><div class="muted pad center">Select a server</div></section>
 </main>
 
@@ -44,12 +78,26 @@
 </dialog>
 
 <dialog id="dlgSettings">
-  <form method="dialog">
-    <h3>Application Settings</h3>
-    <label class="check"><input type="checkbox" id="setLogin"> Start NodeGSM on Windows login (servers flagged Auto Start will launch)</label>
-    <label class="check"><input type="checkbox" id="setTray"> Minimize to tray on close</label>
-    <div class="row end"><button type="button" id="setCancel">Close</button><button type="submit" id="setOk" class="primary">Save</button></div>
-  </form>
+  <div class="settings">
+    <h3>NodeGSM Settings</h3>
+    <h4>Appearance</h4>
+    <div class="srow"><span>Theme</span>
+      <div class="seg" id="setTheme"><button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button><button type="button" data-v="system">Windows</button></div></div>
+    <div class="srow col"><span>Accent colour</span><div id="setAccent" class="swatches"></div></div>
+    <label class="srow"><span>UI animation</span><input type="checkbox" class="switch" id="setAnim"></label>
+    <h4>Server table columns</h4>
+    <p class="muted small" style="margin:0">Used by the <b>Table</b> and <b>Dashboard</b> views. Columns from game plugins (FPS, tick rate ...) show up when your games declare them.</p>
+    <div id="setCols" class="colgrid"></div>
+    <div class="row"><button type="button" id="setColsReset">Reset to default</button></div>
+    <h4>Performance</h4>
+    <label class="srow"><span>Hardware acceleration<small>Turn off if the window flickers or the GPU misbehaves. Applies after a restart.</small></span><input type="checkbox" class="switch" id="setHw"></label>
+    <div class="srow" id="hwNote" hidden><span class="muted">Restart NodeGSM to apply the hardware acceleration change. Running servers are stopped first.</span><button type="button" id="setRestart" class="primary">Restart now</button></div>
+    <h4>Startup</h4>
+    <label class="srow"><span>Start NodeGSM on Windows login<small>Servers flagged Auto Start will launch.</small></span><input type="checkbox" class="switch" id="setLogin"></label>
+    <label class="srow"><span>Minimize to tray on close</span><input type="checkbox" class="switch" id="setTray"></label>
+    <label class="srow"><span>Auto restart NodeGSM on crash<small>Relaunches at most 3 times in 10 minutes. Crashes are logged to logs/crash.log.</small></span><input type="checkbox" class="switch" id="setCrash"></label>
+    <div class="row end"><span class="muted small" style="flex:1">Changes are saved immediately. NodeGSM sends no statistics or telemetry.</span><button type="button" id="setCancel" class="primary">Close</button></div>
+  </div>
 </dialog>
 <dialog id="dlgPlugins" class="wide">
   <div class="gb">
@@ -71,5 +119,6 @@
 </dialog>
 <div id="toast"></div>
 <script src="app.js"></script>
+<script src="dashboard.js"></script>
 </body>
 </html>

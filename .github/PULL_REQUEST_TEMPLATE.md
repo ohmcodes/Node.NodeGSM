@@ -6,6 +6,7 @@
 ## Checklist (plugins)
 - [ ] `npm run validate:plugins <id>` passes
 - [ ] Folder name equals `id`; has `icon.png`, `README.md`, `author`, `version`, `description`
+- [ ] `docs` links added (official first, then unofficial) and I opened each one
 - [ ] Bumped `version` if I changed an existing plugin
 - [ ] Ran `npm run registry` and committed `plugins/registry.json`
 - [ ] Tested in the app: install -> start -> stop (or explain what I could not test)

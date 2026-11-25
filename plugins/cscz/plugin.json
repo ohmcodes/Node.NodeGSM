@@ -7,6 +7,11 @@
   "version": "1.0.0",
   "url": "https://steamdb.info/app/90/info/",
   "tags": ["goldsource", "steamcmd"],
+  "docs": [
+    { "title": "HLDS (GoldSource dedicated server)", "url": "https://developer.valvesoftware.com/wiki/HLDS", "type": "official", "description": "Valve Developer Community" },
+    { "title": "SteamCMD reference", "url": "https://developer.valvesoftware.com/wiki/SteamCMD", "type": "official", "description": "Valve Developer Community" },
+    { "title": "SteamDB: dedicated server app info", "url": "https://steamdb.info/app/90/info/", "type": "unofficial", "description": "App id, depots and build history" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

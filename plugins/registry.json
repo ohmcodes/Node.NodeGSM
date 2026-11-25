@@ -12,6 +12,26 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "7 Days to Die: dedicated servers",
+          "url": "https://7daystodie.fandom.com/wiki/Dedicated_Servers",
+          "type": "unofficial",
+          "description": "Community wiki"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/294420/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "294420",
       "ports": {
@@ -33,6 +53,7 @@
           "path": "7DaysToDieServer_Data/output_log_dedi*.txt"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/7dtd/icon.png",
         "banner": null,
@@ -51,6 +72,26 @@
       "tags": [
         "unreal",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "ARK dedicated server setup",
+          "url": "https://ark.wiki.gg/wiki/Dedicated_server_setup",
+          "type": "unofficial",
+          "description": "ARK Wiki"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/376030/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "376030",
@@ -78,6 +119,7 @@
           "path": "ShooterGame/Saved/Logs/ShooterGame.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/arkse/icon.png",
         "banner": null,
@@ -96,6 +138,20 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/565060/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "565060",
       "ports": {
@@ -106,6 +162,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/avorion/icon.png",
         "banner": null,
@@ -124,6 +181,20 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/1026340/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "1026340",
       "ports": {
@@ -140,6 +211,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/bt/icon.png",
         "banner": null,
@@ -159,6 +231,20 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/423410/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "423410",
       "ports": {
@@ -169,6 +255,7 @@
       "query": null,
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/bw/icon.png",
         "banner": null,
@@ -187,6 +274,20 @@
       "tags": [
         "unreal",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/443030/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "443030",
@@ -219,6 +320,7 @@
           "path": "ConanSandbox/Saved/Logs/ConanSandbox.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/ce/icon.png",
         "banner": null,
@@ -237,6 +339,26 @@
       "tags": [
         "goldsource",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "HLDS (GoldSource dedicated server)",
+          "url": "https://developer.valvesoftware.com/wiki/HLDS",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/90/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "90",
@@ -259,6 +381,7 @@
           "path": "cstrike/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/cs/icon.png",
         "banner": null,
@@ -277,6 +400,26 @@
       "tags": [
         "goldsource",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "HLDS (GoldSource dedicated server)",
+          "url": "https://developer.valvesoftware.com/wiki/HLDS",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/90/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "90",
@@ -299,6 +442,7 @@
           "path": "czero/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/cscz/icon.png",
         "banner": null,
@@ -317,6 +461,44 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "CS:GO dedicated servers",
+          "url": "https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive_Dedicated_Servers",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/740/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "740",
@@ -339,6 +521,7 @@
           "path": "csgo/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/csgo/icon.png",
         "banner": null,
@@ -357,6 +540,38 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/232330/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "232330",
@@ -379,6 +594,7 @@
           "path": "cstrike/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/css/icon.png",
         "banner": null,
@@ -397,6 +613,26 @@
       "tags": [
         "goldsource",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "HLDS (GoldSource dedicated server)",
+          "url": "https://developer.valvesoftware.com/wiki/HLDS",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/90/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "90",
@@ -419,6 +655,7 @@
           "path": "dod/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/dod/icon.png",
         "banner": null,
@@ -437,6 +674,38 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/232290/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "232290",
@@ -459,6 +728,7 @@
           "path": "dod/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/dods/icon.png",
         "banner": null,
@@ -477,6 +747,26 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "DayZ server configuration",
+          "url": "https://community.bistudio.com/wiki/DayZ:Server_Configuration",
+          "type": "official",
+          "description": "Bohemia Interactive wiki"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/223350/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "223350",
       "ports": {
@@ -493,6 +783,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/dayz/icon.png",
         "banner": null,
@@ -511,6 +802,26 @@
       "tags": [
         "goldsource",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "HLDS (GoldSource dedicated server)",
+          "url": "https://developer.valvesoftware.com/wiki/HLDS",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/90/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "90",
@@ -533,6 +844,7 @@
           "path": "dmc/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/dmc/icon.png",
         "banner": null,
@@ -552,6 +864,20 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/739590/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "739590",
       "ports": {
@@ -568,6 +894,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/eco/icon.png",
         "banner": null,
@@ -586,6 +913,20 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/530870/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "530870",
       "ports": {
@@ -602,6 +943,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/egs/icon.png",
         "banner": null,
@@ -620,6 +962,44 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Garry's Mod: downloading a dedicated server",
+          "url": "https://wiki.facepunch.com/gmod/Downloading_a_Dedicated_Server",
+          "type": "official",
+          "description": "Facepunch wiki"
+        },
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/4020/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "4020",
@@ -642,6 +1022,7 @@
           "path": "garrysmod/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/gmod/icon.png",
         "banner": null,
@@ -661,6 +1042,14 @@
         "fivem",
         "download"
       ],
+      "docs": [
+        {
+          "title": "FiveM: setting up a server",
+          "url": "https://docs.fivem.net/docs/server-manual/setting-up-a-server/",
+          "type": "official",
+          "description": "Official Cfx.re documentation"
+        }
+      ],
       "install": "download",
       "steamAppId": null,
       "ports": {
@@ -677,6 +1066,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/gta5/icon.png",
         "banner": null,
@@ -695,6 +1085,38 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/232370/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "232370",
@@ -717,6 +1139,7 @@
           "path": "hl2mp/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/hl2dm/icon.png",
         "banner": null,
@@ -735,6 +1158,26 @@
       "tags": [
         "goldsource",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "HLDS (GoldSource dedicated server)",
+          "url": "https://developer.valvesoftware.com/wiki/HLDS",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/90/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "90",
@@ -757,6 +1200,7 @@
           "path": "gearbox/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/hlof/icon.png",
         "banner": null,
@@ -776,6 +1220,20 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/996600/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "996600",
       "ports": {
@@ -786,6 +1244,7 @@
       "query": null,
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/heat/icon.png",
         "banner": null,
@@ -804,6 +1263,38 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/237410/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "237410",
@@ -826,6 +1317,7 @@
           "path": "insurgency/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/ins/icon.png",
         "banner": null,
@@ -845,6 +1337,20 @@
         "unreal",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/581330/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "581330",
       "ports": {
@@ -855,6 +1361,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/inss/icon.png",
         "banner": null,
@@ -873,6 +1380,44 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Left 4 Dead 2 dedicated server",
+          "url": "https://developer.valvesoftware.com/wiki/Left_4_Dead_2_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/222860/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "222860",
@@ -895,6 +1440,7 @@
           "path": "left4dead2/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/l4d2/icon.png",
         "banner": null,
@@ -914,6 +1460,20 @@
         "minecraft",
         "bedrock",
         "download"
+      ],
+      "docs": [
+        {
+          "title": "Minecraft Bedrock server download",
+          "url": "https://www.minecraft.net/en-us/download/server/bedrock",
+          "type": "official",
+          "description": ""
+        },
+        {
+          "title": "Bedrock Dedicated Server",
+          "url": "https://minecraft.wiki/w/Bedrock_Dedicated_Server",
+          "type": "unofficial",
+          "description": "Minecraft Wiki"
+        }
       ],
       "install": "download",
       "steamAppId": null,
@@ -941,6 +1501,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/mcbe/icon.png",
         "banner": null,
@@ -960,6 +1521,20 @@
         "minecraft",
         "java",
         "download"
+      ],
+      "docs": [
+        {
+          "title": "Minecraft Java server download",
+          "url": "https://www.minecraft.net/en-us/download/server",
+          "type": "official",
+          "description": ""
+        },
+        {
+          "title": "Setting up a Minecraft server",
+          "url": "https://minecraft.wiki/w/Tutorials/Setting_up_a_server",
+          "type": "unofficial",
+          "description": "Minecraft Wiki tutorial"
+        }
       ],
       "install": "download",
       "steamAppId": null,
@@ -992,6 +1567,7 @@
           "path": "logs/latest.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/mc/icon.png",
         "banner": null,
@@ -1010,6 +1586,20 @@
       "tags": [
         "minecraft",
         "pocketmine"
+      ],
+      "docs": [
+        {
+          "title": "PocketMine-MP documentation",
+          "url": "https://pmmp.readthedocs.io/",
+          "type": "official",
+          "description": "Official PocketMine docs"
+        },
+        {
+          "title": "PocketMine-MP releases",
+          "url": "https://github.com/pmmp/PocketMine-MP/releases",
+          "type": "official",
+          "description": ""
+        }
       ],
       "install": "manual",
       "steamAppId": null,
@@ -1037,6 +1627,7 @@
           "path": "server.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/mcpe/icon.png",
         "banner": null,
@@ -1056,6 +1647,20 @@
         "unreal",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/629800/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "629800",
       "ports": {
@@ -1066,6 +1671,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/mordhau/icon.png",
         "banner": null,
@@ -1084,6 +1690,38 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/317670/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "317670",
@@ -1106,6 +1744,7 @@
           "path": "nmrih/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/nmrih/icon.png",
         "banner": null,
@@ -1124,6 +1763,20 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/1204170/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "1204170",
       "ports": {
@@ -1140,6 +1793,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/onset/icon.png",
         "banner": null,
@@ -1159,6 +1813,20 @@
         "unreal",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/915070/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "915070",
       "ports": {
@@ -1169,6 +1837,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/olow/icon.png",
         "banner": null,
@@ -1186,6 +1855,26 @@
       "url": "https://github.com/ohmcodes/WindowsGSM.Palworld",
       "tags": [
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Palworld dedicated server guide",
+          "url": "https://tech.palworldgame.com/dedicated-server-guide",
+          "type": "official",
+          "description": "Official setup, ports and settings"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "How to create a Palworld server",
+          "url": "https://www.survivalservers.com/wiki/index.php?title=How_to_Create_a_Palworld_Server_Guide",
+          "type": "unofficial",
+          "description": ""
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "2394010",
@@ -1208,6 +1897,7 @@
           "path": "Pal/Saved/Logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/palworld/icon.png",
         "banner": null,
@@ -1227,6 +1917,20 @@
         "unreal",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/746200/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "746200",
       "ports": {
@@ -1237,6 +1941,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/ps/icon.png",
         "banner": null,
@@ -1256,6 +1961,20 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/381690/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "381690",
       "ports": {
@@ -1266,6 +1985,7 @@
       "query": null,
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/rok/icon.png",
         "banner": null,
@@ -1284,6 +2004,26 @@
       "tags": [
         "goldsource",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "HLDS (GoldSource dedicated server)",
+          "url": "https://developer.valvesoftware.com/wiki/HLDS",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/90/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "90",
@@ -1306,6 +2046,7 @@
           "path": "ricochet/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/rcc/icon.png",
         "banner": null,
@@ -1325,6 +2066,20 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/1180760/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "1180760",
       "ports": {
@@ -1335,6 +2090,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/ror2/icon.png",
         "banner": null,
@@ -1354,6 +2110,26 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "Creating a Rust server",
+          "url": "https://wiki.facepunch.com/rust/Creating-a-server",
+          "type": "official",
+          "description": "Facepunch wiki"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/258550/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "258550",
       "ports": {
@@ -1364,6 +2140,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/rust/icon.png",
         "banner": null,
@@ -1382,6 +2159,26 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "Space Engineers dedicated servers",
+          "url": "https://www.spaceengineersgame.com/dedicated-servers/",
+          "type": "official",
+          "description": "Official page"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/298740/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "298740",
       "ports": {
@@ -1392,6 +2189,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/se/icon.png",
         "banner": null,
@@ -1410,6 +2208,20 @@
       "tags": [
         "unreal",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/403240/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "403240",
@@ -1437,6 +2249,7 @@
           "path": "SquadGame/Saved/Logs/SquadGame.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/sq/icon.png",
         "banner": null,
@@ -1455,6 +2268,20 @@
       "tags": [
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/1247090/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "1247090",
       "ports": {
@@ -1465,6 +2292,7 @@
       "query": null,
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/sw/icon.png",
         "banner": null,
@@ -1483,6 +2311,38 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/232250/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "232250",
@@ -1505,6 +2365,7 @@
           "path": "tf/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/tf2/icon.png",
         "banner": null,
@@ -1523,6 +2384,26 @@
       "tags": [
         "goldsource",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "HLDS (GoldSource dedicated server)",
+          "url": "https://developer.valvesoftware.com/wiki/HLDS",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/90/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "90",
@@ -1545,6 +2426,7 @@
           "path": "tfc/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/tfc/icon.png",
         "banner": null,
@@ -1564,6 +2446,20 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/556450/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "556450",
       "ports": {
@@ -1580,6 +2476,7 @@
         }
       ],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/tf/icon.png",
         "banner": null,
@@ -1599,6 +2496,26 @@
         "unity",
         "steamcmd"
       ],
+      "docs": [
+        {
+          "title": "Unturned server hosting",
+          "url": "https://docs.smartlydressedgames.com/en/stable/servers/server-hosting.html",
+          "type": "official",
+          "description": "Official Unturned docs"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/1110390/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
+      ],
       "install": "steamcmd",
       "steamAppId": "1110390",
       "ports": {
@@ -1609,6 +2526,7 @@
       "query": "a2s",
       "configs": [],
       "logs": [],
+      "metrics": [],
       "media": {
         "icon": "plugins/unt/icon.png",
         "banner": null,
@@ -1626,6 +2544,14 @@
       "url": "",
       "tags": [
         "download"
+      ],
+      "docs": [
+        {
+          "title": "Vintage Story: dedicated server guide",
+          "url": "https://wiki.vintagestory.at/Guide:Dedicated_Server",
+          "type": "official",
+          "description": "Official wiki"
+        }
       ],
       "install": "download",
       "steamAppId": null,
@@ -1648,6 +2574,7 @@
           "path": "data/Logs/server-main.txt"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/vts/icon.png",
         "banner": null,
@@ -1666,6 +2593,38 @@
       "tags": [
         "source",
         "steamcmd"
+      ],
+      "docs": [
+        {
+          "title": "Source Dedicated Server",
+          "url": "https://developer.valvesoftware.com/wiki/Source_Dedicated_Server",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Command line options",
+          "url": "https://developer.valvesoftware.com/wiki/Command_Line_Options",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "Game Server Login Tokens (GSLT)",
+          "url": "https://steamcommunity.com/dev/managegameservers",
+          "type": "official",
+          "description": "Create the token your server needs to be listed"
+        },
+        {
+          "title": "SteamCMD reference",
+          "url": "https://developer.valvesoftware.com/wiki/SteamCMD",
+          "type": "official",
+          "description": "Valve Developer Community"
+        },
+        {
+          "title": "SteamDB: dedicated server app info",
+          "url": "https://steamdb.info/app/17505/info/",
+          "type": "unofficial",
+          "description": "App id, depots and build history"
+        }
       ],
       "install": "steamcmd",
       "steamAppId": "17505",
@@ -1688,6 +2647,7 @@
           "path": "zps/logs/*.log"
         }
       ],
+      "metrics": [],
       "media": {
         "icon": "plugins/zps/icon.png",
         "banner": null,

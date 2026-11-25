@@ -7,6 +7,10 @@
   "version": "1.0.0",
   "url": "",
   "tags": ["minecraft", "bedrock", "download"],
+  "docs": [
+    { "title": "Minecraft Bedrock server download", "url": "https://www.minecraft.net/en-us/download/server/bedrock", "type": "official" },
+    { "title": "Bedrock Dedicated Server", "url": "https://minecraft.wiki/w/Bedrock_Dedicated_Server", "type": "unofficial", "description": "Minecraft Wiki" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

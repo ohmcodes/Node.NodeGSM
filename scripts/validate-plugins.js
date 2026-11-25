@@ -30,6 +30,7 @@ for (const f of folders) {
     if (!fs.existsSync(path.join(dir, (m.media && m.media.readme) || 'README.md'))) errors.push('README.md is required');
     if (!m.description) errors.push('"description" is required');
     if (!m.author) errors.push('"author" is required');
+    if (!Array.isArray(m.docs) || !m.docs.length) errors.push('"docs" needs at least one link (official or unofficial guide)');
     if (ids.has(m.id)) errors.push(`duplicate id (also in ${ids.get(m.id)})`);
     ids.set(m.id, f);
   }

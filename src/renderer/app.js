@@ -364,6 +364,14 @@ async function renderBrowser() {
     <div class="muted small">${g.source === 'user' ? (g.overrides ? 'Local override' : 'Installed plugin') : 'Built-in'} · v${esc(g.version || '?')}</div></div></div>`).join('');
   $('#gbList').querySelectorAll('[data-g]').forEach((d) => (d.onclick = () => showDetail(d.dataset.g)));
 }
+function docsHtml(docs) {
+  if (!docs || !docs.length) return '<h4>Documentation</h4><p class="muted">No documentation links yet - add some with a pull request.</p>';
+  const group = (type, label) => {
+    const items = docs.filter((x) => x.type === type);
+    return items.length ? `<div class="docgroup"><span class="badge ${type}">${label}</span><ul>${items.map((x) => `<li><a href="#" data-url="${esc(x.url)}">${esc(x.title)}</a>${x.description ? ` <span class="muted">- ${esc(x.description)}</span>` : ''}</li>`).join('')}</ul></div>` : '';
+  };
+  return `<h4>Documentation</h4>${group('official', 'Official')}${group('unofficial', 'Unofficial')}`;
+}
 async function showDetail(id) {
   const d = await run('pluginDetail', id);
   if (!d) return;
@@ -376,6 +384,7 @@ async function showDetail(id) {
       <div>${(d.tags || []).map((t) => `<span class="badge">${esc(t)}</span>`).join(' ')}</div></div>
       <div class="actions"><button class="primary" id="gbAdd">Add server</button>${/^https?:/.test(d.url) ? `<a href="#" data-url="${esc(d.url)}"><button>Open link</button></a>` : ''}</div></div>
     <p>${esc(d.description)}</p>
+    ${docsHtml(d.docs)}
     <h4>Defaults</h4><table><tr><td>Steam app</td><td>${esc(d.appId || '-')}</td><td>Game port</td><td>${esc(d.port || '-')}</td></tr>
       <tr><td>Query</td><td>${esc(d.query || 'none')}</td><td>Query port</td><td>${esc(d.queryPort || '-')}</td></tr></table>
     <h4>Config files (${d.configs.length})</h4>${list(d.configs, (c) => `<li><b>${esc(c.name)}</b> <span class="badge">${esc(c.format || 'text')}</span> <code>${esc(c.path)}</code></li>`)}
@@ -398,21 +407,59 @@ $('#plFolder').onclick = async () => { const id = await run('pluginsInstallFolde
 $('#plReload').onclick = async () => { await run('pluginsReload'); await afterPluginChange('Plugins reloaded'); };
 $('#plOpen').onclick = () => run('pluginsFolder');
 
+// ---------- app settings: appearance + startup ----------
+const ACCENTS = [['Blue', '#4f8cff'], ['Cyan', '#1fb6d9'], ['Teal', '#1abc9c'], ['Green', '#2ecc71'], ['Lime', '#8bc34a'], ['Amber', '#f5a623'],
+  ['Orange', '#ff7a45'], ['Red', '#e74c3c'], ['Pink', '#e84393'], ['Purple', '#9b59b6'], ['Indigo', '#6c5ce7']];
+const sysLight = window.matchMedia('(prefers-color-scheme: light)');
+let appSettings = { theme: 'dark', accent: '#4f8cff', animations: true };
+
+function applyAppearance(s) {
+  appSettings = { ...appSettings, ...s };
+  const r = document.documentElement;
+  const theme = s.theme === 'system' ? (sysLight.matches ? 'light' : 'dark') : s.theme === 'light' ? 'light' : 'dark';
+  r.dataset.theme = theme;
+  r.dataset.anim = s.animations === false ? 'off' : 'on';
+  if (/^#[0-9a-f]{6}$/i.test(s.accent || '')) r.style.setProperty('--accent', s.accent);
+  try { localStorage.setItem('nodegsm.appearance', JSON.stringify({ theme: s.theme, accent: s.accent, animations: s.animations })); } catch { /* private mode */ }
+}
+sysLight.addEventListener('change', () => { if (appSettings.theme === 'system') applyAppearance(appSettings); });
+
+async function saveSetting(patch) {
+  const s = await run('saveSettings', patch);
+  if (s) applyAppearance(s);
+  return s;
+}
+function paintSettings(s) {
+  document.querySelectorAll('#setTheme button').forEach((b) => b.classList.toggle('on', b.dataset.v === s.theme));
+  const known = ACCENTS.some(([, h]) => h.toLowerCase() === s.accent);
+  $('#setAccent').innerHTML = ACCENTS.map(([n, h]) => `<button type="button" class="swatch ${h.toLowerCase() === s.accent ? 'on' : ''}" title="${n}" data-h="${h}" style="background:${h}"></button>`).join('')
+    + `<input type="color" id="setAccentCustom" title="Custom colour" value="${s.accent}" class="${known ? '' : 'on'}">`;
+  $('#setAccent').querySelectorAll('.swatch').forEach((b) => (b.onclick = async () => paintSettings(await saveSetting({ accent: b.dataset.h }) || s)));
+  $('#setAccentCustom').onchange = async (e) => paintSettings(await saveSetting({ accent: e.target.value }) || s);
+  $('#setAnim').checked = s.animations !== false; $('#setHw').checked = s.hardwareAcceleration !== false;
+  $('#setLogin').checked = !!s.startOnLogin; $('#setTray').checked = !!s.minimizeToTray; $('#setCrash').checked = !!s.autoRestartApp;
+}
+document.querySelectorAll('#setTheme button').forEach((b) => (b.onclick = async () => { const s = await saveSetting({ theme: b.dataset.v }); if (s) paintSettings(s); }));
+$('#setAnim').onchange = (e) => saveSetting({ animations: e.target.checked });
+$('#setHw').onchange = async (e) => { await saveSetting({ hardwareAcceleration: e.target.checked }); $('#hwNote').hidden = false; };
+$('#setLogin').onchange = (e) => saveSetting({ startOnLogin: e.target.checked });
+$('#setTray').onchange = (e) => saveSetting({ minimizeToTray: e.target.checked });
+$('#setCrash').onchange = (e) => saveSetting({ autoRestartApp: e.target.checked });
+$('#setRestart').onclick = () => { if (confirm('Restart NodeGSM now? Running servers will be stopped first.')) run('relaunch'); };
 $('#btnSettings').onclick = async () => {
-  const s = (await run('settings')) || {};
-  $('#setLogin').checked = !!s.startOnLogin; $('#setTray').checked = !!s.minimizeToTray;
+  const s = (await run('settings')) || appSettings;
+  $('#hwNote').hidden = true;
+  paintSettings(s);
+  renderColChecks($('#setCols'));
   $('#dlgSettings').showModal();
 };
 $('#setCancel').onclick = () => $('#dlgSettings').close();
-$('#dlgSettings form').onsubmit = async () => {
-  await run('saveSettings', { startOnLogin: $('#setLogin').checked, minimizeToTray: $('#setTray').checked });
-  toast('Settings saved');
-};
 
 // ---------- events ----------
 api.on('status', (v) => {
   state.servers.set(v.id, v);
   renderList();
+  renderTables();
   if (v.id === state.sel) {
     // avoid wiping unsaved form edits: only re-render header-ish when not on a form tab
     if (['console', 'backups'].includes(state.tab)) { const keep = state.consoleBuf; renderDetail(); state.consoleBuf = keep; }
@@ -448,7 +495,7 @@ api.on('logLines', ({ id, logId, reset, file, lines }) => {
 api.on('removed', (id) => {
   state.servers.delete(id);
   if (state.sel === id) state.sel = null;
-  renderList(); renderDetail();
+  renderList(); renderDetail(); renderTables();
 });
 
 async function refreshMetrics() {
@@ -458,10 +505,14 @@ async function refreshMetrics() {
   $('#metrics').textContent = `${m.cpuCount} CPUs · RAM ${used.toFixed(0)}% of ${(m.mem.total / 2 ** 30).toFixed(0)} GB · ${state.servers.size} servers`;
 }
 
-(async function init() {
+async function init() {
+  const st = await run('settings'); if (st) applyAppearance(st);
+  const ms = await run('metricsState'); if (ms) { dash.snap = ms.snapshot; dash.history = ms.history; }
   state.games = (await run('games')) || [];
   for (const s of (await run('list')) || []) state.servers.set(s.id, s);
   renderList();
   refreshMetrics(); setInterval(refreshMetrics, 5000);
+  await setView((st && st.view) || 'servers');
   if (state.servers.size) select([...state.servers.keys()][0]);
-})();
+}
+window.addEventListener('DOMContentLoaded', init);

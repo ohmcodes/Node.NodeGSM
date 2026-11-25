@@ -7,6 +7,10 @@
   "version": "1.0.0",
   "url": "",
   "tags": ["minecraft", "pocketmine"],
+  "docs": [
+    { "title": "PocketMine-MP documentation", "url": "https://pmmp.readthedocs.io/", "type": "official", "description": "Official PocketMine docs" },
+    { "title": "PocketMine-MP releases", "url": "https://github.com/pmmp/PocketMine-MP/releases", "type": "official" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

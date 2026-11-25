@@ -35,8 +35,26 @@ A local plugin with the **same id as a built-in one overrides it** - handy for f
 | `media.readme` | yes* | default `README.md` |
 | `media.banner` | no | e.g. `banner.png` |
 | `media.screenshots` | no | e.g. `["screenshots/1.png", "screenshots/2.png"]` |
+| `docs` | yes* | **documentation links** - official and unofficial guides for creating the server (see below) |
 
 \* required for plugins submitted to the repository; local plugins only get warnings.
+
+#### docs - official and unofficial guides
+Links to everything a server admin might need to set this game up. Shown under **Documentation** in the in-app game browser (grouped *Official* / *Unofficial*) and on the website; also exported in `registry.json`.
+```json
+"docs": [
+  { "title": "Palworld dedicated server guide", "url": "https://tech.palworldgame.com/dedicated-server-guide", "type": "official", "description": "Official setup, ports and settings" },
+  { "title": "How to create a Palworld server", "url": "https://www.survivalservers.com/wiki/index.php?title=How_to_Create_a_Palworld_Server_Guide", "type": "unofficial" }
+]
+```
+| Field | Required | |
+|---|---|---|
+| `title` | yes | link text |
+| `url` | yes | `http(s)://` link (anything else is rejected) |
+| `type` | yes | `official` = published by the game/server developer; `unofficial` = community wiki, forum, guide, video |
+| `description` | no | one line about what the page covers |
+
+Plugins in the repository need **at least one** link. Put official links first, only add links you opened and checked, and prefer stable pages (wiki / docs) over social posts.
 
 ### install - get the server files
 Shorthands:
@@ -130,6 +148,24 @@ They appear in the **Config Files** tab: edit, save (the previous version is kep
 ```
 They appear in the **Logs** tab as a list; click one to follow it live (filter, pause, errors/warnings highlighted). `*` and `?` are allowed in the **file name**; the newest match is followed, and it switches automatically when the game rotates its logs.
 
+### metrics - extra live numbers (FPS, tick rate, entities ...)
+Every server already gets **CPU, memory (whole process tree), threads, uptime, PID, players, map** on the Table and Dashboard views. A plugin can add game-specific numbers; they appear as extra columns the user can switch on in **Settings -> Server table columns**.
+```json
+"metrics": [
+  { "id": "fps", "name": "Server FPS", "unit": "fps", "source": "console", "pattern": "fps[:= ]+([0-9.]+)", "command": "fps", "intervalSec": 10 },
+  { "id": "entities", "name": "Entities", "source": "log:server-log", "pattern": "entities[:= ]+(\\d+)" }
+]
+```
+| Field | Required | |
+|---|---|---|
+| `id`, `name` | yes | column id and title; `unit` is optional (shown in the title) |
+| `source` | yes | `console` (the server's output) or `log:<id>` of a log declared in `logs` |
+| `pattern` | yes | JavaScript regex with **one capture group** holding the number; the newest match wins |
+| `command` | no | console command sent every `intervalSec` (min 2, default 10) so the game prints the value (needs `run.stdin`, not for srcds/hlds) |
+| `staleSec` | no | show nothing when no new value arrived for this long (default 120) |
+
+NodeGSM cannot read FPS from a game by itself - the game has to print it. Check what your server prints (or which console command reports it) and describe it here. Only add metrics you have verified.
+
 ## plugin.js (optional)
 Use it only when JSON cannot do the job (for example resolving the latest download URL). It runs with **full Node.js access** - only install plugins you trust; repository plugins get a security review.
 ```js
@@ -152,7 +188,9 @@ module.exports = {
 Real examples: [`plugins/mc`](plugins/mc), [`plugins/mcbe`](plugins/mcbe), [`plugins/vts`](plugins/vts), [`plugins/gta5`](plugins/gta5).
 
 ## Website / registry
-`npm run registry` builds [`plugins/registry.json`](plugins/registry.json): id, name, description, author, version, tags, ports, install type, config/log lists and the **relative paths** of the icon, banner, README and screenshots (`plugins/<id>/...`). A website can fetch it from the repository (e.g. via `raw.githubusercontent.com`) to list the supported games with their README and screenshots. The in-app **Games** browser shows the same information.
+`npm run registry` builds [`plugins/registry.json`](plugins/registry.json): id, name, description, author, version, tags, **docs links**, ports, install type, config/log lists and the **relative paths** of the icon, banner, README and screenshots (`plugins/<id>/...`). A website can fetch it from the repository (e.g. via `raw.githubusercontent.com`) to list the supported games with their README and screenshots. The in-app **Games** browser shows the same information.
+
+The NodeGSM website ([`website/`](website)) consumes it: `npm run catalog` turns the registry plus each plugin's `README.md` and `icon.png` into a **catalog** (`index.json`, one deterministic zip per plugin with a sha256, icons; `hasScript` flags plugins that contain `plugin.js`, `minAppVersion` is read from an optional `minAppVersion` field in `plugin.json`). The site's searchable **Plugins** page reads that catalog from `CATALOG_URL`, so it can live on a different host or repo than the app. Write a useful `README.md` and `description` - they are what visitors see. Community ratings, comments and editable game info live on the site, not in the plugin folder.
 
 ## Converting a WindowsGSM C# plugin
 | C# (`WindowsGSM.Plugins`) | `plugin.json` |

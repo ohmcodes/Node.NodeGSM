@@ -9,6 +9,8 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | All 46 games are plugins in `plugins/<id>/` | ✅ | Edit/fix a game with a pull request - [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Declarative `plugin.json` + JSON Schema (`plugins/plugin.schema.json`) | ✅ | Editor auto-complete; format reference in [PLUGINS.md](PLUGINS.md) |
 | Listing metadata: title, description, author, version, tags, url, icon, banner, README, screenshots | ✅ | Shown in the in-app **Games** browser and the website |
+| Plugin `metrics`: game-specific live numbers (FPS, tick rate, entities ...) read with a regex from the console or a log, optionally polled with a console command | ✅ | Become selectable columns on Table / Dashboard; no built-in plugin ships one yet (a game must print the value - add only verified patterns) |
+| Documentation links (`docs`): official and unofficial guides per game | ✅ | Grouped Official / Unofficial in the **Games** browser; exported in `registry.json`; at least one required for repository plugins. All 46 built-ins have links (Valve/SteamDB patterns + well-known guides) |
 | Install steps: `steamcmd`, `download`, `extract`, `run` (other installers), `write`, `mkdir`, `script` | ✅ | Confined to the server folder; zip built in, 7z/tar.gz via Windows `tar` |
 | Config files: any number per game (INI, JSON, XML, properties, cfg, YAML, text) | ✅ | **Config Files** tab: edit, JSON validation + format, `.bak` of previous version, create from template |
 | Log files: any number per game, live view | ✅ | **Logs** tab: list of logs, live tail, wildcard (newest file), rotation handled, filter, pause, error/warn highlight |
@@ -22,6 +24,20 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 | PR guide, PR template, game-request issue template, CI | ✅ | `CONTRIBUTING.md`, `.github/` |
 | Converter for WindowsGSM C# plugins | ⏳ | Manual mapping table in PLUGINS.md for now |
 | Online plugin repository / one-click install from the website | ⏳ | |
+
+## Website (`website/`)
+| Feature | Status | Notes |
+|---|---|---|
+| Dark futuristic site: Home, Features & changelog, Plugins, Download | ✅ | No framework; `npm run site:serve` to run it |
+| Plugin **catalog** (`index.json` + `zips/` + `icons/`, sha256, `hasScript`, docs links) built by `npm run catalog` / `npm run site` | ✅ | Site reads `CATALOG_URL`, so it can use a catalog published from a separate plugins repo; nothing is hard-coded |
+| Feature tables + changelog generated from `FEATURES.md` | ✅ | |
+| Plugins page: forgiving search ("7daytodie", "7 days to die", "7dtd", typos), tag filter, sort (name / rating / downloads / players), detail drawer, official + unofficial doc links, zip download, `plugin.js` warning | ✅ | Deep links like `plugins.html#rust` |
+| **Own backend** (`website/server/`, no dependencies): ratings, comments, editable community info with revisions, download counts, admin moderation | ✅ | Rate limits, size limits, link-spam limit, hashed IPs; tests: `npm run test:site`. No accounts/CAPTCHA/moderation UI yet |
+| Same UI without the backend | ✅ | Falls back to per-browser storage (shown with a notice) |
+| GitHub Pages deploy workflow (static part only) | 🧪 | `.github/workflows/site.yml`; Pages cannot run the backend, so set `API_URL` to a hosted API |
+| Online plugin catalog in the app (enable online, install, update from the catalog) | ⏳ | Designed: same `index.json`, sha256-verified, warn on `plugin.js` |
+| Separate plugins repository with PR validation + catalog publish | ⏳ | `scripts/build-catalog.js` is ready to move |
+| Releases / download buttons | ⏳ | Link to GitHub Releases; no release has been published yet |
 
 ## Server management
 | Feature | Status | Notes |
@@ -54,6 +70,18 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 |---|---|---|
 | Electron UI (dark theme) | ✅ | |
 | Start on Windows login, minimize to tray | ✅ | |
+| Table view: WindowsGSM-style horizontal server table | ✅ | ID, PID, game icon, status, name, IP, port, query port, map, players, CPU, memory, uptime ... sortable; double-click opens details |
+| Multi-select + bulk actions: Start, Stop, Restart, **Kill** (force), Update, Backup | ✅ | Checkboxes, header "select all", Ctrl/Shift click; Stop/Restart/Kill run in parallel, Start/Update/Backup one after another; buttons enable only when they apply; skipped (not applicable) servers are reported |
+| Choose which columns to show (Settings, Table and Dashboard) | ✅ | Built-in columns + plugin metrics; saved; reset to default |
+| Dashboard: system CPU / memory / disk, installed + online servers, active players | ✅ | Refreshes every 5 s |
+| Dashboard: per-server CPU, memory (whole process tree), threads, uptime, players | ✅ | One PowerShell process table read per tick, only while servers run |
+| Dashboard: history chart (players / CPU / memory, per server) | ✅ | Last 30 minutes, canvas, follows the theme |
+| Theme: Dark / Light / follow Windows | ✅ | **Settings**; applied instantly, no flash on start; native dialogs follow the theme |
+| Accent colour: 11-colour palette + custom colour picker | ✅ | Not locked behind a donor tier |
+| UI animation on/off | ✅ | Transitions, dialog/toast animations |
+| Hardware acceleration on/off | ✅ | Applies after a restart (**Restart now** button stops servers gracefully first) |
+| Auto restart NodeGSM on crash | ✅ | Relaunches at most 3x per 10 min (no crash loops); crashes logged to `logs/crash.log`; renderer crashes reload the window |
+| Telemetry / "send statistics" | - | Deliberately none |
 | System metrics in header | ✅ | |
 | Windows installer + portable exe (electron-builder) | ✅ | `npm run dist`; unsigned, default icon; bundles `plugins/` |
 | External links open in the default browser; in-app navigation blocked | ✅ | |
@@ -61,6 +89,27 @@ Status: ✅ done · 🧪 done but not tested against a real server · ⏳ planne
 
 ## Changelog
 Newest first. Add an entry for every change.
+
+### 2026-11-24 - Dashboard, server table and bulk actions
+- **Views:** header switch *List / Table / Dashboard* (last view remembered). **Table** is the horizontal WindowsGSM-style list with checkboxes; **Dashboard** shows system CPU/memory/disk, server counts, active players, a 30-minute history chart (players / CPU / memory) and the running-server table.
+- **Multi-select bulk actions:** Start, Stop, Restart, Kill, Update, Backup on any number of selected servers (new `kill` = force-stop the whole process tree; `bulk` runner with per-server results).
+- **Column picker** in Settings (also on the Table toolbar and Dashboard): ID, PID, icon, status, name, game, IP, port, query port, map, players, CPU, memory, uptime, threads, restarts + plugin metrics. One list for Table and Dashboard; reset to default.
+- **Plugin `metrics`** (FPS, tick rate, entities ...): regex on console or a declared log, optional console command polled on a timer; validated, in the schema and template.
+- **Fixed:** PID / CPU / memory stayed empty for servers without a query port (the first Started event fired before the process existed); deleting a server no longer leaves its backups for a new server that reuses the id (they are moved aside as `<id>.deleted-<time>`).
+- **Tests:** process-tree totals, collector (CPU/memory/threads, console + command + log metrics, history), bulk start/stop/kill/backup incl. skipped and unknown actions, settings sanitising.
+
+### 2026-11-24 - Themes, settings and documentation links
+- **Settings dialog rebuilt:** theme (Dark / Light / Windows), accent colour (11 presets + custom picker), UI animation, hardware acceleration (restart button), start on login, minimize to tray, auto restart on crash. Changes apply and save immediately; values are validated (`src/main/settings.js`). The light theme covers the whole UI (terminal, dialogs, badges, logs).
+- **Auto restart on crash:** uncaught main-process errors are logged and the app relaunches (max 3 per 10 minutes, servers stopped gracefully first); a crashed renderer reloads the window.
+- **Plugin `docs` array:** official and unofficial documentation links per game (`title`, `url`, `type`, optional `description`). Validated (http/https only), shown in the **Games** browser grouped Official / Unofficial, exported in `registry.json`, required for repository plugins (validator + PR checklist). Added to all 46 built-in plugins and `plugins/_template`.
+- **Tests:** docs validation, settings sanitising/persistence, crash-restart policy.
+
+### 2026-11-24 - Website
+- **New `website/`**: futuristic dark-mode static site (Home, Features & changelog, Plugins, Download). Layout inspired by the WindowsGSM site, written from scratch.
+- **Plugins page** with forgiving search (fixed: "7daytodie" / "7 days to die" now find 7 Days to Die; matches names, ids, abbreviations, tags, app ids and small typos, ranked by relevance), tag filter, sort, per-plugin drawer (details, README, official/unofficial docs, how to install), zip download, star rating, comments and a Markdown **community info** page anyone can edit (revision history).
+- **Own backend** `website/server/` (dependency-free Node server: static site + `/api`): shared ratings, comments, community info with revisions, download counts, admin moderation (delete comment, revert info), rate/size/link limits, hashed IPs, CORS allow-list; 17 tests (`npm run test:site`). Falls back to per-browser storage when it is not reachable.
+- **Plugin catalog** `scripts/build-catalog.js` (`npm run catalog`): `index.json` + deterministic per-plugin zips (sha256) + icons, with `hasScript`, `minAppVersion` and docs links. The site reads it from `CATALOG_URL`, so it can be served from a separate plugins repo; the same file is what the app's future online mode will use.
+- **`npm run site`** (`scripts/build-site.js`) generates `website/catalog/` and `website/data/site.json` (both gitignored); `.github/workflows/site.yml` publishes the static part to GitHub Pages.
 
 ### 2026-11-24 - Everything is a plugin
 - **All games converted to plugins** (`plugins/<id>/plugin.json`, icon, README); the hard-coded catalog (`games.js`) and built-in installers are gone. Palworld added as a built-in plugin.

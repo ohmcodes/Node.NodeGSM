@@ -7,6 +7,11 @@
   "version": "1.0.0",
   "url": "https://steamdb.info/app/223350/info/",
   "tags": ["steamcmd"],
+  "docs": [
+    { "title": "DayZ server configuration", "url": "https://community.bistudio.com/wiki/DayZ:Server_Configuration", "type": "official", "description": "Bohemia Interactive wiki" },
+    { "title": "SteamCMD reference", "url": "https://developer.valvesoftware.com/wiki/SteamCMD", "type": "official", "description": "Valve Developer Community" },
+    { "title": "SteamDB: dedicated server app info", "url": "https://steamdb.info/app/223350/info/", "type": "unofficial", "description": "App id, depots and build history" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

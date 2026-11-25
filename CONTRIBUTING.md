@@ -22,7 +22,9 @@ git checkout -b add-mygame
 Copy-Item -Recurse plugins\_template plugins\mygame
 ```
 
-3. **Edit `plugins/mygame/plugin.json`.** The comments in [PLUGINS.md](PLUGINS.md) explain every field. The minimum is `id`, `name`, `description`, `author`, `version`, `install`, `run.exe`, `defaults`.
+3. **Edit `plugins/mygame/plugin.json`.** The comments in [PLUGINS.md](PLUGINS.md) explain every field. The minimum is `id`, `name`, `description`, `author`, `version`, `docs`, `install`, `run.exe`, `defaults`.
+   **Add documentation links** (`docs`): official guides first, then unofficial ones (community wikis, forum guides, videos) - each with `title`, `url` and `type` (`official` / `unofficial`). Only add links you opened and checked.
+   Optional: `configs`, `logs`, and `metrics` (FPS / tick rate from the console or a log - only when you verified what the game prints).
    Editors with JSON-schema support (VS Code does) autocomplete the fields because of the `$schema` line.
 4. **Add the media** next to it:
    - `icon.png` - square PNG, 64x64 up to 256x256 (**required**)
@@ -69,6 +71,7 @@ You can also fix a game **locally without a PR**: put the edited folder in the a
 - [ ] Install works from a clean state and the server starts (tested by the author or the reviewer)
 - [ ] Default ports and `query` type are right (query is `null` when the game has no supported query protocol)
 - [ ] Config files and logs open in the app
+- [ ] `docs` has at least one working link; official and unofficial are labelled correctly
 - [ ] No binaries, secrets or unnecessary `plugin.js`
 
 ## Project layout (for code contributions)
@@ -78,7 +81,8 @@ plugins/_template/   copy this to start a new plugin
 plugins/registry.json generated list of all plugins (npm run registry)
 src/main/            Electron main process (server manager, plugin loader, install runner, log tailer)
 src/renderer/        UI
-scripts/             validate-plugins.js, build-registry.js
+scripts/             validate-plugins.js, build-registry.js, build-catalog.js (plugin catalog), build-site.js
+website/             the website + its community backend (npm run site, npm run site:serve; see website/README.md)
 test/                npm test
 ```
 App-code changes: run `npm test`, and update [FEATURES.md](FEATURES.md) (changelog + tables) and the README/PLUGINS docs in the same PR.

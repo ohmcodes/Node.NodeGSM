@@ -7,6 +7,11 @@
   "version": "1.0.0",
   "url": "https://store.steampowered.com/app/123456",
   "tags": ["survival", "steamcmd"],
+  "docs": [
+    { "title": "Official dedicated server guide", "url": "https://example.com/official-guide", "type": "official", "description": "Published by the developer" },
+    { "title": "Community wiki: setting up a server", "url": "https://example.com/wiki/server", "type": "unofficial" },
+    { "title": "Video walkthrough", "url": "https://example.com/video", "type": "unofficial" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",
@@ -53,6 +58,18 @@
       "format": "json",
       "description": "Admin list",
       "template": "templates/admins.json"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "fps",
+      "name": "Server FPS",
+      "unit": "fps",
+      "source": "console",
+      "pattern": "fps[:= ]+([0-9.]+)",
+      "command": "fps",
+      "intervalSec": 10,
+      "description": "Optional: shown as a column on the Table and Dashboard views"
     }
   ],
   "logs": [

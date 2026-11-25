@@ -7,6 +7,9 @@
   "version": "1.0.0",
   "url": "",
   "tags": ["fivem", "download"],
+  "docs": [
+    { "title": "FiveM: setting up a server", "url": "https://docs.fivem.net/docs/server-manual/setting-up-a-server/", "type": "official", "description": "Official Cfx.re documentation" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

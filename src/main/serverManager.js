@@ -50,12 +50,9 @@ class ServerManager extends EventEmitter {
   installPlugin(src) { const id = require('./plugins').installFrom(src, this.pluginsDir); this.reloadPlugins(); return id; }
 
   // ---------- settings / paths ----------
-  loadSettings() {
-    try { return { discordToken: '', startOnLogin: false, ...JSON.parse(fs.readFileSync(this.settingsFile, 'utf8')) }; }
-    catch { return { discordToken: '', startOnLogin: false }; }
-  }
+  loadSettings() { return require('./settings').read(this.dir); }
   saveSettings(patch) {
-    this.settings = { ...this.settings, ...patch };
+    this.settings = { ...this.settings, ...require('./settings').sanitize(patch) };
     fs.writeFileSync(this.settingsFile, JSON.stringify(this.settings, null, 2));
     return this.settings;
   }
@@ -110,6 +107,8 @@ class ServerManager extends EventEmitter {
       startedAt: rt ? rt.startedAt : null,
       players: rt ? rt.players : null,
       maxPlayersLive: rt ? rt.maxPlayersLive : null,
+      liveMap: rt && rt.queryInfo ? rt.queryInfo.map || null : null,
+      restarts: rt ? rt.restarts || 0 : 0,
       pending: rt && rt.busy ? rt.busy : null,
       progress: rt && rt.busy ? rt.progress || null : null,
       ip_display: c.ip || '0.0.0.0',
@@ -205,6 +204,9 @@ class ServerManager extends EventEmitter {
     } else {
       fs.rmSync(path.join(this.serverRoot(id), 'configs'), { recursive: true, force: true });
     }
+    // Keep the backups of a deleted server, but move them aside so a new server that reuses this id doesn't inherit them.
+    const bdir = path.join(this.backupsDir, String(id));
+    if (fs.existsSync(bdir)) { try { fs.renameSync(bdir, path.join(this.backupsDir, `${id}.deleted-${Date.now()}`)); } catch { /* keep */ } }
     this.logTail.stopAll(id);
     this.runtime.delete(String(id));
     this.emit('removed', String(id));
@@ -246,6 +248,7 @@ class ServerManager extends EventEmitter {
       proc = spawn(cmd, args, { cwd, windowsHide: true, stdio: [g.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], windowsVerbatimArguments: false });
     } catch (e) { this.setStatus(id, 'Stopped'); throw e; }
     rt.proc = proc;
+    this.emit('status', this.view(id)); // the first Started event fired before the process existed: announce the PID now
     const pipe = (s) => { s.setEncoding('utf8'); s.on('data', (d) => this.log(id, d)); };
     pipe(proc.stdout); pipe(proc.stderr);
     proc.on('error', (e) => { this.log(id, `Process error: ${e.message}`); });
@@ -267,6 +270,7 @@ class ServerManager extends EventEmitter {
     if (crashed) {
       this.alert(id, 'crashAlert', `Server crashed (exit code ${code})`);
       if (c.autoRestart) {
+        rt.restarts = (rt.restarts || 0) + 1;
         this.log(id, 'Auto-restarting in 5s ...');
         setTimeout(() => { if (!this.rt(id).proc && !this.rt(id).stopping) this.start(id).then(() => this.alert(id, 'autoRestartAlert', 'Server auto-restarted')).catch((e) => this.log(id, e.message)); }, 5000);
       }
@@ -294,17 +298,59 @@ class ServerManager extends EventEmitter {
     return this.view(id);
   }
 
+  /** Force-kill the whole process tree immediately (no graceful stop). */
+  async kill(id) {
+    id = String(id);
+    const rt = this.rt(id); const proc = rt.proc;
+    if (!proc) return this.view(id);
+    rt.stopping = true;
+    this.setStatus(id, 'Stopping');
+    const exited = new Promise((res) => proc.once('exit', res));
+    spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { windowsHide: true });
+    await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
+    return this.view(id);
+  }
+
+  /**
+   * Run one action on several servers. Returns [{ id, ok, skipped?, error? }].
+   * stop / restart / kill run in parallel; start / update / backup run one after another
+   * (SteamCMD and disk-heavy work should not overlap).
+   */
+  async bulk(action, ids) {
+    const list = [...new Set((ids || []).map(String))].filter((i) => this.getConfig(i));
+    const running = (id) => this.isRunning(id);
+    const busy = (id) => { const b = this.rt(id).busy; if (b) throw new Error(`Busy: ${b}`); };
+    const actions = {
+      start: async (id) => { if (running(id)) return 'skipped'; busy(id); await this.start(id); },
+      stop: async (id) => { if (!running(id)) return 'skipped'; await this.stop(id); },
+      restart: async (id) => { if (!running(id)) return 'skipped'; busy(id); await this.restart(id); },
+      kill: async (id) => { if (!running(id)) return 'skipped'; await this.kill(id); },
+      update: async (id) => { busy(id); await this.update(id, false); },
+      backup: async (id) => { busy(id); await this.backup(id); },
+    };
+    const fn = actions[action];
+    if (!fn) throw new Error(`Unknown action: ${action}`);
+    const one = async (id) => {
+      try { const r = await fn(id); return r === 'skipped' ? { id, ok: true, skipped: true } : { id, ok: true }; }
+      catch (e) { this.log(id, `${action} failed: ${e.message}`); return { id, ok: false, error: e.message }; }
+    };
+    if (['stop', 'restart', 'kill'].includes(action)) return Promise.all(list.map(one));
+    const out = [];
+    for (const id of list) { out.push(await one(id)); if (action === 'start') await new Promise((r) => setTimeout(r, 1000)); }
+    return out;
+  }
+
   async restart(id) {
     await this.stop(id);
     await new Promise((r) => setTimeout(r, 1000));
     return this.start(id);
   }
 
-  sendCommand(id, text) {
+  sendCommand(id, text, { silent = false } = {}) {
     const rt = this.rt(id);
     if (!rt.proc || !rt.proc.stdin || !rt.proc.stdin.writable) throw new Error('Console input is not available for this server');
     rt.proc.stdin.write(text + '\n');
-    this.log(id, `> ${text}`);
+    if (!silent) this.log(id, `> ${text}`);
   }
 
   // ---------- CPU priority / affinity ----------
@@ -525,7 +571,7 @@ class ServerManager extends EventEmitter {
       if (!g.query) continue;
       const info = await query(g.query, c.ip, c.queryPort || c.port, 2500);
       const status = info ? 'Started' : 'Starting';
-      rt.players = info ? info.players : null; rt.maxPlayersLive = info ? info.maxPlayers : null;
+      rt.players = info ? info.players : null; rt.maxPlayersLive = info ? info.maxPlayers : null; rt.queryInfo = info || null;
       if (rt.status !== status && rt.status !== 'Updating') this.setStatus(id, status);
       else this.emit('status', this.view(id));
     }

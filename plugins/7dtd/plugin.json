@@ -7,6 +7,11 @@
   "version": "1.0.0",
   "url": "https://steamdb.info/app/294420/info/",
   "tags": ["steamcmd"],
+  "docs": [
+    { "title": "SteamCMD reference", "url": "https://developer.valvesoftware.com/wiki/SteamCMD", "type": "official", "description": "Valve Developer Community" },
+    { "title": "7 Days to Die: dedicated servers", "url": "https://7daystodie.fandom.com/wiki/Dedicated_Servers", "type": "unofficial", "description": "Community wiki" },
+    { "title": "SteamDB: dedicated server app info", "url": "https://steamdb.info/app/294420/info/", "type": "unofficial", "description": "App id, depots and build history" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

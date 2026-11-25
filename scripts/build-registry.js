@@ -22,12 +22,14 @@ function buildRegistry() {
     plugins.push({
       id: m.id, name: m.name, description: m.description || '', author: m.author || '', version: m.version || '', url: m.url || '',
       tags: m.tags || [],
+      docs: (m.docs || []).map((d) => ({ title: d.title, url: d.url, type: d.type, description: d.description || '' })),
       install: steam ? 'steamcmd' : steps.length ? 'download' : 'manual',
       steamAppId: steam ? String(steam.appId) : null,
       ports: { game: d.port || null, query: d.queryPort || null },
       maxPlayers: d.maxPlayers || null, query: m.query || null,
       configs: (m.configs || []).map((c) => ({ name: c.name, path: c.path, format: c.format || 'text' })),
       logs: (m.logs || []).map((l) => ({ name: l.name, path: l.path })),
+      metrics: (m.metrics || []).map((x) => ({ id: x.id, name: x.name, unit: x.unit || '' })),
       media: {
         icon: rel(media.icon || 'icon.png'),
         banner: media.banner ? rel(media.banner) : null,

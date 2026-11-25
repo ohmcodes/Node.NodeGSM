@@ -7,6 +7,11 @@
   "version": "1.1.4",
   "url": "https://github.com/ohmcodes/WindowsGSM.Palworld",
   "tags": ["steamcmd"],
+  "docs": [
+    { "title": "Palworld dedicated server guide", "url": "https://tech.palworldgame.com/dedicated-server-guide", "type": "official", "description": "Official setup, ports and settings" },
+    { "title": "SteamCMD reference", "url": "https://developer.valvesoftware.com/wiki/SteamCMD", "type": "official", "description": "Valve Developer Community" },
+    { "title": "How to create a Palworld server", "url": "https://www.survivalservers.com/wiki/index.php?title=How_to_Create_a_Palworld_Server_Guide", "type": "unofficial" }
+  ],
   "media": {
     "icon": "icon.png",
     "readme": "README.md",

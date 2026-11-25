@@ -13,6 +13,7 @@ const ID_RE = /^[a-z0-9][a-z0-9_-]{1,31}$/;
 const STEP_TYPES = ['steamcmd', 'download', 'extract', 'run', 'write', 'mkdir', 'script'];
 const FORMATS = ['ini', 'json', 'xml', 'properties', 'cfg', 'yaml', 'text'];
 const QUERIES = ['a2s', 'ut3', 'fivem'];
+const DOC_TYPES = ['official', 'unofficial'];
 
 /** @type {Array<object>} live list of loaded games (mutated by loadAll) */
 const GAMES = [];
@@ -113,6 +114,37 @@ function validate(m, dir) {
       if (s.type === 'script' && !(dir && fs.existsSync(path.join(dir, 'plugin.js')))) e(`${at} (script) needs a plugin.js with install()`);
     });
   }
+  if (m.docs !== undefined) {
+    if (!Array.isArray(m.docs)) e('"docs" must be an array of { title, url, type }');
+    else m.docs.forEach((d, i) => {
+      const at = `docs[${i}]`;
+      if (!d || typeof d !== 'object') return e(`${at} must be an object`);
+      if (!d.title || typeof d.title !== 'string') e(`${at}.title is required`);
+      if (typeof d.url !== 'string' || !/^https?:\/\/[^\s]+$/i.test(d.url)) e(`${at}.url must be an http(s) link`);
+      if (!DOC_TYPES.includes(d.type)) e(`${at}.type must be "official" or "unofficial"`);
+      if (d.description !== undefined && typeof d.description !== 'string') e(`${at}.description must be text`);
+    });
+  } else w('no "docs" links (official / unofficial guides for creating this server)');
+  if (m.metrics !== undefined) {
+    if (!Array.isArray(m.metrics)) e('"metrics" must be an array');
+    else {
+      const seen = new Set(); const logIds = new Set((m.logs || []).map((l) => l.id));
+      m.metrics.forEach((x, i) => {
+        const at = `metrics[${i}]`;
+        if (!x || typeof x !== 'object') return e(`${at} must be an object`);
+        if (!x.id || !/^[a-z0-9_-]+$/i.test(x.id)) e(`${at}.id is required (letters, digits, _ -)`);
+        else if (seen.has(x.id)) e(`${at}.id "${x.id}" is duplicated`);
+        seen.add(x.id);
+        if (!x.name) e(`${at}.name is required`);
+        if (x.source !== 'console' && !/^log:[a-z0-9_-]+$/i.test(String(x.source))) e(`${at}.source must be "console" or "log:<id of a declared log>"`);
+        else if (x.source !== 'console' && !logIds.has(String(x.source).slice(4))) e(`${at}.source refers to an undeclared log "${String(x.source).slice(4)}"`);
+        try { const re = new RegExp(x.pattern); if (new RegExp(re.source + '|').exec('').length < 2) e(`${at}.pattern needs one capture group, e.g. "fps=([0-9.]+)"`); }
+        catch { e(`${at}.pattern is not a valid regular expression`); }
+        if (x.command !== undefined && typeof x.command !== 'string') e(`${at}.command must be text`);
+        if (x.intervalSec !== undefined && !(Number(x.intervalSec) >= 2)) e(`${at}.intervalSec must be a number >= 2`);
+      });
+    }
+  }
   if (m.query !== undefined && m.query !== null && !QUERIES.includes(m.query)) e(`"query" must be one of ${QUERIES.join(', ')} or null`);
   for (const [key, list] of [['configs', m.configs], ['logs', m.logs]]) {
     if (list === undefined) continue;
@@ -160,7 +192,7 @@ function toGame(m, dir, source) {
   const steam = steps.find((s) => s.type === 'steamcmd');
   return {
     id: m.id, name: m.name, description: m.description || '', author: m.author || '', version: m.version || '', url: m.url || '',
-    color: m.color || '', tags: m.tags || [], source, dir,
+    color: m.color || '', tags: m.tags || [], docs: Array.isArray(m.docs) ? m.docs : [], source, dir,
     icon: fs.existsSync(iconFile) ? readB64(iconFile) : null,
     media,
     appId: steam ? String(steam.appId) : null, steps, hooks,
@@ -168,7 +200,7 @@ function toGame(m, dir, source) {
     port: String(d.port || ''), queryPort: String(d.queryPort || d.port || ''), map: String(d.map || ''),
     maxPlayers: String(d.maxPlayers || ''), additional: String(d.additional || ''), portIncrement: d.portIncrement || 1,
     query: m.query || null, gslt: !!m.gslt,
-    configs: m.configs || [], logs: m.logs || [],
+    configs: m.configs || [], logs: m.logs || [], metrics: Array.isArray(m.metrics) ? m.metrics : [],
     args: hooks.args ? (c, ctx) => hooks.args(c, ctx) : (c, ctx) => items.flatMap((it) => expandItem(it, c, { appId: steam && steam.appId, ...ctx })),
   };
 }
@@ -243,12 +275,13 @@ function detail(id) {
   const rd = (f) => { try { return readB64(path.join(g.dir, f)); } catch { return null; } };
   return {
     id: g.id, name: g.name, description: g.description, author: g.author, version: g.version, url: g.url, tags: g.tags, source: g.source,
-    appId: g.appId, port: g.port, queryPort: g.queryPort, maxPlayers: g.maxPlayers, query: g.query, overrides: !!g.overrides,
+    docs: g.docs, appId: g.appId, port: g.port, queryPort: g.queryPort, maxPlayers: g.maxPlayers, query: g.query, overrides: !!g.overrides,
     icon: g.icon, banner: m.banner ? rd(m.banner) : null,
     readme: fs.existsSync(readmeFile) ? fs.readFileSync(readmeFile, 'utf8') : '',
     screenshots: (m.screenshots || []).map(rd).filter(Boolean),
     configs: g.configs.map(({ id: i, name, path: p, format, description }) => ({ id: i, name, path: p, format, description })),
     logs: g.logs.map(({ id: i, name, path: p, description }) => ({ id: i, name, path: p, description })),
+    metrics: g.metrics.map(({ id: i, name, unit, source, command, description }) => ({ id: i, name, unit, source, command, description })),
   };
 }
 
