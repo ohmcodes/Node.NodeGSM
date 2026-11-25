@@ -107,6 +107,10 @@ Every function of the app backend is one entry of the table returned by `buildAp
 | `pluginDetail` | `id` | detail object | Listing data, README text, base64 icon / banner / screenshots, `docs` links, ports / defaults, and a trimmed `configs` / `logs` / `metrics` list |
 | `pluginsInfo` | - | `{ loaded, errors[] }` | Result of the last plugin load |
 | `pluginsReload` | - | plugin info | Re-reads bundled and user plugins; emits `plugins:reloaded` on the bus |
+| `catalogueState` | - | `{ url, valid, fetchedAt, count, stale, tags, plugins:[{ id, name, summary, maker, contributors, version, tags, platforms, install, sha256, size, zip, icon, banner, detail, installed, installedVersion, update }] }` | The cached catalogue list (no network). See `src/main/catalogue.js` |
+| `catalogueRefresh` | `force?` | same as `catalogueState` | Downloads the list only when there is no cache, it is older than 24 h or `force` is true; first asks the tiny `catalogue.json` and fetches `index.json` only if its hash changed |
+| `catalogueDetail` | `id` | `{ ...entry, description, docs, ports, configs, logs, screenshots, readme, source }` | Full detail of one catalogue plugin, cached on disk after the first view |
+| `catalogueInstall` | `id` | `{ id, state }` | Downloads the plugin zip, verifies its sha256, installs it into the data folder's `plugins/` and reloads plugins |
 | `pluginsInstallZip` / `pluginsInstallFolder` | - | plugin id or `null` | Opens a file / folder dialog; `null` = cancelled |
 | `pluginsFolder` | - | - | Opens the user plugins folder |
 | `settings` | - | settings | Sanitised settings (bot token masked: `discord.botTokenSet`) |

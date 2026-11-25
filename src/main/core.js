@@ -14,6 +14,7 @@ const { BackupService } = require('./services/backup');
 const { Cluster } = require('./services/cluster');
 const { AutoClear } = require('./services/autoClear');
 const { Consoles } = require('./services/consoles');
+const { Catalogue } = require('./catalogue');
 
 /** Game list as the renderer sees it (no hooks, no readme). */
 function publicGames() {
@@ -72,12 +73,14 @@ function createCore({ dataDir, mode = 'desktop' }) {
   discordBot.onStatus = (st) => hub.emit('discordBot', st);
   cluster.onProgress = (p) => hub.emit('cluster:progress', p);
 
+  const catalogue = new Catalogue(dataDir, () => mgr.settings, (zip) => mgr.installPlugin(zip));
+
   let started = false; let stopped = false;
   return {
-    dataDir, mode, mgr, collector, hub, services: instances, eventLog, discord, discordBot, cluster, autoClear, consoles, publicGames,
+    dataDir, mode, mgr, collector, hub, catalogue, services: instances, eventLog, discord, discordBot, cluster, autoClear, consoles, publicGames,
     platformInfo: () => platformInfo(mode),
     /** IPC table for this core; extra = transport specific ctx (shell, dialog, app, nativeTheme, getWin, currentBg, beforeRelaunch). */
-    buildApi: (extra = {}) => buildApi({ mgr, collector, publicGames, eventLog, discord, discordBot, cluster, autoClear, consoles, platformInfo: () => platformInfo(mode), ...extra }),
+    buildApi: (extra = {}) => buildApi({ mgr, collector, publicGames, catalogue, eventLog, discord, discordBot, cluster, autoClear, consoles, platformInfo: () => platformInfo(mode), ...extra }),
     start() {
       if (started) return; started = true;
       instances.forEach((s) => s.start());

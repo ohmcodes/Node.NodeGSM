@@ -125,5 +125,5 @@ Linux only (everything here is **untested**):
 - [ ] `docker compose up -d --build`; `docker ps` shows healthy; `deploy/nodegsm.service` starts and survives a reboot.
 
 ## 11. Website and docs
-- [ ] `npm run site` then `npm run site:serve`, open the printed address. *Header shows the N mark; the browser tab shows the favicon; Features page lists the tables and the changelog newest first.*
+- [ ] In the **Website** repository: `npm start`, open the printed address. *Header shows the N mark; the browser tab shows the favicon; Features page lists the tables and the changelog newest first.*
 - [ ] Open [docs/README.md](README.md) on GitHub. *Every link works.*

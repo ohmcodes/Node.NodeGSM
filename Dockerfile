@@ -17,7 +17,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY src ./src
-COPY plugins ./plugins
+# games are plugins from the Catalogue repository: installed at runtime from the in-app catalogue (needs internet once) into /data/plugins
 COPY assets ./assets
 
 # non-root user; /data holds settings, servers, backups and the access token (mount a volume here)

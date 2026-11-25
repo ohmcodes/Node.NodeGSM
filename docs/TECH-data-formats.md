@@ -108,3 +108,14 @@ At most 50 rules. Invalid rules are refused when saving through the app and drop
 
 ### Config merge markers
 `NGSM:ignore` anywhere in a line of a config file (in the parent's or the member's copy) keeps the member's line during config sync, whatever the comment style: `# NGSM:ignore`, `// NGSM:ignore`, `; NGSM:ignore`, `<!-- NGSM:ignore -->`.
+
+## Plugin catalogue cache (`<data>/catalogue/`)
+Written by `src/main/catalogue.js`; safe to delete (it is downloaded again).
+
+| File | Content |
+|---|---|
+| `index.json` | the catalogue list as published (`schema`, `count`, `tags`, `plugins[]`: id, name, summary, maker, contributors, version, tags, platforms, install, sha256, size, zip, icon, banner, detail) |
+| `meta.json` | `{ url, fetchedAt, hash, count }`: where the list came from, when it was last checked and the sha256 of `index.json` (compared with the tiny remote `catalogue.json`) |
+| `detail/<id>.json` | per-plugin detail (README, docs, ports ...), cached after the first view; dropped when the list changes |
+
+The list is re-checked at most every 24 h or on Refresh. Plugin zips are downloaded only on Install, verified against `sha256` and extracted into `<data>/plugins/<id>/`. Setting `catalogueUrl` (https URL, localhost http, or a local folder; empty = the official catalogue).

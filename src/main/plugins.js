@@ -2,14 +2,23 @@
 // Plugin loader. EVERY game in NodeGSM is a plugin: a folder with plugin.json (+ icon, README, screenshots, plugin.js).
 //   <app>/plugins/<id>/        bundled games (these are the ones contributed via GitHub PRs)
 //   <data>/plugins/<id>/       user plugins; same id as a bundled one = local override
-// See PLUGINS.md for the format and plugins/plugin.schema.json for editor auto-complete.
+// See PLUGINS.md for the format and plugins/plugin.schema.json (Catalogue repository) for editor auto-complete.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const AdmZip = require('adm-zip');
 const platform = require('./platform');
 
-const BUNDLED_DIR = path.join(__dirname, '..', '..', 'plugins');
+// Games are NOT part of this repository: they live in the Catalogue repository and are installed into <data>/plugins from the in-app catalogue.
+// "Bundled" is only a read-only folder of plugins used when present (developers, tests, offline packs):
+//   1. NODEGSM_BUNDLED_PLUGINS (env)   2. <app>/plugins   3. a sibling checkout ../Node.NodeGSM.Catalogue/plugins (unpackaged runs only)
+function resolveBundledDir() {
+  const app = path.join(__dirname, '..', '..');
+  const cands = [process.env.NODEGSM_BUNDLED_PLUGINS, path.join(app, 'plugins')];
+  if (!/app\.asar/.test(__dirname)) cands.push(path.join(app, '..', 'Node.NodeGSM.Catalogue', 'plugins'));
+  return cands.find((d) => d && fs.existsSync(d)) || path.join(app, 'plugins');
+}
+const BUNDLED_DIR = resolveBundledDir();
 const ID_RE = /^[a-z0-9][a-z0-9_-]{1,31}$/;
 const STEP_TYPES = ['steamcmd', 'download', 'extract', 'run', 'write', 'mkdir', 'script'];
 const FORMATS = ['ini', 'json', 'xml', 'properties', 'cfg', 'yaml', 'text'];

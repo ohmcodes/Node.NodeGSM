@@ -7,16 +7,10 @@
     "start": "electron .",
     "serve": "node src/server/headless.js",
     "serve:dev": "node --watch src/server/headless.js --port 8731",
-    "test": "node test/smoke.js && node scripts/validate-plugins.js --check",
+    "test": "node test/smoke.js",
     "dist": "electron-builder --win",
     "pack": "electron-builder --win --dir",
-    "validate:plugins": "node scripts/validate-plugins.js",
-    "registry": "node scripts/build-registry.js",
-    "site": "node scripts/build-site.js",
-    "catalog": "node scripts/build-catalog.js",
-    "icons": "node scripts/build-icons.js",
-    "site:serve": "node website/server/server.js",
-    "test:site": "node website/server/test.js"
+    "icons": "node scripts/build-icons.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -37,10 +31,8 @@
     },
     "files": [
       "src/**",
-      "plugins/**",
       "assets/**",
-      "package.json",
-      "!plugins/_template/**"
+      "package.json"
     ],
     "win": {
       "target": [

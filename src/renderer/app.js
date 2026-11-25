@@ -375,6 +375,45 @@ $('#plFolder').onclick = async () => { const id = await run('pluginsInstallFolde
 $('#plReload').onclick = async () => { await run('pluginsReload'); await afterPluginChange('Plugins reloaded'); };
 $('#plOpen').onclick = () => run('pluginsFolder');
 
+// ---------- plugin catalogue (the plugin list lives in its own repository; see src/main/catalogue.js) ----------
+// The list is downloaded once and cached; "Refresh" forces a new check, otherwise it is re-checked at most once a day.
+state.cat = null;
+const catIcon = (cat, p) => (cat.url && /^https?:/i.test(cat.url) && p.icon ? new URL(p.icon, cat.url).href : '');
+async function showCatalogue(refresh) {
+  const box = $('#gbDetail');
+  box.innerHTML = '<p class="muted">Loading the catalogue...</p>';
+  let err = '';
+  try { state.cat = refresh === 'force' ? await run('catalogueRefresh', true) : await run('catalogueState'); if (state.cat && (state.cat.stale || !state.cat.count) && refresh !== 'force') state.cat = await run('catalogueRefresh', false); }
+  catch (e) { err = e.message || String(e); try { state.cat = await run('catalogueState'); } catch { /* keep */ } }
+  renderCatalogue(err);
+}
+function renderCatalogue(err) {
+  const cat = state.cat || { plugins: [], count: 0, url: '' };
+  const q = (state.catQ || '').toLowerCase();
+  const items = cat.plugins.filter((p) => !q || `${p.name} ${p.maker} ${p.summary} ${(p.tags || []).join(' ')}`.toLowerCase().includes(q));
+  const when = cat.fetchedAt ? new Date(cat.fetchedAt).toLocaleString() : 'never';
+  $('#gbDetail').innerHTML = `<h3 style="margin-top:0">Plugin catalogue</h3>
+    <p class="muted small">Games are plugins from the community catalogue. Installed plugins keep working offline. ${cat.count} plugins · last checked ${esc(when)} · <span title="${esc(cat.url || '')}">${esc(cat.url || '')}</span></p>
+    ${err ? `<div class="err">${esc(err)}${cat.count ? ' (showing the saved list)' : ''}</div>` : ''}
+    <div class="row wrap"><input id="catQ" placeholder="Search the catalogue..." value="${esc(state.catQ || '')}"><button type="button" id="catRefresh">Refresh</button></div>
+    <div id="catList">${items.map((p) => `<div class="catrow" data-p="${esc(p.id)}" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line,#2a2f3f)">
+      ${catIcon(cat, p) ? `<img src="${esc(catIcon(cat, p))}" alt="" width="40" height="40" style="border-radius:8px">` : '<span style="width:40px"></span>'}
+      <div style="flex:1;min-width:0"><b>${esc(p.name)}</b> <span class="muted small">v${esc(p.version)} · by ${esc(p.maker || 'unknown')}${(p.contributors || []).length ? ' +' + p.contributors.length : ''}${p.hasScript ? ' · script' : ''}</span>
+      <div class="muted small">${esc(p.summary)}</div></div>
+      <button type="button" data-inst="${esc(p.id)}" class="${p.installed && !p.update ? '' : 'primary'}" ${p.installed && !p.update ? 'disabled' : ''}>${p.update ? 'Update to v' + esc(p.version) : p.installed ? 'Installed' : 'Install'}</button></div>`).join('') || '<p class="muted">Nothing found.</p>'}</div>`;
+  $('#catQ').oninput = (e) => { state.catQ = e.target.value; const pos = e.target.selectionStart; renderCatalogue(); const i = $('#catQ'); i.focus(); i.setSelectionRange(pos, pos); };
+  $('#catRefresh').onclick = () => showCatalogue('force');
+  $('#catList').onclick = async (e) => {
+    const b = e.target.closest('[data-inst]'); if (!b) return;
+    const p = cat.plugins.find((x) => x.id === b.dataset.inst);
+    if (p && p.hasScript && !confirm(`"${p.name}" contains a plugin.js script that runs with full access to this computer. Only install it if you trust ${p.maker || 'its author'}. Install anyway?`)) return;
+    b.disabled = true; b.textContent = 'Installing...';
+    try { const r = await run('catalogueInstall', b.dataset.inst); state.cat = r.state; await afterPluginChange(`Plugin "${r.id}" installed`); renderCatalogue(); }
+    catch (er) { toast(er.message || String(er)); renderCatalogue(er.message || String(er)); }
+  };
+}
+$('#plCatalogue').onclick = () => { state.gbSel = null; showCatalogue(); };
+
 // ---------- app settings: appearance + startup ----------
 const ACCENTS = [['Blue', '#4f8cff'], ['Cyan', '#1fb6d9'], ['Teal', '#1abc9c'], ['Green', '#2ecc71'], ['Lime', '#8bc34a'], ['Amber', '#f5a623'],
   ['Orange', '#ff7a45'], ['Red', '#e74c3c'], ['Pink', '#e84393'], ['Purple', '#9b59b6'], ['Indigo', '#6c5ce7']];

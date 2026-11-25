@@ -70,8 +70,8 @@ The logo is hand-written SVG in [`assets/`](assets) (`logo.svg` mark, `logo-word
 | [docs/TESTING-CHECKLIST.md](docs/TESTING-CHECKLIST.md) | manual checks to run in the real app (clusters, backups, Discord, RCON, tick ...) |
 | [PLUGINS.md](PLUGINS.md) | the `plugin.json` format - every field (incl. cluster, backup, events, logging, consoles, tick metrics, auto-clear) and a complete example, `plugin.js`, converting WindowsGSM plugins |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | **how to open a pull request to add or fix a game** |
-| [plugins/registry.json](plugins/registry.json) | machine-readable list of all games (for the website) |
-| [website/](website) | the NodeGSM website with its own community backend (ratings, comments, editable game info). Reads a plugin catalog (`npm run catalog`); `npm run site` then `npm run site:serve`. See [website/README.md](website/README.md) |
+| [Catalogue repository](https://github.com/ohmcodes/Node.NodeGSM.Catalogue) | **all games (plugins)**, PR validation, published as static files. NodeGSM downloads the list once and caches it |
+| [Website repository](https://github.com/ohmcodes/Node.NodeGSM.Website) | the website with the plugin browser, ratings, comments and editable game info; reads the catalogue |
 
 ## Data location
 Servers, backups, user plugins and SteamCMD live in `%APPDATA%\NodeGSM` on Windows and in `$XDG_DATA_HOME/NodeGSM` (default `~/.local/share/NodeGSM`) on Linux (override with the `NODEGSM_DATA` env var).

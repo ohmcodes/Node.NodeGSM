@@ -36,6 +36,7 @@ function cleanSettingsPatch(p) {
 function buildApi(ctx) {
   const { mgr, collector, shell, dialog, app, nativeTheme, getWin, currentBg } = ctx;
   const svc = (k) => { if (!ctx[k]) throw new Error(`Service not available: ${k}`); return ctx[k]; };
+  const installedPlugins = () => Object.fromEntries((mgr.pluginInfo.loaded || []).map((p) => [p.id, p.version]));
   return {
     games: () => ctx.publicGames(),
     list: () => mgr.list(),
@@ -121,6 +122,11 @@ function buildApi(ctx) {
       return r.canceled ? null : mgr.installPlugin(r.filePaths[0]);
     },
     pluginsFolder: () => shell.openPath(mgr.pluginsDir),
+    // catalogue (catalogue.js): the list is cached on disk; refresh() only touches the network when it is stale or forced
+    catalogueState: () => svc('catalogue').state(installedPlugins()),
+    catalogueRefresh: async (force) => { await svc('catalogue').refresh({ force: force === true }); return svc('catalogue').state(installedPlugins()); },
+    catalogueDetail: (id) => svc('catalogue').detail(id),
+    catalogueInstall: async (id) => { const got = await svc('catalogue').install(id); return { id: got, state: svc('catalogue').state(installedPlugins()) }; },
     metrics: () => mgr.metrics(),
     discordBotStatus: () => svc('discordBot').status(),
     discordBotRestart: async () => svc('discordBot').restart(),

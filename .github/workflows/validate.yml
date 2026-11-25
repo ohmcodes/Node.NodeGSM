@@ -6,16 +6,20 @@ on:
     branches: [main]
 
 jobs:
-  plugins-and-tests:
+  tests:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ohmcodes/Node.NodeGSM.Catalogue
+          path: catalogue
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Install (skip the Electron download)
         run: npm ci --ignore-scripts
-      - name: Validate plugins and registry
-        run: node scripts/validate-plugins.js --check
-      - name: Tests
+      - name: Tests (plugins come from the catalogue checkout)
         run: node test/smoke.js
+        env:
+          NODEGSM_BUNDLED_PLUGINS: ${{ github.workspace }}/catalogue/plugins

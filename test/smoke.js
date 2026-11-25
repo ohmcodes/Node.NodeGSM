@@ -113,7 +113,6 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   assert.strictEqual(P.validate({ ...base, docs: [{ title: 'x', url: 'javascript:alert(1)', type: 'official' }, { title: 'y', url: 'https://a.b/c', type: 'maybe' }, { url: 'https://a.b', type: 'official' }] }, null).errors.length, 3, 'bad docs rejected (js: url, type, title)');
   assert.strictEqual(P.validate({ ...base, docs: [{ title: 'ok', url: 'https://a.b/c', type: 'unofficial', description: 'd' }] }, null).errors.length, 0, 'good docs accepted');
   assert(P.validate(base, null).warnings.some((w) => /docs/.test(w)), 'missing docs is a warning for local plugins');
-  assert(require('../scripts/build-registry').buildRegistry().plugins.every((p) => Array.isArray(p.docs) && p.docs.length), 'registry carries docs');
 
   // ---- app settings (theme etc.) ----
   const S = require('../src/main/settings');
@@ -235,8 +234,6 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     [['Saved/SaveGames'], 'saves', 'join', 'sud', 3, 'validate', 'Saved/Crashes', ['port', 'rcon.*']], 'toGame carries the new fields');
   const plain = require('../src/main/plugins').toGame(xbase, xdir, 'user');
   eq([plain.cluster.clearFolders, plain.backup.presets, plain.events, plain.consoles, plain.autoClear], [[], [], [], [], []], 'toGame defaults are empty');
-  const reg = require('../scripts/build-registry').buildRegistry();
-  assert(reg.plugins.every((p) => !('cluster' in p) && !('backup' in p) || p.cluster || p.backup), 'registry includes new fields only when present');
   eq(P.validate(JSON.parse(fs.readFileSync(path.join(P.BUNDLED_DIR, '_template', 'plugin.json'), 'utf8')), null).errors, [], 'template (with all example fields) is valid');
 
   // ---- Phase 0: new settings keys ----
@@ -1420,7 +1417,7 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   {
     const R = path.join(__dirname, '..'); const zl = require('zlib');
     const pngInfo = (rel) => { const b = fs.readFileSync(path.join(R, rel)); assert(b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), rel + ' PNG signature'); assert.strictEqual(b.readUInt32BE(8), 13, rel + ' IHDR length'); assert.strictEqual(b.subarray(12, 16).toString(), 'IHDR', rel + ' IHDR'); assert.strictEqual(b.subarray(b.length - 8, b.length - 4).toString(), 'IEND', rel + ' IEND'); return { w: b.readUInt32BE(16), h: b.readUInt32BE(20), buf: b }; };
-    const sizes = { 'assets/icon.png': 256, 'assets/icon-32.png': 32, 'assets/icon-16.png': 16, 'website/assets/logo.png': 256, 'website/assets/favicon.png': 64 };
+    const sizes = { 'assets/icon.png': 256, 'assets/icon-32.png': 32, 'assets/icon-16.png': 16 };
     for (const [rel, sz] of Object.entries(sizes)) { const i = pngInfo(rel); eq([i.w, i.h], [sz, sz], rel + ' size'); }
     // IDAT inflates to the expected number of bytes (valid zlib stream)
     { const b = pngInfo('assets/icon.png').buf; let o = 8; const idat = []; while (o < b.length) { const len = b.readUInt32BE(o); if (b.subarray(o + 4, o + 8).toString() === 'IDAT') idat.push(b.subarray(o + 8, o + 8 + len)); o += 12 + len; } assert.strictEqual(zl.inflateSync(Buffer.concat(idat)).length, (256 * 4 + 1) * 256, 'icon.png pixel data'); }
@@ -1431,8 +1428,6 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     for (const f of ['logo.svg', 'logo-wordmark.svg', 'icon.svg']) { const svg = fs.readFileSync(path.join(R, 'assets', f), 'utf8'); assert(/^<svg[^>]+viewBox=/.test(svg) && svg.trim().endsWith('</svg>') && !/<script/i.test(svg), 'assets/' + f + ' is a plain SVG'); }
     const pj8 = JSON.parse(fs.readFileSync(path.join(R, 'package.json'), 'utf8')); assert(pj8.build.win.icon && fs.existsSync(path.join(R, pj8.build.win.icon)), 'package.json build.win.icon exists'); assert(pj8.scripts.icons, 'npm run icons');
     const html8 = fs.readFileSync(path.join(R, 'src', 'renderer', 'index.html'), 'utf8'); assert(/<div class="brand"><svg class="logo"/.test(html8) && html8.includes('assets/icon-32.png'), 'app header shows the logo');
-    for (const p of ['index', 'features', 'plugins', 'download']) assert(fs.readFileSync(path.join(R, 'website', p + '.html'), 'utf8').includes('assets/favicon.png'), 'website/' + p + '.html favicon');
-    assert(fs.readFileSync(path.join(R, 'website', 'layout.js'), 'utf8').includes('assets/logo.png'), 'website header uses the logo');
     const mj = fs.readFileSync(path.join(R, 'src', 'main', 'main.js'), 'utf8'); assert(/icon-16.png/.test(mj) && /icon.png/.test(mj) && /icon: path.join/.test(mj), 'tray + window icon wiring');
     { const { buildApi } = require('../src/main/api'); const names = Object.keys(buildApi({ mgr: { settings: {} }, collector: {}, shell: {}, dialog: {}, app: {}, nativeTheme: {}, getWin() {}, currentBg() {} })); const doc = fs.readFileSync(path.join(R, 'docs', 'TECH-api.md'), 'utf8'); const missing = names.filter((n) => !new RegExp('`' + n + '`').test(doc)); eq(missing, [], 'every IPC channel is documented in docs/TECH-api.md'); for (const ch of ['status', 'console', 'consoleOut', 'logLines', 'removed', 'metrics', 'cluster:progress', 'discordBot']) assert(doc.includes('| `' + ch + '` |'), 'push event ' + ch + ' documented'); for (const f of fs.readdirSync(path.join(R, 'docs'))) if (f !== 'README.md') assert(fs.readFileSync(path.join(R, 'docs', 'README.md'), 'utf8').includes('(' + f + ')'), 'docs/README.md links ' + f); for (const f of fs.readdirSync(path.join(R, 'docs'))) if (f !== 'README.md') assert(fs.readFileSync(path.join(R, 'README.md'), 'utf8').includes('docs/' + f), 'README.md links docs/' + f); }
     const B = require('../scripts/build-icons'); const px = B.render(16); assert.strictEqual(px.length, 16 * 16 * 4); assert(px[3] === 0 && px[(8 * 16 + 8) * 4 + 3] === 255 && px[(2 * 16 + 8) * 4 + 3] === 255, 'tile has rounded transparent corners and an opaque body'); assert(B.render(256, { tile: false })[3] === 0, 'mark-only render is transparent in the corner');
@@ -1473,15 +1468,15 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     assert(P.validate({ ...pbase, run: { exe: 'a.exe', linux: { exe: '../x' } } }).errors.some((x) => /run\.linux\.exe/.test(x))); assert(P.validate({ ...pbase, run: { exe: 'a.exe', linux: { args: 'no' } } }).errors.some((x) => /run\.linux\.args/.test(x)));
     assert(P.validate({ ...pbase, install: { type: 'manual', linux: { steps: [{ type: 'steamcmd', appId: 'x' }] } } }).errors.some((x) => /install\.linux\.steps\[0\]\.appId/.test(x))); assert(P.validate({ ...pbase, install: { steps: [{ type: 'steamcmd', appId: '1', platform: 'beos' }] } }).errors.some((x) => /platform/.test(x)));
     assert(P.validate({ ...pbase, platforms: ['linux', 'windows'], run: { exe: 'a.exe', linux: { exe: 'a', command: 'java', env: { A: 'b' } } }, install: { steps: [{ type: 'steamcmd', appId: '1' }], linux: { steps: [{ type: 'steamcmd', appId: '2', platform: 'linux' }] } } }).errors.length === 0, 'valid linux fields');
-    const csgoM = JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'csgo', 'plugin.json'), 'utf8'));
-    const gl = P.toGame(csgoM, path.join(R, 'plugins', 'csgo'), 'bundled', 'linux'); const gw = P.toGame(csgoM, path.join(R, 'plugins', 'csgo'), 'bundled', 'windows');
+    const csgoM = JSON.parse(fs.readFileSync(path.join(P.BUNDLED_DIR, 'csgo', 'plugin.json'), 'utf8'));
+    const gl = P.toGame(csgoM, path.join(P.BUNDLED_DIR, 'csgo'), 'bundled', 'linux'); const gw = P.toGame(csgoM, path.join(P.BUNDLED_DIR, 'csgo'), 'bundled', 'windows');
     eq([gl.exe, gw.exe, gl.supported, gl.stdin], ['srcds_run', 'srcds.exe', true, false], 'run.linux overrides exe, keeps args / stdin'); const acfg = { port: '1', param: '', map: 'm', maxPlayers: '2', gslt: '', ip: '' }; eq(gl.args(acfg, { serverFiles: 'x' }), gw.args(acfg, { serverFiles: 'x' }));
-    const rl = P.toGame(JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'rust', 'plugin.json'), 'utf8')), path.join(R, 'plugins', 'rust'), 'bundled', 'linux'); assert(rl.exe === 'RustDedicated' && /x86_64/.test(rl.env.LD_LIBRARY_PATH));
-    const winOnly = P.toGame(JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'cs', 'plugin.json'), 'utf8')), path.join(R, 'plugins', 'cs'), 'bundled', 'linux'); eq([winOnly.supported, winOnly.platforms], [false, ['windows']], 'plugins without platforms are Windows only');
-    const lins = P.toGame({ ...pbase, install: { steps: [{ type: 'steamcmd', appId: '1' }], linux: { steps: [{ type: 'steamcmd', appId: '2' }] } } }, path.join(R, 'plugins', 'csgo'), 'bundled', 'linux'); assert.strictEqual(lins.appId, '2', 'install.linux replaces the install steps on Linux');
-    const linOnly = P.toGame({ ...pbase, id: 'linonly', platforms: ['linux'] }, path.join(R, 'plugins', 'csgo'), 'bundled', 'windows'); P.GAMES.push(linOnly);
+    const rl = P.toGame(JSON.parse(fs.readFileSync(path.join(P.BUNDLED_DIR, 'rust', 'plugin.json'), 'utf8')), path.join(P.BUNDLED_DIR, 'rust'), 'bundled', 'linux'); assert(rl.exe === 'RustDedicated' && /x86_64/.test(rl.env.LD_LIBRARY_PATH));
+    const winOnly = P.toGame(JSON.parse(fs.readFileSync(path.join(P.BUNDLED_DIR, 'cs', 'plugin.json'), 'utf8')), path.join(P.BUNDLED_DIR, 'cs'), 'bundled', 'linux'); eq([winOnly.supported, winOnly.platforms], [false, ['windows']], 'plugins without platforms are Windows only');
+    const lins = P.toGame({ ...pbase, install: { steps: [{ type: 'steamcmd', appId: '1' }], linux: { steps: [{ type: 'steamcmd', appId: '2' }] } } }, path.join(P.BUNDLED_DIR, 'csgo'), 'bundled', 'linux'); assert.strictEqual(lins.appId, '2', 'install.linux replaces the install steps on Linux');
+    const linOnly = P.toGame({ ...pbase, id: 'linonly', platforms: ['linux'] }, path.join(P.BUNDLED_DIR, 'csgo'), 'bundled', 'windows'); P.GAMES.push(linOnly);
     assert.throws(() => m.create('linonly', 'x'), /not available on this platform/, 'unsupported game refused on the wrong platform'); assert.throws(() => m.importServer('linonly', 'x', dir), /not available on this platform/); P.GAMES.splice(P.GAMES.indexOf(linOnly), 1);
-    const reg = JSON.parse(fs.readFileSync(path.join(R, 'plugins', 'registry.json'), 'utf8')); eq(reg.plugins.filter((x) => x.platforms.includes('linux')).map((x) => x.id).sort(), ['csgo', 'mc', 'palworld', 'rust'], 'registry lists the declared Linux plugins'); assert(reg.plugins.every((x) => Array.isArray(x.platforms)));
+    eq(P.GAMES.filter((x) => x.linuxDeclared).map((x) => x.id).sort(), ['csgo', 'mc', 'palworld', 'rust'], 'loaded plugins declare Linux support'); assert(P.GAMES.every((x) => Array.isArray(x.platforms)));
     assert(P.detail('csgo').platforms.includes('linux') && typeof P.detail('csgo').supported === 'boolean');
     // electron must never load in the headless path
     const cp = require('child_process');
@@ -1569,6 +1564,43 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     const df = fs.readFileSync(path.join(R, 'Dockerfile'), 'utf8'); assert(/node:20-slim/.test(df) && /USER /.test(df) && /VOLUME/.test(df) && /8730/.test(df) && /healthz/.test(df), 'Dockerfile basics');
     const pj9 = JSON.parse(fs.readFileSync(path.join(R, 'package.json'), 'utf8')); assert(pj9.scripts.serve && pj9.scripts['serve:dev'] && pj9.bin.nodegsm && /^\d+\.\d+\.\d+$/.test(pj9.dependencies.ws), 'package.json: serve scripts, bin and a pinned ws');
     fs.rmSync(hdir, { recursive: true, force: true });
+  }
+
+  // ---- catalogue client (plugins come from the Catalogue repository; here a local folder stands in for it) ----
+  {
+    const { Catalogue, normalizeBase, DEFAULT_URL } = require('../src/main/catalogue');
+    const crypto = require('crypto');
+    const cdir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-catc-')); const cdata = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-catd-'));
+    const mkzip = (id, version) => { const z = new AdmZip(); z.addFile(id + '/plugin.json', Buffer.from(JSON.stringify({ id, name: 'Cat ' + id, version, description: 'd', author: 'a', install: { type: 'manual' }, run: { exe: 'x.exe' } }))); return z.toBuffer(); };
+    const publish = (version, corrupt) => {
+      fs.mkdirSync(path.join(cdir, 'zips'), { recursive: true }); fs.mkdirSync(path.join(cdir, 'plugins'), { recursive: true });
+      const buf = mkzip('catgame', version); fs.writeFileSync(path.join(cdir, 'zips', 'catgame.zip'), corrupt ? Buffer.concat([buf, Buffer.from('x')]) : buf);
+      const idx = JSON.stringify({ schema: 1, count: 1, tags: ['t'], plugins: [{ id: 'catgame', name: 'Cat Game', fullName: 'Cat Game Server', summary: 's', maker: 'Maker', contributors: ['C'], version, tags: ['t'], platforms: ['windows'], install: 'manual', sha256: crypto.createHash('sha256').update(mkzip('catgame', version)).digest('hex'), size: buf.length, zip: 'zips/catgame.zip', icon: null, detail: 'plugins/catgame.json' }] });
+      fs.writeFileSync(path.join(cdir, 'index.json'), idx);
+      fs.writeFileSync(path.join(cdir, 'catalogue.json'), JSON.stringify({ schema: 1, generatedAt: 'x', count: 1, hash: crypto.createHash('sha256').update(idx).digest('hex') }));
+      fs.writeFileSync(path.join(cdir, 'plugins', 'catgame.json'), JSON.stringify({ id: 'catgame', description: 'long', readme: '# hi', docs: [], sha256: JSON.parse(idx).plugins[0].sha256 }));
+    };
+    publish('1.0.0');
+    const settings = { catalogueUrl: cdir }; let installed = null;
+    const cat = new Catalogue(cdata, () => settings, (zipFile) => { const dst = path.join(cdata, 'plugins-test'); installed = require('../src/main/plugins').installFrom(zipFile, dst); return installed; });
+    eq(normalizeBase(''), DEFAULT_URL, 'empty catalogue address = the official catalogue');
+    assert.strictEqual(normalizeBase('ftp://x/y'), null); assert.strictEqual(normalizeBase('file:///c:/x'), null); assert.strictEqual(normalizeBase('http://example.com/'), null, 'plain http is refused except localhost'); assert(normalizeBase('https://x.github.io/c').endsWith('/c/'));
+    eq(cat.state().count, 0, 'no list before the first refresh'); assert(cat.state().stale);
+    eq(await cat.refresh(), { changed: true, cached: false }, 'first refresh downloads the list');
+    eq(await cat.refresh(), { changed: false, cached: true }, 'a fresh cache is not downloaded again');
+    eq((await cat.refresh({ force: true })).changed, false, 'forced check with an unchanged hash downloads no index');
+    let st = cat.state({ catgame: '0.9.0' }); assert(st.count === 1 && st.plugins[0].update && st.plugins[0].installedVersion === '0.9.0' && !st.stale, 'state marks updates');
+    eq((await cat.detail('catgame')).readme, '# hi', 'detail on demand');
+    await assert.rejects(() => cat.detail('../x'), /Unknown plugin/);
+    eq(await cat.install('catgame'), 'catgame', 'install from the zip'); assert(fs.existsSync(path.join(cdata, 'plugins-test', 'catgame', 'plugin.json')));
+    publish('1.1.0'); eq((await cat.refresh({ force: true })).changed, true, 'a changed catalogue is picked up'); eq(cat.state().plugins[0].version, '1.1.0');
+    publish('1.2.0', true);
+    await assert.rejects(() => cat.refresh({ force: true }).then(() => cat.install('catgame')), /Checksum mismatch/, 'a tampered zip is refused');
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(cdata, 'plugins-test', 'catgame', 'plugin.json'), 'utf8')).version, '1.0.0', 'nothing was overwritten by the refused download');
+    settings.catalogueUrl = 'ftp://nope'; await assert.rejects(() => cat.refresh({ force: true }), /not valid/, 'bad address is rejected');
+    assert.strictEqual(require('../src/main/settings').sanitize({ catalogueUrl: 'ftp://nope' }).catalogueUrl, undefined, 'settings drop a bad catalogue address');
+    eq(require('../src/main/settings').sanitize({ catalogueUrl: 'https://x.github.io/c/' }).catalogueUrl, 'https://x.github.io/c/');
+    fs.rmSync(cdir, { recursive: true, force: true }); fs.rmSync(cdata, { recursive: true, force: true });
   }
 
   console.log('smoke test passed');

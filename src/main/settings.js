@@ -23,6 +23,7 @@ const DEFAULTS = {
   headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
   discord: { webhookUrl: '', botEnabled: false, botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], permissions: [], allowRawCommands: false, events: {}, templates: {} },
   logging: { retentionDays: 30 }, // NGSM event log retention
+  catalogueUrl: '',           // plugin catalogue: https:// address or a local folder; '' = the official catalogue
 };
 const VIEWS = ['servers', 'table', 'dashboard'];
 const CHARTS = ['players', 'cpu', 'memory', 'tick', 'latency'];
@@ -173,6 +174,7 @@ function sanitize(patch) {
     else if (k === 'headerStats') { if (v && typeof v === 'object') out.headerStats = { ...DEFAULTS.headerStats, ...bools(v, STAT_KEYS) }; }
     else if (k === 'discord') { if (v && typeof v === 'object') out.discord = sanitizeDiscord(v); }
     else if (k === 'logging') { if (v && typeof v === 'object') { const d = Math.round(Number(v.retentionDays)); out.logging = { retentionDays: d >= 1 && d <= 3650 ? d : DEFAULTS.logging.retentionDays }; } }
+    else if (k === 'catalogueUrl') { const s = str(v, 300); if (s === '' || require('./catalogue').normalizeBase(s)) out.catalogueUrl = s; }
     else if (typeof DEFAULTS[k] === 'boolean') out[k] = !!v;
     else if (typeof DEFAULTS[k] === 'string') out[k] = String(v);
   }

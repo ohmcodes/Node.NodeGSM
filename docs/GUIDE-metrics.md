@@ -41,7 +41,7 @@ Add a metric with `"kind": "tick"` to `metrics[]` in `plugin.json` (full field l
    - `rcon:<command>`: sent through RCON; uses the first `consoles[]` entry of type `rcon` (or `rconConsole` / an inline `rconSource`). Nothing is written to the Console tab or the NGSM log.
 3. **Write a pattern with exactly one capture group** around the number. It is matched case-insensitively (`patternFlags` changes that) against each line of the reply; the first / newest match wins. The captured text may contain colour codes, ANSI escapes, a `*` marker, thousands separators, a decimal comma or units - the first number is used.
 4. **Set the colours**: `tickTarget` alone is enough (20 for TPS, 64 for tick rate, 50 for ms per tick with `"higherIsBetter": false`), or give `warnBelow` / `badBelow` (higher is better) / `warnAbove` / `badAbove` (times).
-5. Run `npm run validate:plugins` and `npm run registry`. Only ship patterns you have verified on a real server.
+5. Run `npm run validate <id>` in the Catalogue repository. Only ship patterns you have verified on a real server.
 
 Metric ids are global across games in the column list (`m:<id>`): use a distinct id (`tps`, `mspt`, `fps`) and the same meaning everywhere. Several tick metrics per game are fine; the first one with a fresh value is the *Tick* of that server.
 

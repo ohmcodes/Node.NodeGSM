@@ -6,12 +6,12 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 ## Plugins (every game is a plugin)
 | Feature | Status | Notes |
 |---|---|---|
-| All 46 games are plugins in `plugins/<id>/` | ✅ | Edit/fix a game with a pull request - [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Declarative `plugin.json` + JSON Schema (`plugins/plugin.schema.json`) | ✅ | Editor auto-complete; format reference in [PLUGINS.md](PLUGINS.md) |
+| All 46 games are plugins in the **Catalogue repository** (`plugins/<id>/` there), none in the app repo | ✅ | Fix a game with a pull request to the Catalogue: [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Declarative `plugin.json` + JSON Schema (`plugin.schema.json` in the Catalogue) | ✅ | Editor auto-complete; format reference in [PLUGINS.md](PLUGINS.md) |
 | Listing metadata: title, description, author, version, tags, url, icon, banner, README, screenshots | ✅ | Shown in the in-app **Games** browser and the website |
 | Plugin `metrics`: game-specific live numbers (FPS, tick rate, entities ...) read with a regex from the console, a log or an RCON command, optionally polled on a timer | ✅ | Become selectable columns on Table / Dashboard. `mc` (TPS / ms per tick), `csgo` and `rust` (FPS) ship a tick metric; other games add only verified patterns |
 | Plugin metric `kind: "tick"` + `tickTarget`, `higherIsBetter`, `warnBelow` / `badBelow` / `warnAbove` / `badAbove`, `patternFlags`, `source: "rcon:<command>"` (+ `rconConsole`, `rconSource`) | ✅ | Validated, in the schema / template, exported to `registry.json` (`kind`); see [PLUGINS.md](PLUGINS.md) |
-| Documentation links (`docs`): official and unofficial guides per game | ✅ | Grouped Official / Unofficial in the **Games** browser; exported in `registry.json`; at least one required for repository plugins. All 46 built-ins have links (Valve/SteamDB patterns + well-known guides) |
+| Documentation links (`docs`): official and unofficial guides per game | ✅ | Grouped Official / Unofficial in the **Games** browser; published in the catalogue; at least one required for catalogue plugins. All 46 have links (Valve/SteamDB patterns + well-known guides) |
 | Install steps: `steamcmd`, `download`, `extract`, `run` (other installers), `write`, `mkdir`, `script` | ✅ | Confined to the server folder; zip built in, 7z/tar.gz via Windows `tar` |
 | Config files: any number per game (INI, JSON, XML, properties, cfg, YAML, text) | ✅ | **Config Files** tab and **Home > Configs** screen: pick a file, edit it **Structured** (key / value rows, search, add / remove key) or **Raw**, JSON validation + format, `.bak` of the previous version, create from template |
 | Log files: any number per game, live view | ✅ | **Logs** tab: list of logs, live tail, wildcard (newest file), rotation handled, filter, pause, error/warn highlight |
@@ -19,28 +19,24 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 | Optional `plugin.js` hooks: `install`, `latest`, `local`, `args` | ✅ | Full Node access - reviewed in PRs; used by Minecraft, Bedrock, Vintage Story, FiveM |
 | Install plugin from ZIP / folder, Reload, open plugins folder | ✅ | In **Games** dialog |
 | Local plugin overrides a built-in one with the same id | ✅ | Fix an obsolete game without waiting for a PR |
-| Validation with visible errors; `npm run validate:plugins` | ✅ | Same checks run in CI on pull requests |
-| `plugins/registry.json` for the website (`npm run registry`) | ✅ | id, metadata, ports, configs, logs and relative media paths |
+| Validation with visible errors (the app) and `npm run validate` / CI in the Catalogue repository | ✅ | Same rules; the Catalogue keeps a copy in `scripts/lib/validate.js` |
+| Catalogue built as static files by the Catalogue repository (`npm run build`): `catalogue.json`, `index.json`, `plugins/<id>.json`, deterministic zips + sha256, media | ✅ | Needs only Node, not the app; published with GitHub Pages |
 | Game browser in the app (search, README, screenshots, defaults, configs/logs) | ✅ | **Games** button → **Add server** |
 | PR guide, PR template, game-request issue template, CI | ✅ | `CONTRIBUTING.md`, `.github/` |
 | Optional plugin fields: `cluster`, `configs[].protect`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` | ✅ | Validated (relative paths only, regexes must compile, `rcon:` sources must have the `rcon:<port>:<password>` shape), in the schema, template, `toGame()` and `registry.json`; all of them are used by the app |
 | Converter for WindowsGSM C# plugins | ⏳ | Manual mapping table in PLUGINS.md for now |
-| Online plugin repository / one-click install from the website | ⏳ | |
+| **In-app catalogue** (Games → Catalogue): list downloaded once and cached, refreshed at most daily or on demand, search, one-click install / update, sha256 check, `plugin.js` warning | ✅ | `src/main/catalogue.js`; address configurable (`catalogueUrl`, https or a local folder); tested with a local folder, not against the live Pages site yet |
 | Scanning of `logging.logFiles` (game log files) by the NGSM log | ⏳ | Declared and validated, but only console lines are matched |
 
-## Website (`website/`)
+## Catalogue and website (separate repositories)
 | Feature | Status | Notes |
 |---|---|---|
-| Dark futuristic site: Home, Features & changelog, Plugins, Download | ✅ | No framework; `npm run site:serve` to run it |
-| Plugin **catalog** (`index.json` + `zips/` + `icons/`, sha256, `hasScript`, docs links) built by `npm run catalog` / `npm run site` | ✅ | Site reads `CATALOG_URL`, so it can use a catalog published from a separate plugins repo; nothing is hard-coded |
-| Feature tables + changelog generated from `FEATURES.md` | ✅ | |
-| Logo in the header and as favicon (`assets/favicon.png`, mark `assets/logo.png`) | 🧪 | Generated by `npm run icons`; not looked at in a browser on the live site |
-| Plugins page: forgiving search ("7daytodie", "7 days to die", "7dtd", typos), tag filter, sort (name / rating / downloads / players), detail drawer, official + unofficial doc links, zip download, `plugin.js` warning | ✅ | Deep links like `plugins.html#rust` |
-| **Own backend** (`website/server/`, no dependencies): ratings, comments, editable community info with revisions, download counts, admin moderation | ✅ | Rate limits, size limits, link-spam limit, hashed IPs; tests: `npm run test:site`. No accounts/CAPTCHA/moderation UI yet |
+| **Catalogue repository** (https://github.com/ohmcodes/Node.NodeGSM.Catalogue): plugins, validator, build, tests, PR template, Pages publish workflow | ✅ | Static files, no API server; independent of the app |
+| Website repository (https://github.com/ohmcodes/Node.NodeGSM.Website): Home, Features & changelog, Plugins, Download | ✅ | Reads the catalogue from `CATALOG_URL`; feature tables from `npm run sync:app` |
+| Plugin cards: image, title, maker (+ contributors), short summary, rating; click for the full detail (README, docs, ports, screenshots, zip) | ✅ | Detail fetched on demand from `plugins/<id>.json` |
+| Website backend (no dependencies): ratings, comments, editable community info with revisions, download counts, moderation | ✅ | Website data, separate from the plugin repo; accepts only plugin ids present in the catalogue |
 | Same UI without the backend | ✅ | Falls back to per-browser storage (shown with a notice) |
-| GitHub Pages deploy workflow (static part only) | 🧪 | `.github/workflows/site.yml`; Pages cannot run the backend, so set `API_URL` to a hosted API |
-| Online plugin catalog in the app (enable online, install, update from the catalog) | ⏳ | Designed: same `index.json`, sha256-verified, warn on `plugin.js` |
-| Separate plugins repository with PR validation + catalog publish | ⏳ | `scripts/build-catalog.js` is ready to move |
+| GitHub Pages workflows (Catalogue: publish; Website: static front end) | 🧪 | Written, not run yet: enable Pages in both repositories |
 | Releases / download buttons | ⏳ | Link to GitHub Releases; no release has been published yet |
 
 ## Server management
@@ -140,6 +136,14 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 
 ## Changelog
 Newest first. Add an entry for every change. One entry = one `### <date> - <unique title>` heading followed by bullets (the website parses this format).
+
+### 2026-11-25 - Project separation: Catalogue and Website repositories, in-app catalogue
+- **Why:** the plugin list and the website do not belong in the app repository. Games are community-contributed and the site has its own data (ratings, comments), so each now lives, builds and deploys on its own.
+- **Catalogue** (https://github.com/ohmcodes/Node.NodeGSM.Catalogue): all 46 plugins + `plugin.schema.json` + `_template`, standalone validator (`scripts/lib/validate.js`, copy of the app's rules), `scripts/build-catalog.js`, tests, PR/issue templates and a Pages workflow. It publishes **static files**, not an API: `catalogue.json` (tiny change marker with a hash), `index.json` (lean list), `plugins/<id>.json` (README, docs, ports ...), `zips/`, `media/`. New optional plugin fields: `summary` (card text), `contributors`; `author` is the maker.
+- **Website** (https://github.com/ohmcodes/Node.NodeGSM.Website): moved `website/` (public/, server/, tests), now reads the catalogue from `CATALOG_URL` (default the Catalogue's GitHub Pages address). Plugin cards show image, title, maker, short summary, rating; clicking opens the detail drawer (fetched on demand). The backend validates plugin ids against the published index. `npm run sync:app` regenerates the Features/changelog data from this repo's `FEATURES.md`.
+- **App:** new `src/main/catalogue.js` + API `catalogueState` / `catalogueRefresh` / `catalogueDetail` / `catalogueInstall` + **Games → Catalogue** screen. The list is downloaded once and kept in `<data>/catalogue/`; it is re-checked at most once a day (or via Refresh), asking only `catalogue.json` first. Installs are sha256-verified and go to `<data>/plugins`. New setting `catalogueUrl` (https URL or local folder, default the official catalogue).
+- **Removed from this repo:** `plugins/`, `website/`, `catalog/`, `scripts/build-registry.js`, `build-catalog.js`, `build-site.js`, `validate-plugins.js`, `.github/workflows/site.yml`, `registry.json` and the npm scripts `registry`, `site`, `catalog`, `site:serve`, `test:site`, `validate:plugins`. The packaged app no longer ships games: they are installed from the catalogue (the first run needs internet; installed plugins work offline).
+- **Dev/test:** `plugins.js` reads a read-only bundled folder from `NODEGSM_BUNDLED_PLUGINS`, `<app>/plugins`, or (unpackaged only) the sibling `..\Node.NodeGSM.Catalogue\plugins`. CI checks the Catalogue out. `npm test` gained catalogue client tests (cache, change detection, install, tampered zip refused).
 
 ### 2026-11-25 - Discord bot: per-user per-server permission rules
 - **Why:** not every Discord user should be able to run slash commands or manage every installed server. Authorisation is now a list of rules `<discordUserId> <serverId> <action,action,...>` (new setting `settings.discord.permissions`, a list of `{ userId, serverId, actions[] }`).

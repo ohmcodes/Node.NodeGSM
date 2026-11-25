@@ -108,8 +108,6 @@ function main() {
   out.push(write('assets/icon-32.png', tilePng(32)));
   out.push(write('assets/icon-16.png', tilePng(16)));
   out.push(write('build/icon.ico', ico([16, 32, 48, 64, 128, 256].map((size) => ({ size, data: tilePng(size) })))));
-  out.push(write('website/assets/logo.png', png(256, render(256, { tile: false })))); // mark only, transparent
-  out.push(write('website/assets/favicon.png', tilePng(64)));
   console.log('icons written:\n  ' + out.join('\n  '));
 }
 

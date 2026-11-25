@@ -6,7 +6,7 @@ Decisions deferred while implementing, to confirm with the project owner.
 Short list of the things that block or change the most. Details are in the sections below.
 1. **Embed reference image** (Phase 2): send an example of the Discord embed look you want; the defaults are a neutral guess.
 2. **Bot token live test** (Phase 6): create a throw-away bot and run the commands once; nothing was ever run against real Discord (also: a real webhook **Send test**, Phase 2).
-3. **Footer URLs** (Phase 1): Website, Discord, Patreon, PayPal and Buy Me a Coffee are placeholders in `src/renderer/links.js`; the site's `website/config.js` needs the real repo / Discord / API URLs too.
+3. **Footer URLs** (Phase 1): Website, Discord, Patreon, PayPal and Buy Me a Coffee are placeholders in `src/renderer/links.js`; the website repository's `public/config.js` needs the real repo / Discord / API URLs too.
 4. **Logo direction review** (Phase 8): the logo is a first pass (N from stacked server blocks + a network link). Approve it or describe what to change; `npm run icons` regenerates every file.
 5. **`/send` policy** (Phase 6): keep, restrict to admin roles, or remove? It gives allowed users full console access.
 6. **Token encryption** (Phase 6): the bot token and webhook URLs are plain text in `settings.json`; use Electron `safeStorage` (breaks when the data folder moves to another PC)?
@@ -104,7 +104,7 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - Colour defaults without thresholds come from `tickTarget` (90 % / 75 % higher is better; 1x / 2x lower is better); these are guesses. Plugin authors can set exact `warn*` / `bad*`.
 - Each RCON tick metric is a separate command per interval (mc ships two: `tps` and `tick query`, on Paper both answer). The unused one logs "unknown command" on the server console. Should a metric be disabled automatically after N consecutive failures?
 - RCON polls are not written to the NGSM log (to avoid a line every 15 s). Failures are only kept in memory (`pollErrors`); there is no UI for them yet - should a failing tick poll show a hint (for example "RCON not reachable") in the details panel?
-- `kind` is the only new `metrics[]` kind; the `registry.json` entry carries it, but the website catalog does not show it yet.
+- `kind` is the only new `metrics[]` kind; the catalogue detail carries the metric names, but the website does not show the kind yet.
 
 ## Phase 8 - logo
 - **Logo direction is a first pass.** Concept: an "N" whose two stems are stacked server units and whose diagonal is a network link with a node at each end; accent colour = the app's default `--accent` (#4f8cff). Please review `assets/logo.svg`, `assets/logo-wordmark.svg` and `assets/icon.svg` (or the generated `assets/icon.png`) and say what to change (shape, colours, a different motif, a lettered "NGSM" mark).

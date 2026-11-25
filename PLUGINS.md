@@ -1,6 +1,6 @@
 # Writing a NodeGSM plugin
 
-**Every game in NodeGSM is a plugin** - a folder with a `plugin.json`. The built-in games live in [`plugins/`](plugins) and are contributed by pull request ([CONTRIBUTING.md](CONTRIBUTING.md)); you can also add your own locally. No compiling, no app update.
+**Every game in NodeGSM is a plugin** - a folder with a `plugin.json`. The games live in the **[Catalogue repository](https://github.com/ohmcodes/Node.NodeGSM.Catalogue)** (`plugins/`), are contributed there by pull request, and NodeGSM installs them from its in-app **Catalogue**; you can also add your own locally. No compiling, no app update. This file is the format reference; the Catalogue keeps a mirrored copy next to the validator.
 
 ```
 plugins/palworld/
@@ -12,12 +12,12 @@ plugins/palworld/
   templates/      optional - default config files users can create with one click
   plugin.js       optional - custom code when JSON is not enough
 ```
-Start by copying [`plugins/_template`](plugins/_template). A complete real example: [`plugins/palworld`](plugins/palworld). Editors that understand JSON Schema (VS Code) give auto-complete and errors from [`plugins/plugin.schema.json`](plugins/plugin.schema.json).
+Start by copying [`plugins/_template`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/tree/main/plugins/_template). A complete real example: [`plugins/palworld`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/tree/main/plugins/palworld). Editors that understand JSON Schema (VS Code) give auto-complete and errors from [`plugins/plugin.schema.json`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/blob/main/plugins/plugin.schema.json).
 
-**Install a plugin locally:** in the app, **Games → Install plugin (ZIP / folder)**, or copy the folder into the plugins folder (**Games → Plugins folder**) and click **Reload**.
-A local plugin with the **same id as a built-in one overrides it** - handy for fixing an obsolete game before your PR is merged.
+**Install from the catalogue:** in the app, **Games → Catalogue → Install** (the list is downloaded once and cached; Refresh checks again). **Install a plugin locally:** **Games → Install plugin (ZIP / folder)**, or copy the folder into the plugins folder (**Games → Plugins folder**) and click **Reload**.
+A local plugin with the **same id as a read-only bundled one overrides it** (installed catalogue plugins are replaced by an update) - handy for fixing an obsolete game before your PR is merged.
 
-**Check it:** `npm run validate:plugins <id>`.
+**Check it:** `npm run validate <id>` (in the Catalogue repository).
 
 ## plugin.json
 
@@ -27,7 +27,10 @@ A local plugin with the **same id as a built-in one overrides it** - handy for f
 | `id` | yes | unique, `a-z 0-9 _ -`, 2-32 chars. **Must equal the folder name** |
 | `name` | yes | title, e.g. `Palworld Dedicated Server` |
 | `description` | yes* | one or two sentences |
-| `author`, `version` | yes* | semver version; bump it when you change the plugin |
+| `author` | yes* | the **maker**, shown on every catalogue card |
+| `contributors` | no | other people who improved it, e.g. `["Alice"]` |
+| `version` | yes* | semver version; bump it when you change the plugin |
+| `summary` | no | one line (max 140 characters) for the catalogue card; defaults to the start of `description` |
 | `url` | no | homepage / docs / SteamDB link |
 | `tags` | no | search tags, e.g. `["survival", "steamcmd"]` |
 | `color` | no | accent colour `#RRGGBB` |
@@ -40,7 +43,7 @@ A local plugin with the **same id as a built-in one overrides it** - handy for f
 \* required for plugins submitted to the repository; local plugins only get warnings.
 
 #### docs - official and unofficial guides
-Links to everything a server admin might need to set this game up. Shown under **Documentation** in the in-app game browser (grouped *Official* / *Unofficial*) and on the website; also exported in `registry.json`.
+Links to everything a server admin might need to set this game up. Shown under **Documentation** in the in-app game browser (grouped *Official* / *Unofficial*) and on the website.
 ```json
 "docs": [
   { "title": "Palworld dedicated server guide", "url": "https://tech.palworldgame.com/dedicated-server-guide", "type": "official", "description": "Official setup, ports and settings" },
@@ -125,7 +128,7 @@ Plugins are **Windows only** unless they declare otherwise. All of these fields 
 - `install.linux` - same shape as `install` (`{ "steps": [...] }` or a shorthand), used instead of it on Linux.
 - A `steamcmd` step may set `"platform": "linux"` (or `"windows"`): NodeGSM then adds `+@sSteamCmdForcePlatformType <platform>` as the first SteamCMD argument, but only when it differs from the host OS (for depots that exist for one platform only).
 - On Linux NodeGSM makes the executable runnable (`chmod 755`) before it starts it and starts the server in its own process group (stop = console command, `SIGTERM`, then `SIGKILL`).
-- `registry.json` lists `platforms` for every plugin. Currently declared for Linux (**declared, untested**): `mc`, `csgo`, `rust`, `palworld`.
+- The catalogue lists `platforms` for every plugin. Currently declared for Linux (**declared, untested**): `mc`, `csgo`, `rust`, `palworld`.
 
 #### Argument templates (`run.args`)
 Each list item becomes one command-line argument.
@@ -225,7 +228,7 @@ Bundled examples (check what your game version prints before copying):
 Other Source games (tf2, css, gmod ...) can use the same `stats` pattern as csgo; they currently show Latency only.
 
 ### Optional fields for clusters, backups, events, logging, consoles, update and auto-clear
-All of these are optional. They are validated (`src/main/plugins.js`), described in [`plugin.schema.json`](plugins/plugin.schema.json) and carried onto the game object (and exported in `registry.json` when present). All of them are used by the app (see [FEATURES.md](FEATURES.md)) except `logging.logFiles`. Ids inside these lists (`events`, `backup.presets`, `logging.patterns`, `consoles`) use letters, digits, `_` and `-` and must be unique within their list. **Every path must be relative to the server files folder, without `..`, never absolute.**
+All of these are optional. They are validated (`src/main/plugins.js`), described in [`plugin.schema.json`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/blob/main/plugins/plugin.schema.json) and carried onto the game object. All of them are used by the app (see [FEATURES.md](FEATURES.md)) except `logging.logFiles`. Ids inside these lists (`events`, `backup.presets`, `logging.patterns`, `consoles`) use letters, digits, `_` and `-` and must be unique within their list. **Every path must be relative to the server files folder, without `..`, never absolute.**
 ```json
 "cluster": {
   "protectedConfigKeys": ["Port", "RCONPort"],
@@ -313,7 +316,7 @@ Auto-clear deletes only files (never folders), never follows links, never leaves
 Also shipped: `csgo` (configs, addons, custom content), `rust` (server data, Oxide), `palworld` and `arkse` (saves, settings). Tips: put the folders players care about (saves, configs) in presets and keep `exclude` for logs, crash dumps and caches. Presets only name paths - absolute paths and `..` are rejected. See [docs/GUIDE-backups.md](docs/GUIDE-backups.md).
 
 ## Complete example (every optional field)
-All fields in one valid `plugin.json` (compare [`plugins/_template`](plugins/_template), which you copy to start). Leave out whatever the game does not need - everything except `id`, `name`, `install` and `run` is optional for local plugins. Where each field is explained: listing and `docs` above, `install` / `run` / `defaults` / `query` above, `configs` (+ `protect`), `logs`, `metrics` (incl. `kind: "tick"` and `rcon:` sources) above, and `cluster`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` in the optional-fields section.
+All fields in one valid `plugin.json` (compare [`plugins/_template`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/tree/main/plugins/_template), which you copy to start). Leave out whatever the game does not need - everything except `id`, `name`, `install` and `run` is optional for local plugins. Where each field is explained: listing and `docs` above, `install` / `run` / `defaults` / `query` above, `configs` (+ `protect`), `logs`, `metrics` (incl. `kind: "tick"` and `rcon:` sources) above, and `cluster`, `backup`, `events`, `logging`, `consoles`, `update.validateArgs`, `files.autoClear` in the optional-fields section.
 ```json
 {
   "$schema": "../plugin.schema.json",
@@ -389,7 +392,7 @@ All fields in one valid `plugin.json` (compare [`plugins/_template`](plugins/_te
   }
 }
 ```
-Checklist: every path relative to the server files folder and without `..`; every regex compiles (`npm run validate:plugins <id>` checks); `rcon:` sources look like `rcon:<port>:<password>`; `consoles[].source` of a `log` console is the id of a declared `logs[]` entry; a metric with `source: "rcon:<command>"` needs an `rcon` console (or `rconSource`); `files.autoClear[].default: true` only for files that are always safe to delete.
+Checklist: every path relative to the server files folder and without `..`; every regex compiles (`npm run validate <id>` (in the Catalogue repository) checks); `rcon:` sources look like `rcon:<port>:<password>`; `consoles[].source` of a `log` console is the id of a declared `logs[]` entry; a metric with `source: "rcon:<command>"` needs an `rcon` console (or `rconSource`); `files.autoClear[].default: true` only for files that are always safe to delete.
 
 ## plugin.js (optional)
 Use it only when JSON cannot do the job (for example resolving the latest download URL). It runs with **full Node.js access** - only install plugins you trust; repository plugins get a security review.
@@ -410,32 +413,7 @@ module.exports = {
   args: (cfg, ctx) => ['-port=' + cfg.port],
 };
 ```
-Real examples: [`plugins/mc`](plugins/mc), [`plugins/mcbe`](plugins/mcbe), [`plugins/vts`](plugins/vts), [`plugins/gta5`](plugins/gta5).
+Real examples: [`plugins/mc`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/tree/main/plugins/mc), [`plugins/mcbe`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/tree/main/plugins/mcbe), [`plugins/vts`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/tree/main/plugins/vts), [`plugins/gta5`](https://github.com/ohmcodes/Node.NodeGSM.Catalogue/tree/main/plugins/gta5).
 
-## Website / registry
-`npm run registry` builds [`plugins/registry.json`](plugins/registry.json): id, name, description, author, version, tags, **docs links**, ports, install type, config/log lists and the **relative paths** of the icon, banner, README and screenshots (`plugins/<id>/...`). A website can fetch it from the repository (e.g. via `raw.githubusercontent.com`) to list the supported games with their README and screenshots. The in-app **Games** browser shows the same information.
-
-The NodeGSM website ([`website/`](website)) consumes it: `npm run catalog` turns the registry plus each plugin's `README.md` and `icon.png` into a **catalog** (`index.json`, one deterministic zip per plugin with a sha256, icons; `hasScript` flags plugins that contain `plugin.js`, `minAppVersion` is read from an optional `minAppVersion` field in `plugin.json`). The site's searchable **Plugins** page reads that catalog from `CATALOG_URL`, so it can live on a different host or repo than the app. Write a useful `README.md` and `description` - they are what visitors see. Community ratings, comments and editable game info live on the site, not in the plugin folder.
-
-## Converting a WindowsGSM C# plugin
-| C# (`WindowsGSM.Plugins`) | `plugin.json` |
-|---|---|
-| `Plugin { name, author, description, version, url, color }` | `name`, `author`, `description`, `version`, `url`, `color` |
-| `AppId` | `install: { "type": "steamcmd", "appId": ... }` |
-| `StartPath` | `run.exe` (use `/`) |
-| `Port`, `QueryPort`, `Defaultmap`, `Maxplayers`, `Additional`, `PortIncrements` | `defaults.port/queryPort/map/maxPlayers/additional/portIncrement` |
-| `QueryMethod = new A2S()` | `"query": "a2s"` (`null` if `QueryMethod = null`) |
-| the `param += ...` lines in `Start()` | `run.args` templates (`_serverData.ServerPort` -> `{port}`, `ServerName` -> `{name}`, `ServerIP` -> `{ip}`, `ServerMaxPlayer` -> `{maxPlayers}`, `ServerParam` -> `{param}`) |
-| `Stop()` sending `^c` / `quit` | `run.stopCommand` |
-| `RedirectStandardInput = false` (srcds) | `run.stdin: false` |
-| `CreateServerCFG()` writing files | `install.steps` -> `write`, or `configs[].template` |
-
-### Example: alert Discord when a player joins
-```json
-"events": [{ "id": "player-join", "label": "Player joined", "default": true }],
-"logging": { "patterns": [
-  { "id": "player-join", "regex": "(\\S+) joined the game", "level": "info" },
-  { "id": "sudden-stop", "regex": "stopped suddenly", "level": "error" }
-] }
-```
-`player-join` has the same id as an event, so each matching console line is logged as `game:player-join` and (if toggled on in the Discord view) sent to Discord; the matching line is available as `{message}` in the template. `sudden-stop` is only logged as `pattern:sudden-stop` in the **Logs** screen. A crashed process is always logged as `server:crashed` without any pattern.
+## Catalogue
+Plugins are published from the [Catalogue repository](https://github.com/ohmcodes/Node.NodeGSM.Catalogue) as static files (`catalogue.json`, `index.json`, `plugins/<id>.json`, `zips/<id>.zip`, `media/<id>/`; see its README). NodeGSM and the [website](https://github.com/ohmcodes/Node.NodeGSM.Website) both read them; there is no API server. Write a useful `README.md`, `summary` and `description`: they are what users see. Community ratings, comments and editable game info live on the website, not in the plugin folder.

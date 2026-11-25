@@ -1,7 +1,8 @@
 # NodeGSM - project rules
 
 - **Docs rule:** with every change (feature, fix, rename, build change), add an entry to the Changelog in `FEATURES.md`, update the feature tables there, and update `README.md`, `PLUGINS.md`, `CONTRIBUTING.md` and any other affected docs in the same commit.
-- **Everything is a plugin.** Games live in `plugins/<id>/` (plugin.json, icon.png, README.md, optional plugin.js). Never hard-code a game in `src/`. After changing anything under `plugins/`, run `npm run registry` and commit `plugins/registry.json`.
+- **Everything is a plugin, and plugins do not live in this repository.** Games live in the Catalogue repository (https://github.com/ohmcodes/Node.NodeGSM.Catalogue, local checkout `..\Node.NodeGSM.Catalogue`). Never hard-code a game in `src/` and never add `plugins/` back here. NodeGSM only reads the catalogue (`src/main/catalogue.js`): the list is downloaded once, cached in the data folder and plugins are installed from sha256-verified zips. The plugin *format* (PLUGINS.md, `src/main/plugins.js`) is owned here: when it changes, port the validator to `Node.NodeGSM.Catalogue/scripts/lib/validate.js` and mirror PLUGINS.md.
+- **The website lives in its own repository** (https://github.com/ohmcodes/Node.NodeGSM.Website); it reads the catalogue, not this repo. `npm run sync:app` over there refreshes its Features/changelog data from `FEATURES.md`.
 - Keep internal names (`wgsm.json`, `.wgsm-version`, `window.wgsm`) stable; they affect existing user data. The legacy data folder `%APPDATA%\node-wgsm2026\WGSM` must keep working.
-- Run `npm test` (smoke tests + plugin validation) before committing.
+- Run `npm test` before committing. The tests load plugins from `NODEGSM_BUNDLED_PLUGINS`, else a sibling `..\Node.NodeGSM.Catalogue\plugins` checkout (CI checks the catalogue out next to the app).
 - Do not stop the user's running electron/steamcmd processes (they may be mid-download).
