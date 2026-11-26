@@ -153,6 +153,11 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 ## Changelog
 Newest first. Add an entry for every change. One entry = one `### <date> - <unique title>` heading followed by bullets (the website parses this format).
 
+### 2026-11-25 - Install plugins from the website (nodegsm:// links)
+- **Added:**
+  - **`nodegsm://install/<plugin id>` links:** the website's "Install in NodeGSM" button opens the app, which asks for confirmation, then installs the plugin from the catalogue (sha256 verified). The installer registers the `nodegsm` scheme; `src/main/deeplink.js` validates links (only `install`, catalogue-style ids).
+  - NodeGSM now runs as a single instance: starting it again (or opening a link) focuses the running window.
+
 ### 2026-11-25 - RCON: WebRCON, quick commands, history, scheduled commands, graceful stop
 - **Added:**
   - **WebRCON** (Rust): console sources can now be `webrcon:<port>:<password>` next to `rcon:`; `src/main/webrcon.js` talks WebSocket JSON to `ws://127.0.0.1:<port>/<password>`.

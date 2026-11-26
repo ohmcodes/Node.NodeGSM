@@ -5,6 +5,7 @@ const platform = require('./platform');
 const appSettings = require('./settings');
 const { shouldRestart } = require('./crash');
 const { createCore, headlessHost } = require('./core');
+const { SCHEME, parseLink, linkFromArgv } = require('./deeplink');
 const { startServer } = require('../server/headless');
 const { WebAccess } = require('../server/webAccess');
 
@@ -91,6 +92,37 @@ function handle(name, fn) {
   });
 }
 
+// ---- nodegsm://install/<id> links from the website catalogue: one running instance handles them; the user confirms before anything is installed
+let pendingLink = linkFromArgv(process.argv);
+function showWindow() { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } }
+async function handleLink(raw) {
+  const link = parseLink(raw);
+  if (!link || !mgr) return;
+  showWindow();
+  try {
+    const cat = core.catalogue;
+    const find = () => (cat.state().plugins || []).find((p) => p.id === link.id);
+    let entry = find();
+    if (!entry) { await cat.refresh({ force: true }); entry = find(); }
+    if (!entry) { await dialog.showMessageBox(win, { type: 'error', title: 'NodeGSM', message: `"${link.id}" is not in the catalogue.` }); return; }
+    const r = await dialog.showMessageBox(win, {
+      type: 'question', title: 'Install plugin', buttons: ['Install', 'Cancel'], defaultId: 1, cancelId: 1,
+      message: `Install "${entry.fullName || entry.name || entry.id}" ${entry.version || ''} from the NodeGSM catalogue?`,
+      detail: 'This was requested from a web page. Plugins can run scripts on your PC, so only install ones you trust.',
+    });
+    if (r.response !== 0) return;
+    await cat.install(link.id);
+    send('catalogueChanged', { id: link.id });
+    await dialog.showMessageBox(win, { type: 'info', title: 'NodeGSM', message: `Installed "${entry.fullName || entry.name || entry.id}". Find it under Add server.` });
+  } catch (e) { dialog.showErrorBox('NodeGSM', `Could not install the plugin: ${e.message}`); }
+}
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+  app.on('second-instance', (_e, argv) => { const l = linkFromArgv(argv); if (l) handleLink(l); else showWindow(); });
+  app.on('open-url', (e, url) => { e.preventDefault(); if (mgr) handleLink(url); else pendingLink = url; }); // macOS
+  try { if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient(SCHEME, process.execPath, [path.resolve(process.argv[1])]); else app.setAsDefaultProtocolClient(SCHEME); } catch { /* registering is best effort */ }
+}
+
 app.whenReady().then(() => {
   core = createCore({ dataDir, mode: 'desktop' });
   mgr = core.mgr;
@@ -113,6 +145,7 @@ app.whenReady().then(() => {
   createWindow();
   core.start();
   applyWeb();
+  if (pendingLink) { const l = pendingLink; pendingLink = null; win.webContents.once('did-finish-load', () => handleLink(l)); }
 
   // tray: 16 px image + 32 px representation for high-DPI screens (falls back to resizing the 256 px icon)
   const assetsDir = path.join(__dirname, '..', '..', 'assets');

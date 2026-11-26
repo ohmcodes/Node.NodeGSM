@@ -1856,6 +1856,15 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     fs.rmSync(cdir, { recursive: true, force: true }); fs.rmSync(cdata, { recursive: true, force: true });
   }
 
+  { // nodegsm:// links from the website
+    const { parseLink, linkFromArgv } = require('../src/main/deeplink');
+    assert.deepStrictEqual(parseLink('nodegsm://install/nightingale'), { action: 'install', id: 'nightingale' });
+    assert.deepStrictEqual(parseLink('nodegsm://install/mc-vanilla/'), { action: 'install', id: 'mc-vanilla' });
+    for (const bad of ['nodegsm://install/', 'nodegsm://install/../x', 'nodegsm://run/mc', 'nodegsm://install/a/b', 'https://install/mc', 'nodegsm://u:p@install/mc', 'nodegsm://install/Bad%20Id', '']) assert.strictEqual(parseLink(bad), null, 'rejects ' + bad);
+    assert.strictEqual(linkFromArgv(['NodeGSM.exe', '--hidden', 'nodegsm://install/mc']), 'nodegsm://install/mc');
+    assert.strictEqual(linkFromArgv(['NodeGSM.exe']), null);
+  }
+
   console.log('smoke test passed');
   m.logTail.shutdown(); fs.rmSync(dir, { recursive: true, force: true });
   process.exit(0);

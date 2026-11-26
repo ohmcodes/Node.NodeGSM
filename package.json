@@ -26,6 +26,14 @@
   "build": {
     "appId": "com.nodegsm.app",
     "productName": "NodeGSM",
+    "protocols": [
+      {
+        "name": "NodeGSM catalogue link",
+        "schemes": [
+          "nodegsm"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist"
     },
