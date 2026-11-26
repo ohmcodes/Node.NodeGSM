@@ -22,9 +22,9 @@ async function waPaint(settings) {
     html += `<div class="srow col" id="waCfg"><div class="row">
       <label class="small">Listen on <select id="waHost"><option value="127.0.0.1" ${net ? '' : 'selected'}>This computer only (127.0.0.1)</option><option value="0.0.0.0" ${net ? 'selected' : ''}>Other devices too (all network interfaces)</option></select></label>
       <label class="small">Port <input id="waPort" type="number" min="1" max="65535" value="${esc(w.port || 8730)}" style="width:90px"></label></div>
-      <label class="small"><input type="checkbox" id="waHttps" ${w.https ? 'checked' : ''}> A reverse proxy in front provides HTTPS (cookies become Secure)</label>
-      <label class="small"><input type="checkbox" id="waProxy" ${w.trustProxy ? 'checked' : ''}> Trust X-Forwarded-For from that proxy (only behind your own proxy)</label>
-      <label class="small"><input type="checkbox" id="w2fa" ${w.require2fa ? 'checked' : ''}> Require two-factor authentication for every account</label>
+      <label class="check"><input type="checkbox" id="waHttps" ${w.https ? 'checked' : ''}> A reverse proxy in front provides HTTPS (cookies become Secure)</label>
+      <label class="check"><input type="checkbox" id="waProxy" ${w.trustProxy ? 'checked' : ''}> Trust X-Forwarded-For from that proxy (only behind your own proxy)</label>
+      <label class="check"><input type="checkbox" id="w2fa" ${w.require2fa ? 'checked' : ''}> Require two-factor authentication for every account</label>
       <div class="row"><button type="button" id="waSave" class="primary">Save</button></div></div>`;
     const sv = wa.server || {};
     html += `<div class="small ${sv.error ? 'err' : 'muted'}" id="waState">${sv.error ? esc(sv.error) : sv.running ? `Running: <b>${esc(sv.url)}</b> <button type="button" id="waOpen">Open</button> <button type="button" id="waCopy">Copy address</button>` : 'Not running.'}</div>`;

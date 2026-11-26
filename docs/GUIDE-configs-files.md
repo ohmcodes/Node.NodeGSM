@@ -36,10 +36,13 @@ Deletes old files on a schedule, for example log archives or crash dumps. A rule
 The **Game console** is the server's own text console (stdin / stdout), exactly as before. When the game plugin declares more consoles, sub-tabs appear above it:
 
 - **Log consoles** follow a log file of the game (read-only, the input is disabled).
-- **RCON consoles** send commands through the game's RCON (Source RCON; Minecraft uses the same protocol) and show the reply. The server must be running and RCON must be enabled in the game's own config (Minecraft: `enable-rcon=true`, `rcon.port`, `rcon.password` in `server.properties`; Source games: `rcon_password` in `server.cfg`). NodeGSM reads the port and password from those files each time you send a command, connects to `127.0.0.1` only, reconnects by itself after a dropped connection and never shows or logs the password. Messages: "authentication failed" = wrong password (restart the game after changing it), "timed out" / "connection failed" = RCON is not enabled or the port is wrong, "was not found" = the setting is missing in the config file.
+- **RCON consoles** send commands through the game's RCON and show the reply: Source RCON (also Minecraft, Factorio ...) and **WebRCON** (Rust). The server must be running and RCON must be enabled in the game's own config (Rust: add `+rcon.port 28016 +rcon.password <secret> +rcon.web 1` to the server's start parameters). If something is missing, the console shows what.
+- **Quick commands:** games can add buttons above the RCON input (for example Minecraft *List players* / *Save world*); a button marked "confirm" asks first. **Up / down arrow** in the input recalls earlier commands of that console.
+- **Scheduled commands:** server > **Automation** > *Scheduled commands*: tick the job, give a cron schedule (presets: every 5 / 15 / 30 minutes, hourly, every 6 hours, daily 04:00; local time), pick the console and type the command (for example `save-all` or `say Restart in 5 minutes`), press **Save commands**. Jobs run only while the server is running, at most once per minute, through the first RCON console (or the game console if the game has no RCON). A failure is written to the server console. Up to 20 jobs per server.
+- **Graceful stop:** for games that declare it (CS:GO, Rust), **Stop** and **Restart** first send the game's quit command over RCON and wait up to 20 seconds for the server to exit; if RCON is not reachable, the normal stop follows.
 - Commands typed in an RCON console are recorded in the NodeGSM log like normal console commands.
 
-Games without `consoles[]` look unchanged. Plugin authors: see `consoles` in [PLUGINS.md](../PLUGINS.md) for the `rcon:<port>:<password>` source format.
+Games without `consoles[]` look unchanged. Plugin authors: see `consoles` in [PLUGINS.md](../PLUGINS.md) for the `rcon:<port>:<password>` / `webrcon:<port>:<password>` source format, `commands` and `run.stopRcon`.
 
 ## Update and Validate
 - **Update** downloads the newest game version (a running server is stopped first and started again afterwards).

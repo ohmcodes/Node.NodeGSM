@@ -11,7 +11,7 @@ Rules for a safe test run:
 - [ ] Start the app. *The window and the Windows taskbar show the NodeGSM icon (dark tile, blue N made of stacked blocks); the header shows the same mark in the accent colour next to "NodeGSM".*
 - [ ] Settings > pick another accent colour. *The header mark changes colour with it.*
 - [ ] Switch to the light theme. *The mark stays readable; the dark tile icon is unchanged (it is an image).*
-- [ ] Enable **minimize to tray**, close the window. *A tray icon with the N appears (sharp at 100 % and 150 % display scaling); clicking it shows the window.*
+- [ ] Enable **minimize to tray**, close the window. *A tray icon with the N appears (sharp at 100 % and 150 % display scaling); clicking it shows the window. A notification says NodeGSM was minimized to the tray.*
 - [ ] After `npm run pack`: open `dist\win-unpacked`. *Note: with `signAndEditExecutable: false` the .exe itself keeps the Electron icon; see the README build note.*
 
 ## 1. Layout panels, header stats and footer links
@@ -91,6 +91,10 @@ Follow [GUIDE-discord.md](GUIDE-discord.md) > "Set it up".
 - [ ] Toggle **Raw**, edit, toggle back. *Content stays consistent; an unparseable file (e.g. an `.xml`) says why it is raw only.*
 - [ ] Minecraft: set `enable-rcon=true`, `rcon.password=test`, `rcon.port=25575` in `server.properties`, restart the server. Console tab > **RCON**: type `list`. *The player list answer appears; wrong password shows "authentication failed" without printing the password.*
 - [ ] Console tab > **log** console (`latest.log`). *Read-only tail, follows new lines.*
+- [ ] Minecraft RCON console: click a **quick-command button** (*List players*), then press the up arrow in the input. *The answer appears; the up arrow recalls the last command; "confirm" buttons ask first.*
+- [ ] Automation > Scheduled commands: add `* * * * *` with `say NodeGSM test`, Save commands, wait a minute with the server running. *The command shows in the RCON console and the server chat; stopped server: nothing is sent. Remove the job afterwards.*
+- [ ] Rust: start parameters `+rcon.port 28016 +rcon.password test +rcon.web 1`, Console tab > **WebRCON**: `status`. *Answer shown; a wrong password reports "authentication failed".*
+- [ ] CS:GO / Rust: **Stop**. *The server quits by itself within a few seconds (the NodeGSM console says "Stopping over RCON"), no force kill.*
 - [ ] Source server (CS:GO): `rcon_password` in `server.cfg`, console tab RCON: `status`. *Answer shown (srcds has no stdin, RCON is the only way).*
 - [ ] **Update** vs **Validate** buttons (server header and Table toolbar). *Status text shows `Updating` or `Validating`; Validate asks for confirmation.*
 

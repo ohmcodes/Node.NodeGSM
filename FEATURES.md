@@ -104,14 +104,19 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 | Plugin `backup.presets` / `backup.exclude` shipped for Minecraft Java, CS:GO, Rust, Palworld, ARK: SE | 🧪 | Paths are best-effort (not checked against live servers) |
 | **Files auto-clear**: per-server rules `{ path, pattern, olderThanDays, intervalMin, enabled, recursive, onlyWhenStopped }` in `wgsm.json`, seeded once from plugin `files.autoClear` (user edits are kept); checked every minute; files only, links never followed, locked files skipped, confined to the server folder; Preview / Run now / Edit / Delete in the **Files** tab ("Auto-clear this folder..." or right-click a folder) | 🧪 | Logged to the NGSM log (`autoclear:run`) and the event `server:autoclear`; tested with fake servers only |
 | **Structured config editor** (ini, properties, cfg, json, simple yaml): comments and unknown lines are kept, JSON keeps its indentation; unparseable files fall back to Raw | ✅ | `configEdit.js`; list-rooted JSON, block-scalar-only or tab-indented YAML and xml / text are raw only |
-| **Injected consoles**: Console tab sub-tabs for the plugin's `consoles[]` - game console, read-only **log** tail, **RCON** (Source protocol, also Minecraft) | 🧪 | `rcon.js` tested against a local fake RCON server only; port and password come from the server's config (`rcon:<port>:<password>` with `{placeholders}`) and never leave the main process |
+| **Injected consoles**: Console tab sub-tabs for the plugin's `consoles[]` - game console, read-only **log** tail, **RCON** (Source protocol, also Minecraft and Factorio; **WebRCON** for Rust) with plugin **quick-command buttons** and **command history** (up / down arrows) | 🧪 | `rcon.js` and `webrcon.js` tested against local fake servers only; port and password come from the server's config (`rcon:<port>:<password>` with `{placeholders}`) and never leave the main process |
+| **WebRCON** (WebSocket RCON as used by Rust): `webrcon:<port>:<password>` console sources | 🧪 | `webrcon.js` (uses the existing `ws` dependency); matched by `Identifier`, pushed console lines ignored, loopback only, password never logged; tested with a fake server, not a real Rust server |
+| **Start-parameter placeholders** `{param:name}` in RCON sources (`+rcon.port 28016 +rcon.password x`, `name=value`) | ✅ | For games that take RCON settings on the command line (Rust) |
+| **Quick-command buttons** (plugin `consoles[].commands`: label, command, optional confirm) and **command history** per console in the Console tab | 🧪 | `mc`, `csgo` and `rust` declare some; not tried with real servers |
+| **Graceful stop over RCON** (plugin `run.stopRcon`): sent first on Stop / Restart, waits up to 20 s for the server to exit, then the usual stop | 🧪 | `csgo` (srcds has no console input) and `rust`; unit-tested with a fake process, not with a real server |
+| **Scheduled commands** per server (Automation tab): up to 20 cron jobs that send a command over RCON (or the game console) while the server runs, e.g. `save-all` or a broadcast | 🧪 | `rconSchedule` in `wgsm.json`, `ServerManager.scheduledCommandTick` from the 1-minute cron tick; unit-tested with a fake clock |
 | **Update** and **Validate** are separate buttons (server header, Table toolbar, bulk); busy / status text shows `Updating` or `Validating`; plugin `update.validateArgs.steamcmd` customises the validate arguments | 🧪 | Validate is `+app_update <id> validate`; see PLUGINS.md |
 
 ## App
 | Feature | Status | Notes |
 |---|---|---|
 | Electron UI (dark theme) | ✅ | |
-| Start on Windows login, minimize to tray | ✅ | |
+| Start on Windows login, minimize to tray | ✅ | Closing the window with minimize-to-tray on shows a notification ("NodeGSM is still running ... minimized to the system tray") |
 | Table view: WindowsGSM-style horizontal server table | ✅ | ID, PID, game icon, status, name, IP, port, query port, map, players, CPU, memory, uptime ... sortable; double-click opens details |
 | Multi-select + bulk actions: Start, Stop, Restart, **Kill** (force), Update, Backup | ✅ | Checkboxes, header "select all", Ctrl/Shift click; Stop/Restart/Kill run in parallel, Start/Update/Backup one after another; buttons enable only when they apply; skipped (not applicable) servers are reported |
 | Choose which columns to show (Settings, Table and Dashboard) | ✅ | Built-in columns (incl. **Tick**) + plugin metrics + **Latency**; saved; reset to default |
@@ -147,6 +152,27 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 
 ## Changelog
 Newest first. Add an entry for every change. One entry = one `### <date> - <unique title>` heading followed by bullets (the website parses this format).
+
+### 2026-11-25 - RCON: WebRCON, quick commands, history, scheduled commands, graceful stop
+- **Added:**
+  - **WebRCON** (Rust): console sources can now be `webrcon:<port>:<password>` next to `rcon:`; `src/main/webrcon.js` talks WebSocket JSON to `ws://127.0.0.1:<port>/<password>`.
+  - **`{param:name}`** placeholder: reads RCON port / password from the server's start parameters (`+rcon.port 28016 +rcon.password x`).
+  - **Quick-command buttons** above the RCON input (plugin `consoles[].commands`, with an optional confirmation) and **command history** with the up / down arrow keys per console.
+  - **Scheduled commands**: Automation tab > Scheduled commands, up to 20 cron jobs per server (enable, cron with presets, console, command). Sent through the first RCON console, else the game console, only while the server runs, once per minute at most; failures are written to the server console.
+  - **Graceful stop over RCON**: plugin `run.stopRcon` is sent first on Stop / Restart; NodeGSM waits up to 20 s for the server to exit before the usual stop.
+- **Plugins (Catalogue):** `rust` gets a WebRCON console (`webrcon:{param:rcon.port}:{param:rcon.password}`; add `+rcon.port 28016 +rcon.password <secret> +rcon.web 1` to the start parameters), quick commands and `stopRcon`; `csgo` gets quick commands and `stopRcon`; `mc` gets quick commands. Versions 1.1.0. Validator, schema and PLUGINS.md ported to the Catalogue repository.
+- **Technical:** `rconSchedule` in the server's `wgsm.json` (`settings.sanitizeRconSchedule`), `ServerManager.scheduledCommandTick`, `Consoles.run`; `consolesList` entries of rcon consoles carry `commands` (never the source). No new IPC channels.
+- **Docs:** README, PLUGINS.md (both repositories), docs/GUIDE-configs-files.md, docs/TECH-architecture.md, docs/TECH-data-formats.md, docs/TESTING-CHECKLIST.md, the website landing page text.
+- **Not verified:** WebRCON, stop over RCON and the schedule were tested with fakes only, not with a real Rust, CS:GO or Minecraft server.
+
+### 2026-11-25 - Notification when the window is minimized to the tray
+- **Added:** with **minimize to tray** on, closing the window now shows a system notification ("NodeGSM is still running. It was minimized to the system tray. Your servers keep running ..."), so it is clear the app was not quit. Falls back to a tray balloon where notifications are unavailable.
+- **Docs:** testing checklist.
+- **Not verified:** not yet seen in a rebuilt exe (Windows may hide it in Focus assist).
+
+### 2026-11-25 - Web access panel checkbox layout
+- **Fixed:** in Settings > Web access (desktop app) the three tick boxes (HTTPS proxy, trust X-Forwarded-For, require two-factor) sat on their own line above their text; they are now inline with the label.
+- **Not verified:** the panel is desktop-only, so this is checked by reading the markup, not yet in a rebuilt exe.
 
 ### 2026-11-25 - Screenshots of every feature
 - **Added:** 22 screenshots in `docs/screenshots/` covering the server list, console, settings, automation, backups (scheduled backups), files, config files, table, configs, logs, clusters, system metrics, games, add server, settings, Web access, Discord (alerts, embed editor, bot) and the three web sign-in screens. They are in the README, in the new `docs/SCREENSHOTS.md` gallery and in the Website repository for the landing page and Features page.

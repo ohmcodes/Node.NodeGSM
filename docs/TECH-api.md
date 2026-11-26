@@ -49,7 +49,7 @@ Every function of the app backend is one entry of the table returned by `buildAp
 | `configEdit` | `format, text, ops[]` | `{ ok, text, entries }` | Pure: applies `set` / `remove` (by entry id) and `add` (by path) operations, keeping comments, CRLF, BOM |
 | `logsList` | `id` | `[{ id, name, path, exists, ... }]` | The plugin's `logs[]` |
 | `logStart` / `logStop` | `id, logId` | - | Starts / stops the live tail of a log; lines arrive as `logLines` |
-| `consolesList` | `id` | `[{ id, name, type, readOnly }]` | `main` (game console) plus `consoles[]`; sources / passwords are never returned |
+| `consolesList` | `id` | `[{ id, name, type, readOnly, commands? }]` | `main` (game console) plus `consoles[]`; `commands` = the plugin's quick-command buttons `[{ label, command, confirm }]` of an rcon console; sources / passwords are never returned. Scheduled commands are saved with `save(id, { rconSchedule })` |
 | `consoleCommand` | `id, consoleId, text` | `{ output }` | `main` -> game stdin, `rcon` -> RCON (loopback only); `log` consoles refuse commands |
 | `consoleStart` / `consoleStop` | `id, consoleId` | - | Start / stop a `log` console tail; output arrives as `consoleOut` |
 | `autoClearList` | `id` | rule[] | `{ path, pattern, olderThanDays, intervalMin, enabled, recursive, onlyWhenStopped, lastRun, index, fromPlugin, nextRun }` |

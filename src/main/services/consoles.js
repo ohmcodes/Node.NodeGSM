@@ -2,27 +2,50 @@
 // Injected consoles: the plugin's consoles[] (besides the game's own process console).
 //   type "process"  the game console (stdin/stdout of the server process, always available as id "main")
 //   type "log"      read-only tail of a plugin logs[] entry (source = log id)
-//   type "rcon"     Source RCON (also Minecraft): source = "rcon:<port>:<password>", see parseRconSource()
+//   type "rcon"     Source RCON (also Minecraft, Factorio ...): source = "rcon:<port>:<password>"; WebSocket RCON (Rust): "webrcon:<port>:<password>"; see parseRconSource()
 // Output reaches the renderer through the 'consoleOut' event: { id, consoleId, lines[], reset?, file? }.
 const { RconClient } = require('../rcon');
+const { WebRconClient } = require('../webrcon');
 const configEdit = require('../configEdit');
 
 const MAX_COMMAND = 4096;
 const RCON_IDLE_CLOSE_MS = 5 * 60 * 1000;
+const MAX_QUICK = 30;   // quick-command buttons per console
+/** Value of a start-parameter option: "+rcon.port 28016", "-rcon.port 28016", "rcon.port=28016" (quotes around the value are removed). */
+function paramValue(param, name) {
+  const toks = String(param || '').match(/"[^"]*"|'[^']*'|\S+/g) || [];
+  const strip = (t) => (/^(["']).*\1$/.test(t) ? t.slice(1, -1) : t);
+  const want = String(name).toLowerCase();
+  for (let i = 0; i < toks.length; i++) {
+    const bare = toks[i].replace(/^[-+]+/, '');
+    const eq = bare.indexOf('=');
+    if (eq > 0 && bare.slice(0, eq).toLowerCase() === want) return strip(bare.slice(eq + 1));
+    if (bare.toLowerCase() === want && i + 1 < toks.length && !/^[-+]/.test(toks[i + 1])) return strip(toks[i + 1]);
+  }
+  return undefined;
+}
+
 const SETTING_KEYS = ['port', 'queryPort', 'maxPlayers', 'map', 'ip'];   // server settings that may be used as {placeholders}; secrets such as gslt are not exposed
 
 /**
- * Parse "rcon:<port>:<password>". Each part is a literal or a {placeholder}:
+ * Parse "rcon:<port>:<password>" (Source RCON) or "webrcon:<port>:<password>" (WebSocket RCON). Each part is a literal or a {placeholder}:
  *   {port} / {queryPort} / {maxPlayers} / {map} / {ip}   server settings
+ *   {param:name}                                         value of "name" in the server's start parameters ("+name value", "-name value" or "name=value")
  *   {configId:key}                                       value of "key" in the plugin config file "configId"
  *   {key}                                                value of "key" in the first plugin config file that has it
  * The password is the rest of the text after the second ":" and may itself contain ":".
- * Returns { port, password } as raw tokens, or throws.
+ * Returns { web, port, password } (raw tokens), or throws.
  */
 function parseRconSource(src) {
-  const m = /^rcon:(\{[^}]+\}|\d{1,5}):(.*)$/s.exec(String(src || ''));
-  if (!m) throw new Error('Invalid RCON source (expected rcon:<port>:<password>)');
-  return { port: m[1], password: m[2] };
+  const m = /^(web)?rcon:(\{[^}]+\}|\d{1,5}):(.*)$/s.exec(String(src || ''));
+  if (!m) throw new Error('Invalid RCON source (expected rcon:<port>:<password> or webrcon:<port>:<password>)');
+  return { web: !!m[1], port: m[2], password: m[3] };
+}
+
+/** The plugin's quick-command buttons of a console: [{ label, command, confirm }] (text only, capped). */
+function quickCommands(d) {
+  return (Array.isArray(d.commands) ? d.commands : []).filter((c) => c && typeof c.label === 'string' && typeof c.command === 'string' && c.command.trim())
+    .slice(0, MAX_QUICK).map((c) => ({ label: c.label.slice(0, 40), command: c.command.slice(0, MAX_COMMAND), confirm: c.confirm === true }));
 }
 
 class Consoles {
@@ -64,7 +87,7 @@ class Consoles {
     const out = [{ id: 'main', name: proc ? proc.name : 'Game console', type: 'process', readOnly: false }];
     for (const x of decl) {
       if (x.type === 'process' || x.id === 'main') continue;
-      out.push({ id: x.id, name: x.name, type: x.type, readOnly: x.type === 'log' });
+      out.push({ id: x.id, name: x.name, type: x.type, readOnly: x.type === 'log', commands: x.type === 'rcon' ? quickCommands(x) : [] });
     }
     return out;
   }
@@ -85,6 +108,11 @@ class Consoles {
     const value = (t) => {
       const m = /^\{([^}]+)\}$/.exec(t); if (!m) return t;
       const name = m[1].trim();
+      if (/^param:/i.test(name)) {
+        const pn = name.slice(6).trim(); const v = paramValue(c.param, pn);
+        if (v === undefined || v === '') throw new Error('RCON: "' + pn + '" was not found in the start parameters of this server');
+        return v;
+      }
       if (name.includes(':')) {
         const [cid, ...rest] = name.split(':'); const key = rest.join(':');
         const def = g.configs.find((x) => x.id === cid); if (!def) throw new Error(`RCON: unknown config file "${cid}"`);
@@ -101,18 +129,19 @@ class Consoles {
     };
     const port = Number(value(tok.port));
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('RCON: the port is not a valid number');
-    return { port, password: value(tok.password) };
+    return { web: tok.web, port, password: value(tok.password) };
   }
 
   client(id, consoleId) { return this.clientFor(id, `${id}:${consoleId}`, this.def(id, consoleId).source); }
   /** Pooled client for an rcon source ("rcon:<port>:<password>" with placeholders), one per pool key. */
   clientFor(id, key, source) {
-    const { port, password } = this.resolveRcon(id, source);
+    const { web, port, password } = this.resolveRcon(id, source);
     let e = this.clients.get(key);
     // settings may have changed (new password / port): reconnect when they differ
-    if (e && (e.port !== port || e.pw !== password)) { this.drop(key); e = null; }
+    if (e && (e.port !== port || e.pw !== password || e.web !== web)) { this.drop(key); e = null; }
     if (!e) {
-      e = { client: new RconClient({ host: '127.0.0.1', port, password, ...(this.rconOpts || {}) }), port, pw: password, last: Date.now() };
+      const Client = web ? WebRconClient : RconClient;
+      e = { client: new Client({ host: '127.0.0.1', port, password, ...(this.rconOpts || {}) }), port, web, pw: password, last: Date.now() };
       Object.defineProperty(e, 'pw', { enumerable: false, value: password });
       this.clients.set(key, e);
     }
@@ -164,6 +193,18 @@ class Consoles {
     try { return await client.send(command); } catch (e) { this.drop(key); throw new Error(e.message); }
   }
 
+  /** Id of the game's first rcon console, or null. */
+  rconConsoleId(id) { const { g } = this.game(id); const d = (g.consoles || []).find((x) => x.type === 'rcon'); return d ? d.id : null; }
+
+  /**
+   * Run a command for automation (scheduled commands): through the rcon console consoleId (default: the first one), else the
+   * game's own console (stdin). Shows up in the console and the event log like a typed command.
+   */
+  async run(id, text, consoleId) {
+    const cid = consoleId || this.rconConsoleId(id) || 'main';
+    return this.command(id, cid, text);
+  }
+
   // ---------- log consoles ----------
   /** Start tailing a log console. Returns { file, lines }. Subsequent lines arrive as consoleOut events. */
   startLog(id, consoleId) {
@@ -180,4 +221,4 @@ class Consoles {
   }
 }
 
-module.exports = { Consoles, parseRconSource };
+module.exports = { Consoles, parseRconSource, paramValue, quickCommands };

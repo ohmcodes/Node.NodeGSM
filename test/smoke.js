@@ -1010,7 +1010,7 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     await assert.rejects(new RconClient({ host: '127.0.0.1', port: 1, password: 'x', connectTimeoutMs: 500 }).connect(), /failed|timed out/, 'refused connection reports a clean error');
 
     // ---- consoles: source format, IPC, rcon / log / main routing ----
-    eq(parseRconSource('rcon:25575:pw:with:colons'), { port: '25575', password: 'pw:with:colons' }, 'source: literal port, password may contain ":"'); eq(parseRconSource('rcon:{props:rcon.port}:{props:rcon.password}'), { port: '{props:rcon.port}', password: '{props:rcon.password}' });
+    eq(parseRconSource('rcon:25575:pw:with:colons'), { web: false, port: '25575', password: 'pw:with:colons' }, 'source: literal port, password may contain ":"'); eq(parseRconSource('rcon:{props:rcon.port}:{props:rcon.password}'), { web: false, port: '{props:rcon.port}', password: '{props:rcon.password}' }); eq(parseRconSource('webrcon:{param:rcon.port}:{param:rcon.password}'), { web: true, port: '{param:rcon.port}', password: '{param:rcon.password}' }, 'source: webrcon scheme');
     for (const badSrc of ['', 'tcp:1:2', 'rcon:', 'rcon:abc:pw', 'rcon:123456789:pw']) assert.throws(() => parseRconSource(badSrc), /Invalid RCON source/, 'bad source: ' + badSrc);
     assert(P.validate({ id: 'rcbad', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' }, consoles: [{ id: 'r', name: 'R', type: 'rcon', source: 'just-a-string' }] }, null).errors.some((x) => /rcon:<port>/.test(x)), 'plugin validation rejects a malformed rcon source'); assert(P.validate({ id: 'rcbad', name: 'N', install: { type: 'manual' }, run: { exe: 'a.exe' }, consoles: [{ id: 'main', name: 'R', type: 'rcon', source: 'rcon:1:x' }] }, null).errors.some((x) => /reserved/.test(x)), 'console id "main" is reserved');
     const cs = new Consoles(m, P, m.settings, dir); cs.start(); assert(m._consoles === cs);
@@ -1722,6 +1722,82 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     assert(sm.bk().info(sv.id).nextRun > Date.now() - 1000, 'info reports the next run');
     sm.saveConfig(sv.id, { backupSchedule: { enabled: false, cron: '30 4 * * *' } }); sm.scheduledBackupTick(new Date(2026, 0, 8, 4, 30, 5)); eq(calls.length, 2, 'disabled schedule does nothing'); eq(sm.bk().info(sv.id).nextRun, 0);
     fs.rmSync(sd, { recursive: true, force: true });
+  }
+
+
+  // ---- RCON features: WebRCON, {param:} placeholders, quick commands, scheduled commands, stop over RCON ----
+  {
+    const { WebRconClient } = require('../src/main/webrcon'); const WS = require('ws'); const SET = require('../src/main/settings');
+    const { paramValue, quickCommands, Consoles: CS } = require('../src/main/services/consoles'); const PL = require('../src/main/plugins'); const { ServerManager: SM } = require('../src/main/serverManager');
+    // fake Rust-style WebRCON server: ws://127.0.0.1:<port>/<password>, answers { Identifier, Message }, pushes an unrelated line first
+    const wsServer = (password, behaviour) => new Promise((resolve) => {
+      const wss = new WS.Server({ host: '127.0.0.1', port: 0, verifyClient: (info, cb) => (info.req.url === '/' + encodeURIComponent(password) ? cb(true) : cb(false, 401, 'Unauthorized')) });
+      wss.on('connection', (sock) => sock.on('message', (d) => {
+        const m = JSON.parse(String(d)); if (m.Name !== 'NodeGSM') return;
+        sock.send(JSON.stringify({ Identifier: 0, Message: 'pushed console line', Type: 'Generic' }));
+        if (behaviour === 'silent') return;
+        sock.send(JSON.stringify({ Identifier: m.Identifier, Message: m.Message === 'quit' ? 'bye' : 'echo:' + m.Message, Type: 'Generic' }));
+      }));
+      wss.on('listening', () => resolve({ port: wss.address().port, close: () => wss.close() }));
+    });
+    const pw = 'p@ss w/rd#1';
+    const w1 = await wsServer(pw); const wc = new WebRconClient({ port: w1.port, password: pw, connectTimeoutMs: 1500, commandTimeoutMs: 1500 });
+    eq(await wc.send('status'), 'echo:status', 'WebRCON: reply matched by Identifier (pushed lines ignored)'); assert(wc.connected, 'WebRCON: connected after the first command');
+    const both = await Promise.all([wc.send('a'), wc.send('b')]); eq(both, ['echo:a', 'echo:b'], 'WebRCON: parallel commands are matched to their own answers');
+    assert(!String(wc).includes(pw) && !require('util').inspect(wc).includes(pw), 'WebRCON: password is not in toString / inspect');
+    await assert.rejects(wc.send('x'.repeat(5000)), /too long/, 'WebRCON: oversized command refused'); wc.close(); assert(!wc.connected, 'WebRCON: close()');
+    await assert.rejects(new WebRconClient({ port: w1.port, password: 'zzBadPw9', connectTimeoutMs: 1500 }).connect().catch((e) => { assert(!e.message.includes('zzBadPw9'), 'error does not repeat the password'); throw e; }), /authentication failed/, 'WebRCON: wrong password is reported');
+    const w2 = await wsServer('x', 'silent'); await assert.rejects(new WebRconClient({ port: w2.port, password: 'x', commandTimeoutMs: 300 }).send('hi'), /timed out/, 'WebRCON: command timeout'); w2.close();
+    await assert.rejects(new WebRconClient({ port: 1, password: 'x', connectTimeoutMs: 400 }).connect(), /failed|timed out/, 'WebRCON: refused connection is a clean error');
+    assert.throws(() => new WebRconClient({ port: 0, password: 'x' }), /port/);
+
+    // {param:name} placeholders
+    eq(paramValue('-batchmode +rcon.port 28016 +rcon.password "my pass" -x=1', 'rcon.port'), '28016', 'param: +name value'); eq(paramValue('+rcon.password "my pass"', 'rcon.password'), 'my pass', 'param: quoted value');
+    eq(paramValue('-rcon.port=2222 -y', 'rcon.port'), '2222', 'param: name=value'); eq(paramValue('+rcon.port', 'rcon.port'), undefined, 'param: name without a value'); eq(paramValue('', 'x'), undefined);
+    eq(paramValue('+RCON.Port 5', 'rcon.port'), '5', 'param: case-insensitive');
+    eq(quickCommands({ commands: [{ label: 'List', command: 'list' }, { label: 5, command: 'x' }, { label: 'Empty', command: '  ' }, { label: 'Save', command: 'save-all', confirm: true }] }), [{ label: 'List', command: 'list', confirm: false }, { label: 'Save', command: 'save-all', confirm: true }], 'quick commands: invalid entries are dropped');
+
+    // plugin validation
+    const base = () => ({ id: 'tt', name: 'T', description: 'd', author: 'a', version: '1.0.0', run: { exe: 'a.exe', stopRcon: 'stop' }, defaults: { port: '1' }, consoles: [{ id: 'r', name: 'RCON', type: 'rcon', source: 'webrcon:{param:rcon.port}:{param:rcon.password}', commands: [{ label: 'List', command: 'list' }] }] });
+    const errsOf = (m) => { try { const v = PL.validate(m, os.tmpdir()); return v && v.errors ? v.errors : []; } catch (e) { return [e.message]; } };
+    {
+      eq(errsOf(base()).filter((x) => /rcon|commands|stopRcon/i.test(x)), [], 'plugin: webrcon console, commands and stopRcon are accepted');
+      const noCon = base(); delete noCon.consoles; assert(errsOf(noCon).some((x) => /stopRcon/.test(x)), 'plugin: stopRcon needs an rcon console');
+      const badCmd = base(); badCmd.consoles[0].commands = [{ label: '', command: 'x' }, { label: 'a', command: '' }, { label: 'b', command: 'c', confirm: 'yes' }]; assert(errsOf(badCmd).filter((x) => /commands/.test(x)).length >= 3, 'plugin: bad quick commands are reported');
+      const logCmd = base(); logCmd.consoles.push({ id: 'l', name: 'L', type: 'log', source: 'x', commands: [{ label: 'a', command: 'b' }] }); assert(errsOf(logCmd).some((x) => /only for consoles of type/.test(x)), 'plugin: commands only on rcon consoles');
+    }
+
+    // scheduled commands: settings + tick + routing
+    assert.throws(() => SET.sanitizeRconSchedule([{ cron: 'nope', command: 'x' }]), /5 fields/); assert.throws(() => SET.sanitizeRconSchedule([{ cron: '*/5 * * * *', command: ' ' }]), /empty/); assert.throws(() => SET.sanitizeRconSchedule(new Array(21).fill({ cron: '* * * * *', command: 'x' })), /At most/);
+    eq(SET.sanitizeRconSchedule([{ cron: ' */30 * * * * ', command: ' save-all ', console: 'rcon' }, { enabled: false, cron: '0 4 * * *', command: 'say hi' }]), [{ enabled: true, cron: '*/30 * * * *', command: 'save-all', console: 'rcon' }, { enabled: false, cron: '0 4 * * *', command: 'say hi', console: '' }], 'schedule rows are cleaned');
+    eq(SET.sanitizeRconSchedule('x'), [], 'schedule: not a list = empty');
+    const sd = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-rcs-')); const sm = new SM(sd); const sv = sm.create('mc', 'Cmds');
+    sm.saveConfig(sv.id, { rconSchedule: [{ enabled: true, cron: '30 4 * * *', command: 'save-all' }, { enabled: false, cron: '30 4 * * *', command: 'off' }] }); eq(sm.getConfig(sv.id).rconSchedule.length, 2, 'rconSchedule is saved per server');
+    assert.throws(() => sm.saveConfig(sv.id, { rconSchedule: [{ cron: 'bad', command: 'x' }] }), /cron/, 'a bad scheduled command is not saved');
+    const sent = []; sm._consoles = { run: async (i, c, con) => { sent.push([i, c, con]); }, poll: async () => '' };
+    let running = false; sm.isRunning = () => running;
+    sm.scheduledCommandTick(new Date(2026, 0, 5, 4, 30, 10)); eq(sent.length, 0, 'scheduled command: not while the server is stopped');
+    running = true; sm.scheduledCommandTick(new Date(2026, 0, 5, 4, 29, 30)); eq(sent.length, 0, 'scheduled command: not due');
+    sm.scheduledCommandTick(new Date(2026, 0, 5, 4, 30, 10)); eq(sent, [[sv.id, 'save-all', undefined]], 'scheduled command: sent at the minute, disabled jobs skipped');
+    sm.scheduledCommandTick(new Date(2026, 0, 5, 4, 30, 40)); eq(sent.length, 1, 'scheduled command: once per minute');
+    sm.cronTick(new Date(2026, 0, 6, 4, 30, 5)); eq(sent.length, 2, 'cronTick drives scheduled commands');
+    const logs = []; sm.log = (i, l) => logs.push(l); sm._consoles = { run: async () => { throw new Error('boom'); } };
+    sm.scheduledCommandTick(new Date(2026, 0, 7, 4, 30, 5)); await new Promise((r) => setTimeout(r, 20)); assert(logs.some((l) => /Scheduled command failed.*boom/.test(l)), 'scheduled command: failure is logged');
+    fs.rmSync(sd, { recursive: true, force: true });
+
+    // Consoles.run routes to the first rcon console, else the game console
+    const cons = Object.create(CS.prototype); const routed = [];
+    cons.mgr = { getConfig: () => ({ game: 'g' }) }; cons.plugins = { byId: () => ({ consoles: [{ id: 'main', type: 'process' }, { id: 'r1', type: 'rcon' }] }) }; cons.command = async (i, c, t) => { routed.push([c, t]); };
+    await cons.run('1', 'list'); await cons.run('1', 'list', 'other'); cons.plugins = { byId: () => ({ consoles: [] }) }; await cons.run('1', 'list');
+    eq(routed, [['r1', 'list'], ['other', 'list'], ['main', 'list']], 'automation commands: first rcon console, an explicit console, or the game console');
+
+    // graceful stop over RCON: the plugin's stopRcon is sent first and a server that exits is not killed
+    const sd2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-stop-')); const sm2 = new SM(sd2); const sv2 = sm2.create('mc', 'Stopper');
+    const { EventEmitter: EE2 } = require('events'); const proc = new EE2(); proc.pid = 0; proc.stdin = { writable: true, write: () => { throw new Error('stdin must not be used when RCON stopped the server'); } };
+    sm2.rt(sv2.id).proc = proc; const polled = []; sm2._consoles = { poll: async (i, c) => { polled.push(c); setTimeout(() => proc.emit('exit', 0), 10); } };
+    sm2.rconStopWaitMs = 200; sm2.rconStopExitMs = 1000; const gm = require('../src/main/plugins').byId('mc'); const had = gm.stopRcon; gm.stopRcon = 'stop';
+    await sm2.stop(sv2.id); eq(polled, ['stop'], 'stop: the plugin stopRcon command is sent over RCON'); gm.stopRcon = had;
+    fs.rmSync(sd2, { recursive: true, force: true }); w1.close();
   }
 
   // ---- plugin logging.logFiles scanning ----

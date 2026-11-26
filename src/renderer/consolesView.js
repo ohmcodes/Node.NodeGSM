@@ -2,7 +2,7 @@
 // Console tab: the game console plus the plugin's injected consoles (log tail, RCON) as sub-tabs.
 // A game without consoles[] looks exactly like before (no sub-tab bar). Uses the globals of app.js (api, run, esc, $, state).
 
-const conState = { lists: {}, sub: 'main', sid: null, bufs: {}, logOn: null };   // bufs: "<server>:<console>" -> lines
+const conState = { lists: {}, sub: 'main', sid: null, bufs: {}, logOn: null, hist: {}, histPos: -1 };   // hist: "<server>:<console>" -> sent commands (newest last)   // bufs: "<server>:<console>" -> lines
 const CON_MAX = 2000;
 const conKey = (sid, cid) => `${sid}:${cid}`;
 
@@ -15,6 +15,26 @@ function conPaint(lines) {
   out.textContent = lines.join('\n'); out.scrollTop = out.scrollHeight;
 }
 
+/** Quick-command buttons of an rcon console (declared by the plugin: consoles[].commands) */
+function conQuick(s, c) {
+  const box = $('#conQuick'); if (!box) return;
+  const cmds = (c && c.type === 'rcon' && c.commands) || [];
+  box.hidden = !cmds.length;
+  box.innerHTML = cmds.map((q, i) => '<button type="button" class="qc" data-i="' + i + '" title="' + esc(q.command) + '">' + esc(q.label) + '</button>').join('');
+  box.querySelectorAll('.qc').forEach((b) => (b.onclick = async () => {
+    const q = cmds[+b.dataset.i];
+    if (q.confirm && !confirm('Send "' + q.command + '" to ' + s.name + '?')) return;
+    conRemember(s.id, c.id, q.command);
+    await run('consoleCommand', s.id, c.id, q.command);
+  }));
+}
+function conRemember(sid, cid, text) {
+  const k = conKey(sid, cid); const h = conState.hist[k] || (conState.hist[k] = []);
+  if (h[h.length - 1] !== text) h.push(text);
+  if (h.length > 100) h.shift();
+  conState.histPos = -1;
+}
+
 async function conSwitch(s, cid) {
   const same = conState.logOn && conState.logOn.sid === s.id && conState.logOn.cid === cid;   // a status refresh re-rendered the tab: keep following
   if (!same) stopConsoleLog();
@@ -22,6 +42,7 @@ async function conSwitch(s, cid) {
   const list = conState.lists[s.id] || []; const c = list.find((x) => x.id === cid) || { id: 'main', type: 'process' };
   document.querySelectorAll('#con .subtabs button').forEach((b) => b.classList.toggle('on', b.dataset.c === cid));
   const inp = $('#conIn'); const btn = $('#conSend');
+  conState.histPos = -1; conQuick(s, c);
   if (c.type === 'process') {
     inp.disabled = false; btn.disabled = false;
     inp.placeholder = 'Type a command and press Enter (not supported by Source/GoldSource engines)';
@@ -46,17 +67,28 @@ function tabConsole(b, s) {
   const list = conState.lists[s.id];
   const multi = list && list.length > 1;
   b.innerHTML = `<div id="con">${multi ? `<div class="subtabs">${list.map((c) => `<button type="button" data-c="${esc(c.id)}" class="${c.id === conState.sub ? 'on' : ''}" title="${esc(c.type)}">${esc(c.name)}</button>`).join('')}</div>` : ''}<div id="conOut"></div>
+    <div id="conQuick" class="qcmds" hidden></div>
     <div class="row"><input id="conIn" placeholder="Type a command and press Enter (not supported by Source/GoldSource engines)"><button id="conSend">Send</button></div></div>`;
   const out = $('#conOut');
   out.textContent = state.consoleBuf.join('\n');
   out.scrollTop = out.scrollHeight;
   const send = async () => {
     const v = $('#conIn').value; if (!v) return; $('#conIn').value = '';
+    conRemember(s.id, conState.sub, v);
     // main console output arrives through the 'console' event; RCON output through 'consoleOut'
     await run('consoleCommand', s.id, conState.sub, v);
   };
   $('#conSend').onclick = send;
-  $('#conIn').onkeydown = (e) => { if (e.key === 'Enter') send(); };
+  $('#conIn').onkeydown = (e) => {
+    if (e.key === 'Enter') return send();
+    // arrow up / down: earlier commands of this console
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    const h = conState.hist[conKey(s.id, conState.sub)] || []; if (!h.length) return;
+    e.preventDefault();
+    conState.histPos = e.key === 'ArrowUp' ? Math.min(conState.histPos + 1, h.length - 1) : Math.max(conState.histPos - 1, -1);
+    $('#conIn').value = conState.histPos < 0 ? '' : h[h.length - 1 - conState.histPos];
+  };
+  { const l = conState.lists[s.id]; if (l && conState.sub !== 'main') conQuick(s, l.find((x) => x.id === conState.sub)); }
   if (!list) {
     run('consolesList', s.id).then((l) => {
       conState.lists[s.id] = l && l.length ? l : [{ id: 'main', name: 'Game console', type: 'process' }];
@@ -82,3 +114,38 @@ api.on('consoleOut', ({ id, consoleId, reset, lines }) => {
   out.textContent = buf.join('\n');
   if (atBottom) out.scrollTop = out.scrollHeight;
 });
+
+// ---------- Automation tab: scheduled commands (per server rconSchedule) ----------
+const RC_PRESETS = [['Every 5 minutes', '*/5 * * * *'], ['Every 15 minutes', '*/15 * * * *'], ['Every 30 minutes', '*/30 * * * *'], ['Every hour', '0 * * * *'], ['Every 6 hours', '0 */6 * * *'], ['Every day at 04:00', '0 4 * * *']];
+
+/** Block "Scheduled commands" inside the Automation tab: commands sent over RCON (or the game console) on a cron schedule while the server runs. */
+async function rconSchedBlock(host, s) {
+  const jobs = (Array.isArray(s.rconSchedule) ? s.rconSchedule : []).map((j) => ({ ...j }));
+  let consoles = conState.lists[s.id];
+  if (!consoles) { consoles = (await run('consolesList', s.id)) || []; conState.lists[s.id] = consoles; }
+  const rcons = consoles.filter((c) => c.type === 'rcon');
+  const paint = () => {
+    host.innerHTML = '<datalist id="rcPresets">' + RC_PRESETS.map(([n, c]) => '<option value="' + esc(c) + '">' + esc(n) + '</option>').join('') + '</datalist>'
+      + (jobs.length ? '' : '<p class="muted small" style="margin:0 0 8px">No scheduled commands.</p>')
+      + jobs.map((j, i) => '<div class="rc-row" data-i="' + i + '">'
+        + '<label class="check" title="Run this command"><input type="checkbox" data-f="enabled" ' + (j.enabled !== false ? 'checked' : '') + '></label>'
+        + '<input data-f="cron" list="rcPresets" value="' + esc(j.cron || '') + '" spellcheck="false" placeholder="*/30 * * * *" style="width:140px" title="Five fields: minute hour day-of-month month day-of-week (this computer\'s local time)">'
+        + (rcons.length ? '<select data-f="console" title="Which console sends it"><option value="">' + esc(rcons[0].name) + ' (default)</option>' + rcons.slice(1).map((c) => '<option value="' + esc(c.id) + '" ' + (j.console === c.id ? 'selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select>' : '<span class="muted small">game console</span>')
+        + '<input data-f="command" value="' + esc(j.command || '') + '" spellcheck="false" placeholder="say Backup in 5 minutes" style="flex:1;min-width:160px">'
+        + '<button type="button" class="danger" data-del="' + i + '" title="Remove">&times;</button></div>').join('')
+      + '<div class="row" style="margin-top:8px"><button type="button" id="rcAdd">+ Add command</button><button type="button" id="rcSave" class="primary">Save commands</button></div>'
+      + '<p class="muted small" style="margin:6px 0 0">Sent only while the server is running, once per minute at most, in this computer\'s local time. ' + (rcons.length ? 'RCON must be enabled in the game\'s config.' : 'This game has no RCON console, so the commands go to its own console.') + '</p>';
+    host.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => { read(); jobs.splice(+b.dataset.del, 1); paint(); }));
+    $('#rcAdd').onclick = () => { read(); if (jobs.length >= 20) return toast('At most 20 scheduled commands', true); jobs.push({ enabled: true, cron: '*/30 * * * *', command: '', console: '' }); paint(); };
+    $('#rcSave').onclick = async () => {
+      read();
+      const r = await run('save', s.id, { rconSchedule: jobs.map((j) => ({ enabled: j.enabled !== false, cron: String(j.cron || '').trim(), command: String(j.command || '').trim(), console: j.console || '' })) });
+      if (r !== undefined) toast('Scheduled commands saved');
+    };
+  };
+  const read = () => host.querySelectorAll('.rc-row').forEach((row) => {
+    const j = jobs[+row.dataset.i]; if (!j) return;
+    row.querySelectorAll('[data-f]').forEach((el) => { j[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value; });
+  });
+  paint();
+}

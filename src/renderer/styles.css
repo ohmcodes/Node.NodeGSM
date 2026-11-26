@@ -286,6 +286,8 @@ footer a,.linkbtn{color:var(--muted);text-decoration:none;cursor:pointer}footer 
 .cl-members .dot,.cl-dots .dot{margin-left:0}.cl-members td:first-child{width:22px}
 
 /* ---- Phase 5: consoles, configs editor, auto-clear ---- */
+.qcmds{display:flex;flex-wrap:wrap;gap:6px;padding:6px 0}.qcmds[hidden]{display:none}.qcmds .qc{padding:3px 10px;font-size:12px}
+.rc-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
 .subtabs{display:flex;gap:2px;border-bottom:1px solid var(--line)}
 .subtabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:6px 12px}
 .subtabs button.on{border-bottom-color:var(--accent);color:var(--accent)}

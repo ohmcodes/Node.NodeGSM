@@ -22,6 +22,7 @@ const DEFAULTS = {
   restartCrontab: false, crontabFormat: '0 6 * * *',
   autoStartAlert: true, autoRestartAlert: true, autoUpdateAlert: true, restartCrontabAlert: true, crashAlert: true,
   backupKeep: 0, // keep the newest N backups (0 = unlimited)
+  rconSchedule: [],   // scheduled commands [{ enabled, cron, command, console }] sent over RCON (or the game console) while the server runs
   backupSchedule: { enabled: false, cron: '0 4 * * *', options: { mode: 'full' } }, // scheduled backups (cron, local time); options = the "Backup now" options
   autoClear: [], autoClearSeeded: [], // Files auto-clear rules (services/autoClear.js); autoClearSeeded = plugin rule keys already copied once
   cpuPriority: 'Normal', cpuAffinity: '', installDir: '', // installDir: custom location for imported servers
@@ -314,6 +315,14 @@ class ServerManager extends EventEmitter {
     this.setStatus(id, 'Stopping');
     const exited = new Promise((res) => proc.once('exit', res));
     const graceful = g.stopCommand || 'quit';
+    // plugin run.stopRcon: ask the server to shut itself down over RCON first (lets it save); only then fall back to stdin / taskkill
+    if (g.stopRcon && this._consoles) {
+      this.log(id, 'Stopping over RCON: ' + g.stopRcon);
+      const sent = this._consoles.poll(id, g.stopRcon).then(() => true, () => false);   // a server that quits at once closes the connection: not an error
+      await Promise.race([sent, new Promise((r) => setTimeout(r, this.rconStopWaitMs ?? 6000))]);
+      if ((await Promise.race([exited, new Promise((r) => setTimeout(r, this.rconStopExitMs ?? 20000, 'timeout'))])) !== 'timeout') return this.view(id);
+      this.log(id, 'The server did not exit after the RCON stop command; stopping it the usual way.');
+    }
     try { if (proc.stdin && proc.stdin.writable) proc.stdin.write(graceful + '\n'); } catch {}
     // soft taskkill (WM_CLOSE to windows), then hard kill
     platform.killTree(proc.pid, { force: false });
@@ -580,8 +589,26 @@ class ServerManager extends EventEmitter {
     }
   }
 
+  /** Scheduled commands (per server rconSchedule): sent while the server runs, once per minute per job, at most one failure line per run. */
+  scheduledCommandTick(now = new Date()) {
+    for (const id of this.ids()) {
+      const c = this.getConfig(id); const jobs = c && Array.isArray(c.rconSchedule) ? c.rconSchedule : [];
+      if (!jobs.length || !this.isRunning(id)) continue;
+      const rt = this.rt(id); const minute = Math.floor(now.getTime() / 60000);
+      rt.lastCommandRun = rt.lastCommandRun || {};
+      jobs.forEach((j, i) => {
+        if (!j || j.enabled === false || !j.cron || !j.command || rt.lastCommandRun[i] === minute) return;
+        try { if (!ServerManager.cronDue(j.cron, now)) return; } catch (e) { this.log(id, 'Invalid schedule of command ' + (i + 1) + ': ' + e.message); return; }
+        rt.lastCommandRun[i] = minute;
+        const run = this._consoles ? this._consoles.run(id, j.command, j.console || undefined) : Promise.resolve(this.sendCommand(id, j.command));
+        Promise.resolve(run).catch((e) => this.log(id, 'Scheduled command failed (' + j.command.slice(0, 60) + '): ' + e.message));
+      });
+    }
+  }
+
   cronTick(now = new Date()) {
     this.scheduledBackupTick(now);
+    this.scheduledCommandTick(now);
     for (const id of this.ids()) {
       const c = this.getConfig(id);
       if (!c.restartCrontab || !c.crontabFormat || !this.isRunning(id)) continue;

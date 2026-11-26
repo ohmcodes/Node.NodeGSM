@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, nativeTheme, Notification } = require('electron');
 const path = require('path');
 const platform = require('./platform');
 const appSettings = require('./settings');
@@ -15,6 +15,15 @@ if (!earlySettings.hardwareAcceleration) app.disableHardwareAcceleration();
 nativeTheme.themeSource = earlySettings.theme; // dialogs / menus follow the chosen theme
 
 let core; let mgr; let win; let tray; let quitting = false;
+
+/** Tells the user that closing the window only hid NodeGSM in the tray (servers keep running; Quit is in the tray menu). */
+function notifyTray() {
+  const title = 'NodeGSM is still running'; const body = 'It was minimized to the system tray. Your servers keep running. Right-click the tray icon and choose Quit to exit.';
+  try {
+    if (Notification && Notification.isSupported()) new Notification({ title, body, silent: true }).show();
+    else if (tray && tray.displayBalloon) tray.displayBalloon({ title, content: body });
+  } catch { /* a notification must never block closing */ }
+}
 let webAccess; let web = null; let webState = { running: false, url: '', host: '', port: 0, error: '' };
 const startHidden = process.argv.includes('--hidden');   // launched by the Windows login item: stay in the tray
 const BG = { dark: '#14161c', light: '#f3f5f9' };
@@ -54,7 +63,7 @@ function createWindow() {
     onCrash('renderer', d.reason);
     if (mgr.settings.autoRestartApp && !win.isDestroyed()) win.reload();
   });
-  win.on('close', (e) => { if (!quitting && mgr.settings.minimizeToTray) { e.preventDefault(); win.hide(); } });
+  win.on('close', (e) => { if (!quitting && mgr.settings.minimizeToTray) { e.preventDefault(); win.hide(); notifyTray(); } });
 }
 
 const isLoopbackHost = (h) => /^(127\.\d+\.\d+\.\d+|::1|localhost)$/i.test(h);

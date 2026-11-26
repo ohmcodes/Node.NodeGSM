@@ -110,7 +110,28 @@ function sanitizeServerBackup(patch) {
   const out = {};
   if (patch && typeof patch === 'object' && 'backupKeep' in patch) { const n = Math.floor(Number(patch.backupKeep)); out.backupKeep = n >= 0 && n <= 1000 ? n : 0; }
   if (patch && typeof patch === 'object' && 'backupSchedule' in patch) out.backupSchedule = sanitizeBackupSchedule(patch.backupSchedule);
+  if (patch && typeof patch === 'object' && 'rconSchedule' in patch) out.rconSchedule = sanitizeRconSchedule(patch.rconSchedule);
   return out;
+}
+const MAX_RCON_JOBS = 20;
+/**
+ * Scheduled commands of one server: [{ enabled, cron (5 fields, validated), command, console }]. The command is sent through the
+ * game's rcon console (console = its id, empty = the first one; a game without RCON uses its own console). Throws on a bad row.
+ */
+function sanitizeRconSchedule(v) {
+  if (!Array.isArray(v)) return [];
+  if (v.length > MAX_RCON_JOBS) throw new Error('At most ' + MAX_RCON_JOBS + ' scheduled commands per server.');
+  return v.map((j, i) => {
+    j = j && typeof j === 'object' ? j : {};
+    const n = i + 1;
+    const cron = str(j.cron, 100);
+    if (cron.split(/\s+/).length !== 5) throw new Error('Scheduled command ' + n + ': the schedule must be a cron expression with 5 fields, for example "*/30 * * * *" (every 30 minutes).');
+    try { require('cron-parser').parseExpression(cron); } catch (e) { throw new Error('Scheduled command ' + n + ': invalid cron expression: ' + e.message); }
+    const command = typeof j.command === 'string' ? j.command.trim() : '';
+    if (!command) throw new Error('Scheduled command ' + n + ': the command is empty.');
+    if (Buffer.byteLength(command, 'utf8') > 4096) throw new Error('Scheduled command ' + n + ': the command is too long (limit 4096 bytes).');
+    return { enabled: j.enabled !== false, cron, command, console: str(j.console, 40) };
+  });
 }
 const strList = (v, n, len) => (Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string').map((x) => x.trim().slice(0, len)).filter(Boolean))].slice(0, n) : []);
 /**
@@ -215,4 +236,4 @@ function read(dataDir) {
 /** 'system' -> dark/light depending on Windows */
 const resolveTheme = (theme, systemDark) => (theme === 'system' ? (systemDark ? 'dark' : 'light') : theme === 'light' ? 'light' : 'dark');
 
-module.exports = { sanitizeBackupSchedule, sanitizeWeb, DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord, sanitizeServerBackup, sanitizeAutoClear, sanitizeAutoClearRule, sanitizeServerAutoClear, relFolder };
+module.exports = { sanitizeRconSchedule, sanitizeBackupSchedule, sanitizeWeb, DEFAULTS, THEMES, sanitize, read, resolveTheme, isDiscordWebhook, sanitizeTemplate, sanitizeServerDiscord, sanitizeServerBackup, sanitizeAutoClear, sanitizeAutoClearRule, sanitizeServerAutoClear, relFolder };

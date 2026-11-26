@@ -103,8 +103,11 @@ All paths are relative to the server files folder (`safeRel`: no `..`, drive let
 
 At most 50 rules. Invalid rules are refused when saving through the app and dropped when read from a hand-edited file.
 
+## Per-server scheduled commands (`servers/<id>/configs/wgsm.json`)
+`"rconSchedule": [{ "enabled": true, "cron": "*/30 * * * *", "command": "save-all", "console": "" }]` - at most 20 jobs; `cron` has 5 fields (local time, validated on save), `command` up to 4096 bytes, `console` is an rcon console id (empty = the first one; games without RCON use the game console). A job runs only while the server runs, at most once per minute.
+
 ## Plugin `consoles[]` RCON source
-`rcon:<port>:<password>`; `<port>` is 1-5 digits or a `{placeholder}`, `<password>` is everything after the second `:` (literal or a `{placeholder}`). Placeholders: `{port}` `{queryPort}` `{maxPlayers}` `{map}` `{ip}`, `{configId:key}`, `{key}` (first config file with that key). See [PLUGINS.md](../PLUGINS.md).
+`rcon:<port>:<password>` (Source RCON) or `webrcon:<port>:<password>` (WebSocket RCON, Rust); `<port>` is 1-5 digits or a `{placeholder}`, `<password>` is everything after the second `:` (literal or a `{placeholder}`). Placeholders: `{port}` `{queryPort}` `{maxPlayers}` `{map}` `{ip}`, `{configId:key}`, `{key}` (first config file with that key). See [PLUGINS.md](../PLUGINS.md).
 
 ### Config merge markers
 `NGSM:ignore` anywhere in a line of a config file (in the parent's or the member's copy) keeps the member's line during config sync, whatever the comment style: `# NGSM:ignore`, `// NGSM:ignore`, `; NGSM:ignore`, `<!-- NGSM:ignore -->`.

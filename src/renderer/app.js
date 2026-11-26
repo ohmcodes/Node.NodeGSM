@@ -159,6 +159,8 @@ function tabAutomation(b, s) {
       ${check('backupOnStart', 'Backup on start', s)}${check('restartCrontab', 'Restart crontab', s)}
     </div>
     <div class="grid" style="margin-top:10px">${field('crontabFormat', 'Crontab (min hour dom mon dow)', s)}</div>
+    <h4>Scheduled commands</h4>
+    <div id="rcSched"><span class="muted small">Loading ...</span></div>
     <h4>Discord alerts (webhook)</h4>
     ${check('discordAlert', 'Enable Discord alerts', s)}
     <div class="grid" style="margin-top:8px">${field('discordWebhook', 'Webhook URL', s)}${field('discordMessage', 'Custom message', s)}</div>
@@ -171,6 +173,7 @@ function tabAutomation(b, s) {
     <div class="grid" id="evOverrides"><span class="muted small">Loading ...</span></div>
     <div class="row end"><button id="saveBtn" class="primary">Save</button></div>`;
   bindSave(b, s);
+  rconSchedBlock($('#rcSched'), s);
   run('discordInfo').then((info) => {
     const box = $('#evOverrides');
     if (!info || !box) return;

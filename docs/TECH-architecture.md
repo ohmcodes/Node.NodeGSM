@@ -75,7 +75,7 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 | `backup.js` (+ `zip.js`) | **done** - full / neat-pick backups, restore, restore as new, retention, all-backups listing |
 | `cluster.js` (+ `clusterMerge.js`) | **done** - clusters, cluster update, config sync, clear folders |
 | `autoClear.js` | **done** - per-server rules, seeding from the plugin, scheduler tick, preview / run |
-| `consoles.js` (+ `../rcon.js`, `../configEdit.js`) | **done** - injected consoles (log tail, RCON), structured config helpers |
+| `consoles.js` (+ `../rcon.js`, `../webrcon.js`, `../configEdit.js`) | **done** - injected consoles (log tail, RCON), structured config helpers |
 | `discordBot.js` + `discordCommands.js` + `discordPermissions.js` | **done** (not tested against real Discord) - slash-command bot: discord.js client wiring + pure command handlers + the per-user per-server permission rules (parse / sanitise / match) |
 
 ### Event log (`eventLog.js`)
@@ -119,7 +119,9 @@ Each service is a class `new S(mgr, plugins, settings, dataDir)` with `start()` 
 - `scan(id, rule, now)` confines the rule folder with `safeRel` + `inside` + `realInside`, refuses a link as the folder, skips links while walking, filters by name glob (`logTail.globToRegex`) and mtime. `runRule` re-checks with `lstat` before `unlink`, counts locked files (`EBUSY / EPERM / EACCES`), persists `lastRun` in the rule (+ in memory), logs `autoclear:run`, emits `server:autoclear`.
 - `tick` skips disabled rules, rules not yet due (`lastRun + intervalMin`), `onlyWhenStopped` rules of running servers and servers with `rt.busy`. Rules are re-sanitised (non-strict: invalid hand-edited rules are dropped) on every read; user input goes through the strict sanitiser (`settings.sanitizeAutoClear`).
 
-### Consoles and RCON (`consoles.js`, `rcon.js`)
+### Consoles and RCON (`consoles.js`, `rcon.js`, `webrcon.js`)
+- `webrcon.js` is the WebSocket client (Rust): same interface as `RconClient` (`connect`, `send`, `close`, `connected`); `clientFor()` picks the class from the source scheme (`rcon:` / `webrcon:`). `{param:name}` placeholders read the start parameters (`paramValue()`).
+- `Consoles.run(id, text, consoleId?)` is the automation path (scheduled commands): first rcon console, else the game console. `ServerManager.scheduledCommandTick()` runs from `cronTick`; `ServerManager.stop()` sends the plugin's `run.stopRcon` first (silent `poll`, 6 s send cap, 20 s exit wait).
 - `list(id)` returns `main` (the game console) plus the plugin's `consoles[]`; sources are never returned. `command(id, consoleId, text)` routes: `main` -> `mgr.sendCommand`, `rcon` -> `RconClient`, `log` -> refused. RCON clients are cached per `server:console`, re-created when the resolved port / password changes, closed after 5 idle minutes and when the server is removed; a failed command drops the client so the next command reconnects.
 - `resolveRcon(id, source)` parses `rcon:<port>:<password>` (`parseRconSource`) and resolves `{placeholders}` from server settings (whitelist `port, queryPort, maxPlayers, map, ip`) or config files through `configEdit.get`. Host is always `127.0.0.1`.
 - `rcon.js`: packets `int32le size | id | type | body | 0 0`; auth (type 3, success = auth response with the same id, `-1` = wrong password), commands (type 2) followed by an empty type-0 packet whose echo marks the end of a (multi-packet) response; if no marker returns, an idle timeout ends it. Limits: 4096-byte command, 4160-byte packet, 1 MB response text, connect / command timeouts. Events of a replaced socket are ignored.
