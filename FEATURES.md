@@ -142,10 +142,18 @@ Status: ✅ done and verified here (tests / the UI) · 🧪 done, but not tested
 | Automated GitHub release on a version tag | 🧪 | `.github/workflows/release.yml` builds the installer + portable exe and publishes a GitHub Release; written but not yet run on GitHub |
 | Choose the data folder (Settings -> Data location) | ✅ | **Change folder...** copies everything to an empty folder with progress, then restarts; **Use existing data...** points at a folder that already holds NodeGSM data; **Use the standard folder**; the old folder is never deleted; refused while a server runs or an install / update is in progress; stored in `data-location.txt` outside the data folder; `NODEGSM_DATA` overrides it |
 | Installer asks for the data folder | ✅ | NSIS page after the install-folder page (skipped for silent installs and when a folder was already chosen); the portable .exe uses Settings instead |
+| **Screenshots** of every screen (22 images, dark theme) in `docs/screenshots/`, shown in the README and on the website landing page; regenerated with `scripts/seed-demo.js` + `scripts/screenshots.js` | ✅ | Real renderer against a throw-away demo data folder (no mock-ups); gallery and steps in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md). Not captured: the desktop-only Web access switch (Electron window) and light theme |
 | Documentation: guides, `TECH-api.md` (all IPC channels), `TECH-architecture.md`, `TECH-data-formats.md`, `docs/README.md` index, `OPEN-QUESTIONS.md`, `TESTING-CHECKLIST.md` | ✅ | [docs/README.md](docs/README.md); a test fails when an IPC channel is missing from TECH-api.md |
 
 ## Changelog
 Newest first. Add an entry for every change. One entry = one `### <date> - <unique title>` heading followed by bullets (the website parses this format).
+
+### 2026-11-25 - Screenshots of every feature
+- **Added:** 22 screenshots in `docs/screenshots/` covering the server list, console, settings, automation, backups (scheduled backups), files, config files, table, configs, logs, clusters, system metrics, games, add server, settings, Web access, Discord (alerts, embed editor, bot) and the three web sign-in screens. They are in the README, in the new `docs/SCREENSHOTS.md` gallery and in the Website repository for the landing page and Features page.
+- **Technical:** `scripts/seed-demo.js` fills a throw-away loopback server with demo servers, backups, a cluster and log lines (refuses non-loopback addresses); `scripts/screenshots.js` captures the real renderer with a hidden Electron window (`npx electron scripts/screenshots.js <port> docs/screenshots dark`). Nothing is read from a real data folder.
+- **Fixed:** the web **My account** page (`account.html`) is now centred on wide windows instead of hugging the left edge.
+- **Docs:** README, `docs/SCREENSHOTS.md`, `docs/README.md`, `docs/GUIDE-ui.md`, CONTRIBUTING.
+- **Not verified:** the desktop-only Web access switch is not in the images (they come from the web UI); no light-theme set yet.
 
 ### 2026-11-25 - Game log files feed the NGSM log
 - **Added:** plugin `logging.logFiles` is now scanned. While a server runs, NodeGSM reads the new lines of those files (relative to the server files, `*` allowed in the file name, newest match) every 2 seconds and matches them with the plugin's `logging.patterns`, exactly like console lines (same levels, same `game:<id>` / `pattern:<id>` events, same 10 s rate limit per pattern). The first look at a file starts at its end, rotated or truncated files are followed, a stopped server is forgotten and re-scanned from the end after a restart.

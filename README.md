@@ -6,6 +6,28 @@ An Electron rewrite of [WindowsGSM](https://github.com/WindowsGSM/WindowsGSM) - 
 
 **Every supported game is a plugin** (a folder with a `plugin.json` in [`plugins/`](plugins)). New games and fixes for outdated ones are added by pull request - no app code, no compiling. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Screenshots
+<table>
+<tr>
+<td width="50%"><a href="docs/screenshots/01-server-list.png"><img src="docs/screenshots/01-server-list.png" alt="Server list with live console"></a><br><sub><b>Servers</b> - list, details, live console, quick settings</sub></td>
+<td width="50%"><a href="docs/screenshots/12-system-metrics.png"><img src="docs/screenshots/12-system-metrics.png" alt="System metrics dashboard"></a><br><sub><b>System Metrics</b> - CPU, memory, disk, players, history</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/screenshots/07-server-table.png"><img src="docs/screenshots/07-server-table.png" alt="Server table with bulk actions"></a><br><sub><b>Table</b> - multi-select and bulk Start / Stop / Restart / Update / Backup</sub></td>
+<td width="50%"><a href="docs/screenshots/04-server-backups.png"><img src="docs/screenshots/04-server-backups.png" alt="Backups tab with scheduled backups"></a><br><sub><b>Backups</b> - Full or Neat pick, schedule, restore as new server</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/screenshots/06-server-config-files.png"><img src="docs/screenshots/06-server-config-files.png" alt="Structured config file editor"></a><br><sub><b>Config files</b> - Structured or Raw editor</sub></td>
+<td width="50%"><a href="docs/screenshots/11-clusters.png"><img src="docs/screenshots/11-clusters.png" alt="Clusters"></a><br><sub><b>Clusters</b> - update, sync configs, clear folders together</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/screenshots/18-discord-embed-editor.png"><img src="docs/screenshots/18-discord-embed-editor.png" alt="Discord embed editor with live preview"></a><br><sub><b>Discord</b> - alerts, embed editor with live preview, slash-command bot</sub></td>
+<td width="50%"><a href="docs/screenshots/13-games-plugins.png"><img src="docs/screenshots/13-games-plugins.png" alt="Games and plugins browser"></a><br><sub><b>Games</b> - every game is a plugin</sub></td>
+</tr>
+</table>
+
+All 22 screens, and how they are made: [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
+
 ## Run
 ```
 npm install
@@ -63,6 +85,7 @@ The logo is hand-written SVG in [`assets/`](assets) (`logo.svg` mark, `logo-word
 |---|---|
 | [FEATURES.md](FEATURES.md) | full feature list with status, and the changelog |
 | [docs/GUIDE-ui.md](docs/GUIDE-ui.md) | user guide for the app layout: navigation, panels, header bar, footer |
+| [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) | all screenshots of the app (also used on the website) and how to regenerate them |
 | [docs/GUIDE-configs-files.md](docs/GUIDE-configs-files.md) | the Configs editor (structured / raw), Files auto-clear, injected consoles (RCON / log), Update vs Validate |
 | [docs/GUIDE-metrics.md](docs/GUIDE-metrics.md) | table / dashboard metrics, the server tick (TPS / tick rate), Latency, and how plugin authors add a tick metric |
 | [docs/GUIDE-backups.md](docs/GUIDE-backups.md) | full / neat-pick backups, retention, restore, restore as new server, the Backups screen |

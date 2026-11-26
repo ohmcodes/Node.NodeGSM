@@ -54,7 +54,7 @@ src/renderer/          UI (plain JS / CSS, no framework, no inline scripts):
   app.js (servers, detail tabs, games browser, settings), dashboard.js (table + metrics + views), shell.js (nav, panels, footer),
   tick.js (shared tick helpers, also required by the main process), links.js (footer URLs - placeholders),
   discordView.js, logsView.js, backupsView.js, clustersView.js, configsView.js, autoClearView.js, consolesView.js
-scripts/               build-icons.js (logo -> PNG / ICO)
+scripts/               build-icons.js (logo -> PNG / ICO), seed-demo.js + screenshots.js (demo data and the README / website screenshots, see docs/SCREENSHOTS.md)
 (website)              lives in its own repository: https://github.com/ohmcodes/Node.NodeGSM.Website
 docs/                  user guides (GUIDE-*), technical docs (TECH-*), OPEN-QUESTIONS.md, TESTING-CHECKLIST.md - index in docs/README.md
 Dockerfile, docker-compose.example.yml, deploy/   Docker image, compose example, systemd unit, nginx config

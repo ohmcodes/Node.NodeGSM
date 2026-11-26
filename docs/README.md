@@ -8,6 +8,7 @@ Start with the project [README](../README.md). This folder holds the user guides
 | Guide | What it covers |
 |---|---|
 | [GUIDE-ui.md](GUIDE-ui.md) | App layout: left navigation, collapsible panels, header info bar, footer links |
+| [SCREENSHOTS.md](SCREENSHOTS.md) | Screenshot gallery (README, website landing page) and how to regenerate it; the images are in [screenshots/](screenshots) |
 | [GUIDE-configs-files.md](GUIDE-configs-files.md) | Configs editor (Structured / Raw), Files auto-clear, injected consoles (RCON / log), Update vs Validate |
 | [GUIDE-metrics.md](GUIDE-metrics.md) | Table / dashboard metrics, the server tick (TPS / tick rate), Latency, how plugin authors add a tick metric |
 | [GUIDE-backups.md](GUIDE-backups.md) | Full and neat-pick backups, retention, restore, restore as new server, the Backups screen |
