@@ -23,6 +23,7 @@ const DEFAULTS = {
   headerStats: { cpu: true, ram: true, disk: false, servers: true, players: false, tick: false },  // header info bar
   discord: { webhookUrl: '', botEnabled: false, botToken: '', applicationId: '', guildId: '', allowedUserIds: [], adminRoleIds: [], permissions: [], allowRawCommands: false, events: {}, templates: {} },
   logging: { retentionDays: 30 }, // NGSM event log retention
+  steam: { username: '' },   // the Steam account signed in under Settings > Steam account (only the name; SteamCMD keeps its own login token, NodeGSM never stores the password)
   web: { enabled: false, host: '127.0.0.1', port: 8730, https: false, trustProxy: false, require2fa: false, sessionHours: 12 }, // Web access: the browser UI served by the desktop app (accounts: <data>/web-users.json)
   catalogueUrl: '',           // plugin catalogue: https:// address or a local folder; '' = the official catalogue
 };
@@ -127,10 +128,14 @@ function sanitizeRconSchedule(v) {
     const cron = str(j.cron, 100);
     if (cron.split(/\s+/).length !== 5) throw new Error('Scheduled command ' + n + ': the schedule must be a cron expression with 5 fields, for example "*/30 * * * *" (every 30 minutes).');
     try { require('cron-parser').parseExpression(cron); } catch (e) { throw new Error('Scheduled command ' + n + ': invalid cron expression: ' + e.message); }
-    const command = typeof j.command === 'string' ? j.command.trim() : '';
-    if (!command) throw new Error('Scheduled command ' + n + ': the command is empty.');
-    if (Buffer.byteLength(command, 'utf8') > 4096) throw new Error('Scheduled command ' + n + ': the command is too long (limit 4096 bytes).');
-    return { enabled: j.enabled !== false, cron, command, console: str(j.console, 40) };
+    // one command per line (up to 20), like several arguments of mcrcon; wait = seconds between them (0 - 600)
+    const lines = (typeof j.command === 'string' ? j.command : '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) throw new Error('Scheduled command ' + n + ': the command is empty.');
+    if (lines.length > 20) throw new Error('Scheduled command ' + n + ': at most 20 commands per job.');
+    if (lines.some((l) => Buffer.byteLength(l, 'utf8') > 4096)) throw new Error('Scheduled command ' + n + ': a command is too long (limit 4096 bytes).');
+    const wait = j.wait === undefined || j.wait === '' ? 1 : Math.floor(Number(j.wait));
+    if (!(wait >= 0 && wait <= 600)) throw new Error('Scheduled command ' + n + ': the wait between commands must be 0 to 600 seconds.');
+    return { enabled: j.enabled !== false, cron, command: lines.join('\n'), console: str(j.console, 40), wait };
   });
 }
 const strList = (v, n, len) => (Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string').map((x) => x.trim().slice(0, len)).filter(Boolean))].slice(0, n) : []);
@@ -221,6 +226,7 @@ function sanitize(patch) {
     else if (k === 'discord') { if (v && typeof v === 'object') out.discord = sanitizeDiscord(v); }
     else if (k === 'logging') { if (v && typeof v === 'object') { const d = Math.round(Number(v.retentionDays)); out.logging = { retentionDays: d >= 1 && d <= 3650 ? d : DEFAULTS.logging.retentionDays }; } }
     else if (k === 'web') { if (v && typeof v === 'object') out.web = sanitizeWeb(v); }
+    else if (k === 'steam') { if (v && typeof v === 'object') { const u = str(v.username, 64); out.steam = { username: u === '' || /^[A-Za-z0-9_.@-]{2,64}$/.test(u) ? u : '' }; } }
     else if (k === 'catalogueUrl') { const s = str(v, 300); if (s === '' || require('./catalogue').normalizeBase(s)) out.catalogueUrl = s; }
     else if (typeof DEFAULTS[k] === 'boolean') out[k] = !!v;
     else if (typeof DEFAULTS[k] === 'string') out[k] = String(v);

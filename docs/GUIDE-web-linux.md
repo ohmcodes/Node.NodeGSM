@@ -91,7 +91,10 @@ NodeGSM has **no built-in TLS** on purpose (see [OPEN-QUESTIONS.md](OPEN-QUESTIO
 |---|---|
 | owner | everything: accounts, data folder, plugin installs, event-log clearing, Discord tests |
 | admin | everything about the game servers, files, configs, console, backups, settings (not the bind address / port / HTTPS: those are changed in the desktop app or `settings.json`) |
+| operator | a viewer who can also start, stop, restart and kill servers, send console / RCON commands, make backups and download them, and use bulk start / stop / restart / backup. No settings, files, configs, plugins or accounts |
 | viewer | read only: server list, status, console output, logs, backup list. No files, configs, console commands, settings or downloads |
+
+Operator and viewer accounts can be **limited to chosen servers** (Settings > Web access > Servers button, owner only): they then see only those servers in the list, console, logs, backups, event log and metrics, and live updates of other servers are not sent to them. Owners and admins always see everything. Changing the list or the role signs the account out.
 
 Two-factor is a normal authenticator app (Google Authenticator, Authy, Aegis, 1Password ...). A code can be used once. With **Require two-factor** (`--require-2fa` or the Settings checkbox) every account must set it up: until then its session only reaches `/account.html`.
 
@@ -114,12 +117,17 @@ The channel list is [TECH-api.md](TECH-api.md). Every sign-in, failure, lockout 
 - The status line shows the address (Open / Copy address) or the reason it could not start (for example "Port 8730 is already in use").
 - Turn on **Start NodeGSM on Windows login** and the app starts hidden in the tray when Web access is on, so after a reboot and a Windows sign-in the web page is back and Auto Start servers launch. A Windows service that runs before anyone signs in is not built; for a dedicated always-on machine use the headless mode (`npm run serve`) as a service.
 
+### Background start (Windows, no desktop window)
+Settings > Web access > **Run without the app** creates a Windows Task Scheduler task named `NodeGSM Web` that starts the web server hidden: **At sign-in** (no administrator needed) or **At Windows start** (runs as SYSTEM before anyone signs in; needs NodeGSM started as administrator once). It uses the host / port / HTTPS / 2FA settings above and this data folder, restarts the server 30 seconds after a crash and writes `logs/service.log` in the data folder. **Close the desktop app first**: the desktop app and the background server must not manage the same data folder at the same time. Remove the task from the same place. The first time, open the page and create the owner account (token in `web-token`).
+
+This is a scheduled task, not an installed Windows service: a real service needs a wrapper executable that NodeGSM would have to ship and sign. The task gives the same result (starts at boot, hidden, restarts) with built-in tools.
+
 ## Putting NodeGSM on the internet
 
 Best: **do not**. Use a VPN (WireGuard, Tailscale) or an SSH tunnel and keep the port closed. If you must publish it:
 1. TLS in front (`deploy/nginx.conf.example`, certbot), start with `--https --trust-proxy` (or tick both boxes in the desktop app). Never publish the plain HTTP port.
 2. Create the owner account **before** opening the port, use long unique passwords and turn on **Require two-factor**.
-3. Give people the lowest role they need; viewers cannot touch files or consoles.
+3. Give people the lowest role they need: **viewer** for watching, **operator** (limited to their own servers) for people who only restart and use the console; viewers cannot touch files or consoles.
 4. Add what the proxy can add: an IP allow list, mTLS, or basic auth in front of NodeGSM, and the rate limit of your proxy on `/login`.
 5. Keep NodeGSM and the OS updated, run as an unprivileged user, open only the game ports, watch the NGSM log for `web:login-failed` / `web:login-blocked`.
 6. Remember what an account grants: control of the game servers' files and consoles. An owner / admin can run what the game server can run.

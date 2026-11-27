@@ -69,7 +69,7 @@ const fill = (s, vars) => String(s).replace(/\{(\w+)\}/g, (_, k) => (vars[k] ===
  * @param {object} env   { dir, cfg, log, steam, onProgress }
  */
 async function runInstall(game, env) {
-  const { dir, cfg, log, steam, onProgress } = env;
+  const { dir, cfg, log, steam, onProgress, steamUser } = env;
   const validate = env.validate; const validateArgs = env.validateArgs || {};   // Update vs Validate (see PLUGINS.md: update.validateArgs)
   fs.mkdirSync(dir, { recursive: true });
   const vars = { ...cfg, serverFiles: dir, appId: game.appId };
@@ -85,8 +85,9 @@ async function runInstall(game, env) {
     i += 1;
     log(`[step ${i}/${steps.length}] ${s.type}${s.appId ? ' ' + s.appId : s.url ? ' ' + fill(s.url, vars) : ''}`);
     if (s.type === 'steamcmd') {
-      const code = await steam.install(dir, s.appId, { forcePlatform: s.platform, validate: s.validate !== false, validateArgs: validateArgs.steamcmd, mod: s.mod, repeat: s.repeat, beta: s.beta, onProgress }, log);
-      if (code !== 0) throw new Error(`SteamCMD exited with code ${code} - the download did not complete`);
+      if (s.account === true && !steamUser) throw new Error('This game needs a Steam account that owns it. Sign in under Settings > Steam account first, then run the install again.');
+      const code = await steam.install(dir, s.appId, { user: s.account === true ? steamUser : undefined, forcePlatform: s.platform, validate: s.validate !== false, validateArgs: validateArgs.steamcmd, mod: s.mod, repeat: s.repeat, beta: s.beta, onProgress }, log);
+      if (code !== 0) throw new Error(`SteamCMD exited with code ${code}${s.account === true ? ' - check that the signed-in Steam account owns this game and that the sign-in is still valid (Settings > Steam account)' : ''} - the download did not complete`);
     } else if (s.type === 'download') {
       const to = inside(dir, fill(s.to, vars));
       await download(fill(s.url, vars), to, onProgress);

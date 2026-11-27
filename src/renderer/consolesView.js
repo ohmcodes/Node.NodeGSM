@@ -10,9 +10,25 @@ function stopConsoleLog() {
   if (conState.logOn) { api.call('consoleStop', conState.logOn.sid, conState.logOn.cid).catch(() => {}); conState.logOn = null; }
 }
 
-function conPaint(lines) {
+// Minecraft colour codes (the section sign + 0-9 a-f, k l m n o r) as in mcrcon, shown as colours; "reset" ends them. ANSI escapes are removed.
+const MC_COLORS = { 0: '#000000', 1: '#0000aa', 2: '#00aa00', 3: '#00aaaa', 4: '#aa0000', 5: '#aa00aa', 6: '#ffaa00', 7: '#aaaaaa', 8: '#555555', 9: '#5555ff', a: '#55ff55', b: '#55ffff', c: '#ff5555', d: '#ff55ff', e: '#ffff55', f: '#ffffff' };
+function mcHtml(line) {
+  const parts = String(line).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split('\u00a7');
+  let html = esc(parts[0]); let open = false;
+  for (let i = 1; i < parts.length; i++) {
+    const p = parts[i]; const code = (p[0] || '').toLowerCase(); const rest = p.slice(1);
+    if (MC_COLORS[code]) { html += (open ? '</span>' : '') + '<span style="color:' + MC_COLORS[code] + '">'; open = true; }
+    else if (code === 'r') { html += open ? '</span>' : ''; open = false; }
+    else if (!'klmno'.includes(code)) { html += '\u00a7' + esc(p); continue; }   // not a code: keep the text
+    html += esc(rest);
+  }
+  return html + (open ? '</span>' : '');
+}
+const conIsRcon = (sid, cid) => { const l = conState.lists[sid]; const c = l && l.find((x) => x.id === cid); return !!c && c.type === 'rcon'; };
+function conPaint(lines, rcon) {
   const out = $('#conOut'); if (!out) return;
-  out.textContent = lines.join('\n'); out.scrollTop = out.scrollHeight;
+  if (rcon) out.innerHTML = lines.map(mcHtml).join('\n'); else out.textContent = lines.join('\n');
+  out.scrollTop = out.scrollHeight;
 }
 
 /** Quick-command buttons of an rcon console (declared by the plugin: consoles[].commands) */
@@ -50,7 +66,7 @@ async function conSwitch(s, cid) {
   }
   if (c.type === 'rcon') {
     inp.disabled = false; btn.disabled = false; inp.placeholder = 'RCON command (connects on the first command; the server must be running and RCON enabled in its config)';
-    conPaint(conState.bufs[conKey(s.id, cid)] || []); return;
+    conPaint(conState.bufs[conKey(s.id, cid)] || [], true); return;
   }
   inp.disabled = true; btn.disabled = true; inp.placeholder = 'Read-only: this console follows a log file';
   conPaint(conState.bufs[conKey(s.id, cid)] || []);
@@ -111,7 +127,7 @@ api.on('consoleOut', ({ id, consoleId, reset, lines }) => {
   if (id !== state.sel || state.tab !== 'console' || conState.sub !== consoleId) return;
   const out = $('#conOut'); if (!out) return;
   const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
-  out.textContent = buf.join('\n');
+  if (conIsRcon(id, consoleId)) out.innerHTML = buf.map(mcHtml).join('\n'); else out.textContent = buf.join('\n');
   if (atBottom) out.scrollTop = out.scrollHeight;
 });
 
@@ -131,15 +147,16 @@ async function rconSchedBlock(host, s) {
         + '<label class="check" title="Run this command"><input type="checkbox" data-f="enabled" ' + (j.enabled !== false ? 'checked' : '') + '></label>'
         + '<input data-f="cron" list="rcPresets" value="' + esc(j.cron || '') + '" spellcheck="false" placeholder="*/30 * * * *" style="width:140px" title="Five fields: minute hour day-of-month month day-of-week (this computer\'s local time)">'
         + (rcons.length ? '<select data-f="console" title="Which console sends it"><option value="">' + esc(rcons[0].name) + ' (default)</option>' + rcons.slice(1).map((c) => '<option value="' + esc(c.id) + '" ' + (j.console === c.id ? 'selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select>' : '<span class="muted small">game console</span>')
-        + '<input data-f="command" value="' + esc(j.command || '') + '" spellcheck="false" placeholder="say Backup in 5 minutes" style="flex:1;min-width:160px">'
+        + '<textarea data-f="command" rows="' + Math.min(Math.max(String(j.command || '').split('\n').length, 1), 4) + '" spellcheck="false" placeholder="one command per line, e.g. say Backup in 5 minutes" style="flex:1;min-width:200px;resize:vertical">' + esc(j.command || '') + '</textarea>'
+        + '<input data-f="wait" type="number" min="0" max="600" value="' + esc(j.wait === undefined ? 1 : j.wait) + '" style="width:64px" title="Seconds to wait between the commands of this job (0 - 600)">'
         + '<button type="button" class="danger" data-del="' + i + '" title="Remove">&times;</button></div>').join('')
       + '<div class="row" style="margin-top:8px"><button type="button" id="rcAdd">+ Add command</button><button type="button" id="rcSave" class="primary">Save commands</button></div>'
-      + '<p class="muted small" style="margin:6px 0 0">Sent only while the server is running, once per minute at most, in this computer\'s local time. ' + (rcons.length ? 'RCON must be enabled in the game\'s config.' : 'This game has no RCON console, so the commands go to its own console.') + '</p>';
+      + '<p class="muted small" style="margin:6px 0 0">Sent only while the server is running, once per minute at most, in this computer\'s local time. One command per line; the number is the pause in seconds between the lines. ' + (rcons.length ? 'RCON must be enabled in the game\'s config.' : 'This game has no RCON console, so the commands go to its own console.') + '</p>';
     host.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => { read(); jobs.splice(+b.dataset.del, 1); paint(); }));
-    $('#rcAdd').onclick = () => { read(); if (jobs.length >= 20) return toast('At most 20 scheduled commands', true); jobs.push({ enabled: true, cron: '*/30 * * * *', command: '', console: '' }); paint(); };
+    $('#rcAdd').onclick = () => { read(); if (jobs.length >= 20) return toast('At most 20 scheduled commands', true); jobs.push({ enabled: true, cron: '*/30 * * * *', command: '', console: '', wait: 1 }); paint(); };
     $('#rcSave').onclick = async () => {
       read();
-      const r = await run('save', s.id, { rconSchedule: jobs.map((j) => ({ enabled: j.enabled !== false, cron: String(j.cron || '').trim(), command: String(j.command || '').trim(), console: j.console || '' })) });
+      const r = await run('save', s.id, { rconSchedule: jobs.map((j) => ({ enabled: j.enabled !== false, cron: String(j.cron || '').trim(), command: String(j.command || '').trim(), console: j.console || '', wait: j.wait === '' || j.wait === undefined ? 1 : Number(j.wait) })) });
       if (r !== undefined) toast('Scheduled commands saved');
     };
   };

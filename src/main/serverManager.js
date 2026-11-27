@@ -183,7 +183,7 @@ class ServerManager extends EventEmitter {
     steps = steps.map((x) => (x.type === 'steamcmd' ? { ...x, validate } : x));
     const onProgress = (p) => { rt.progress = p; this.emit('status', this.view(id)); };
     try {
-      await runInstall({ ...g, steps }, { dir: this.filesDir(id), cfg: this.getConfig(id), log: (l) => this.log(id, l), steam: this.steam, onProgress, validate, validateArgs: (g.update && g.update.validateArgs) || {} });
+      await runInstall({ ...g, steps }, { dir: this.filesDir(id), cfg: this.getConfig(id), log: (l) => this.log(id, l), steam: this.steam, steamUser: ((this.settings && this.settings.steam) || {}).username || '', onProgress, validate, validateArgs: (g.update && g.update.validateArgs) || {} });
     } finally { rt.progress = null; }
   }
 
@@ -600,7 +600,7 @@ class ServerManager extends EventEmitter {
         if (!j || j.enabled === false || !j.cron || !j.command || rt.lastCommandRun[i] === minute) return;
         try { if (!ServerManager.cronDue(j.cron, now)) return; } catch (e) { this.log(id, 'Invalid schedule of command ' + (i + 1) + ': ' + e.message); return; }
         rt.lastCommandRun[i] = minute;
-        const run = this._consoles ? this._consoles.run(id, j.command, j.console || undefined) : Promise.resolve(this.sendCommand(id, j.command));
+        const run = this._consoles ? this._consoles.run(id, j.command, j.console || undefined, { waitSec: j.wait === undefined ? 1 : j.wait }) : Promise.resolve(this.sendCommand(id, j.command));
         Promise.resolve(run).catch((e) => this.log(id, 'Scheduled command failed (' + j.command.slice(0, 60) + '): ' + e.message));
       });
     }

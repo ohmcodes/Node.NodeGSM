@@ -109,6 +109,8 @@ document.querySelectorAll('footer [data-link]').forEach((a) => (a.onclick = (e) 
   $('#ftDonateMenu').hidden = true;
   if (url) openLink(url);
 }));
+// a link whose URL is empty (for example the halted Discord link) is not shown
+document.querySelectorAll('footer [data-link]').forEach((a) => { if (typeof NODEGSM_LINKS !== 'undefined' && !NODEGSM_LINKS[a.dataset.link]) a.hidden = true; });
 $('#ftDonate').onclick = (e) => { e.stopPropagation(); $('#ftDonateMenu').hidden = !$('#ftDonateMenu').hidden; };
 document.addEventListener('click', (e) => { if (!e.target.closest('.donate')) $('#ftDonateMenu').hidden = true; });
 

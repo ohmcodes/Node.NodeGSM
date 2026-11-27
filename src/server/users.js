@@ -6,7 +6,16 @@ const path = require('path');
 const crypto = require('crypto');
 const totp = require('./totp');
 
-const ROLES = ['owner', 'admin', 'viewer'];
+const ROLES = ['owner', 'admin', 'operator', 'viewer'];   // operator = viewer + start / stop / restart / console / backup
+const SCOPED = ['operator', 'viewer'];                    // only these can be limited to some servers (owners and admins can edit everything anyway)
+/** A server list for an account: null = all servers, else up to 200 ids (digits). Roles other than operator / viewer always get null. */
+function cleanServers(role, v) {
+  if (!SCOPED.includes(role) || v === null || v === undefined) return null;
+  if (!Array.isArray(v)) throw new Error('The server list must be a list of server ids.');
+  const ids = [...new Set(v.map((x) => String(x).trim()).filter(Boolean))];
+  if (ids.length > 200 || ids.some((x) => !/^\d{1,9}$/.test(x))) throw new Error('Invalid server id in the list.');
+  return ids;
+}
 const USERNAME = /^[a-z0-9][a-z0-9._-]{2,31}$/i;
 const MIN_PASSWORD = 10;
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 32 };
@@ -56,17 +65,18 @@ class UserStore {
   }
   has() { return this.users.length > 0; }
   find(username) { const k = String(username || '').toLowerCase(); return this.users.find((u) => u.username.toLowerCase() === k) || null; }
-  pub(u) { return { username: u.username, role: u.role, totp: !!(u.totp && u.totp.enabled), recoveryLeft: u.totp && u.totp.enabled ? (u.totp.recovery || []).length : 0, createdAt: u.createdAt, lastLogin: u.lastLogin || 0 }; }
+  pub(u) { return { username: u.username, role: u.role, totp: !!(u.totp && u.totp.enabled), recoveryLeft: u.totp && u.totp.enabled ? (u.totp.recovery || []).length : 0, createdAt: u.createdAt, lastLogin: u.lastLogin || 0, servers: Array.isArray(u.servers) && SCOPED.includes(u.role) ? u.servers : null }; }
   list() { return this.users.map((u) => this.pub(u)); }
   owners() { return this.users.filter((u) => u.role === 'owner'); }
 
-  async create({ username, password, role = 'viewer' }) {
+  async create({ username, password, role = 'viewer', servers = null }) {
     username = String(username || '').trim();
     if (!USERNAME.test(username)) throw new Error('Username: 3-32 characters (letters, digits, dot, dash, underscore), starting with a letter or digit.');
     if (!ROLES.includes(role)) throw new Error('Unknown role.');
     const bad = passwordProblem(password, username); if (bad) throw new Error(bad);
     if (this.find(username)) throw new Error('That username already exists.');
-    this.users.push({ username, role, pw: await hashPassword(password), totp: { enabled: false, secret: '', lastStep: 0, recovery: [] }, createdAt: this.now(), lastLogin: 0 });
+    const scope = cleanServers(role, servers);
+    this.users.push({ username, role, servers: scope, pw: await hashPassword(password), totp: { enabled: false, secret: '', lastStep: 0, recovery: [] }, createdAt: this.now(), lastLogin: 0 });
     this.save(); return this.pub(this.find(username));
   }
   async setPassword(username, password) {
@@ -78,8 +88,16 @@ class UserStore {
     const u = this.find(username); if (!u) throw new Error('No such user.');
     if (!ROLES.includes(role)) throw new Error('Unknown role.');
     if (u.role === 'owner' && role !== 'owner' && this.owners().length < 2) throw new Error('There must be at least one owner.');
-    u.role = role; this.save();
+    u.role = role; u.servers = cleanServers(role, u.servers); this.save();
   }
+  /** Limit an operator / viewer account to some servers (null = all). */
+  setServers(username, servers) {
+    const u = this.find(username); if (!u) throw new Error('No such user.');
+    if (!SCOPED.includes(u.role) && servers !== null && servers !== undefined) throw new Error('Only operator and viewer accounts can be limited to some servers (owners and admins can change everything).');
+    u.servers = cleanServers(u.role, servers); this.save();
+  }
+  /** The allowed server ids of an account as a Set, or null for all servers. */
+  scopeOf(username) { const u = this.find(username); return u && Array.isArray(u.servers) && SCOPED.includes(u.role) ? new Set(u.servers.map(String)) : null; }
   remove(username) {
     const u = this.find(username); if (!u) throw new Error('No such user.');
     if (u.role === 'owner' && this.owners().length < 2) throw new Error('The last owner cannot be deleted.');
@@ -141,4 +159,4 @@ class UserStore {
   disableTotp(username) { const u = this.find(username); if (!u) throw new Error('No such user.'); u.totp = { enabled: false, secret: '', lastStep: 0, recovery: [] }; this.pending.delete(u.username); this.save(); }
 }
 
-module.exports = { UserStore, ROLES, USERNAME, MIN_PASSWORD, hashPassword, checkPassword, passwordProblem };
+module.exports = { UserStore, ROLES, SCOPED, cleanServers, USERNAME, MIN_PASSWORD, hashPassword, checkPassword, passwordProblem };

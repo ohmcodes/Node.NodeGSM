@@ -7,6 +7,39 @@ Rules for a safe test run:
 - Several checks need two or more servers of the same game: create them with **+ Add Server** (or import copies of one folder).
 - `[ ]` = not tested yet. Expected results are in italics.
 
+## FINAL TEST (owner) - what is built and unit-tested, but needs you on the real thing
+Tick these last, in this order. Everything here passes the automated tests (`npm test`, all three repositories) with fakes; none of it has been run against the real service. **Build first:** `npm run dist` (version 0.0.1), install or run the portable exe, and use a throw-away server.
+
+**A. The new exe**
+- [ ] Close the window with *minimize to tray* on. *A notification says NodeGSM was minimized to the tray; the tray icon opens it again.*
+- [ ] Settings > Web access: the three tick boxes (HTTPS proxy, trust X-Forwarded-For, require 2FA) sit inline with their text.
+- [ ] Settings > Web access: switch it on, **Open**. *The sign-in / setup page appears in the browser; create the owner account.*
+- [ ] Footer: **Website** opens https://nodegsm.ohmcodes.com, **Donate** shows Patreon / PayPal / Buy Me a Coffee and each opens the right page; there is no Discord link.
+
+**B. Web accounts**
+- [ ] Add an account with *set up 2FA now* ticked (or **Set up 2FA** on an existing one). Add the key to an authenticator app, enter the code, **Confirm**. *Eight recovery codes are shown once.* Sign in on the web page with that account. *Password, then the code; a recovery code also works once.*
+- [ ] Create an **operator** limited to ONE of two servers (Servers button). Sign in as it in the browser. *Only that server is listed; Start / Stop / Restart / console / backup work; Settings, Files, Config and the other server are not available (403); no events of the other server arrive.* Change its server list in the desktop app. *It is signed out and sees the new list after signing in.*
+- [ ] Same with a **viewer** limited to one server. *Read-only, no console input, no backup download.*
+
+**C. Background start (Windows)**
+- [ ] Close the desktop app, then Settings > Web access > Run without the app > **At sign-in** > Install (re-open the app only to remove it later, or use Task Scheduler). *Task "NodeGSM Web" exists; http://127.0.0.1:8730 answers without the app window; `logs/service.log` has output.* Sign out and in again. *It is running after sign-in.* Kill the server process. *It is back after about 30 seconds.* Remove the task. *The page stops answering.*
+- [ ] Same with **At Windows start** (start NodeGSM as administrator once to install). Restart the computer and do not sign in on the console. *The page answers after boot.*
+
+**D. Steam account**
+- [ ] Settings > Steam account: sign in with an account that owns DayZ (a throw-away account if possible). *Steam Guard code requested if enabled; "Signed in as ...".* Add a **DayZ** server and Install. *The download starts with the account; without signing in first it says to sign in.* Sign out. *The name disappears.*
+
+**E. RCON**
+- [ ] Minecraft (RCON on): click the quick-command buttons, use the up arrow for history. *Answers appear; coloured text shows as colours.*
+- [ ] Automation > Scheduled commands: a job with three lines (`say a`, `save-all`, `say b`), wait 2, schedule every minute. *Commands arrive in order about 2 s apart while the server runs; nothing while it is stopped.* Remove it.
+- [ ] Rust with `+rcon.port 28016 +rcon.password test +rcon.web 1`: Console > WebRCON > `status`. *Answer; a wrong password reports an authentication error.* Stop the server. *"Stopping over RCON", it quits by itself.*
+- [ ] CS:GO: Stop. *Quits by itself (no force kill).*
+
+**F. Earlier open items**
+- [ ] A scheduled backup over a real night; a real game log with `logging.logFiles`; the Discord bot and webhook against real Discord; two real servers in a cluster.
+
+**G. Release**
+- [ ] Only after A to F: tag `v0.0.1` and push (release workflow), download the installer from the GitHub Release, install it on a clean user, check the version in the app is 0.0.1.
+
 ## 0. First start and logo
 - [ ] Start the app. *The window and the Windows taskbar show the NodeGSM icon (dark tile, blue N made of stacked blocks); the header shows the same mark in the accent colour next to "NodeGSM".*
 - [ ] Settings > pick another accent colour. *The header mark changes colour with it.*

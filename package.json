@@ -1,6 +1,6 @@
 {
   "name": "nodegsm",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "NodeGSM - Node Game Server Manager. Install, run and automate game servers with one click.",
   "main": "src/main/main.js",
   "scripts": {

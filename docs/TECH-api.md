@@ -49,6 +49,9 @@ Every function of the app backend is one entry of the table returned by `buildAp
 | `configEdit` | `format, text, ops[]` | `{ ok, text, entries }` | Pure: applies `set` / `remove` (by entry id) and `add` (by path) operations, keeping comments, CRLF, BOM |
 | `logsList` | `id` | `[{ id, name, path, exists, ... }]` | The plugin's `logs[]` |
 | `logStart` / `logStop` | `id, logId` | - | Starts / stops the live tail of a log; lines arrive as `logLines` |
+| `steamStatus` | - | admin | `{ username }` of the Steam account signed in for games that need one (no password is ever stored) |
+| `steamLogin` | `user, pass, code?` | owner | `{ ok, needGuard, error, username }`: one-time SteamCMD sign-in that caches the login; `code` = Steam Guard code. The password only goes to SteamCMD's command line |
+| `steamLogout` | - | owner | `{ username: '' }`: asks SteamCMD to forget the login and clears the saved name |
 | `consolesList` | `id` | `[{ id, name, type, readOnly, commands? }]` | `main` (game console) plus `consoles[]`; `commands` = the plugin's quick-command buttons `[{ label, command, confirm }]` of an rcon console; sources / passwords are never returned. Scheduled commands are saved with `save(id, { rconSchedule })` |
 | `consoleCommand` | `id, consoleId, text` | `{ output }` | `main` -> game stdin, `rcon` -> RCON (loopback only); `log` consoles refuse commands |
 | `consoleStart` / `consoleStop` | `id, consoleId` | - | Start / stop a `log` console tail; output arrives as `consoleOut` |
@@ -170,10 +173,16 @@ Served by `WebAccess.api(actor)` (`src/server/webAccess.js`), on `POST /api/<nam
 | Channel | Args | Who | Returns / notes |
 |---|---|---|---|
 | `webStatus` | - | any | `{ accounts, setupNeeded, user, role, local, require2fa, limited }` |
+| `serviceStatus` | - | desktop only | `{ supported, installed, running, status, mode }` of the Windows background task (src/main/service.js) |
+| `serviceInstall` | `mode` | desktop only | `logon` (at sign-in) or `boot` (at Windows start, administrator); writes the launcher and creates the task, returns the status |
+| `serviceUninstall` | - | desktop only | removes the task |
 | `webServerStatus` | - | desktop only | `{ running, url, host, port, error, accounts }` of the embedded web server |
 | `webAccount` | - | web account | own `{ username, role, totp, recoveryLeft, require2fa, limited }` |
 | `webUsers` | - | owner | list of accounts (no hashes) |
-| `webUserCreate` | `username, password, role` | owner | the new account; password 10+ characters |
+| `webUserCreate` | `username, password, role, servers?` | owner | the new account; password 10+ characters; role `owner`, `admin`, `operator` or `viewer`; `servers` (operator / viewer only) = ids the account may use, omitted / `null` = all |
+| `webUserServers` | `username, servers` | owner | list; limits an operator / viewer account to the given server ids (`null` = all); signs the user's sessions out |
+| `webUserTotpBegin` | `username` | owner | `{ secret, uri }`: starts two-factor enrolment of any account (the desktop window shows the key) |
+| `webUserTotpConfirm` | `username, code` | owner | `{ recoveryCodes }`: the first authenticator code turns 2FA on; the 8 recovery codes are shown once |
 | `webUserRole` | `username, role` | owner | list; signs the user's sessions out; the last owner cannot be demoted |
 | `webUserPassword` | `username, password` | owner | `true`; signs the user's sessions out |
 | `webUserTotpOff` | `username` | owner | list; for a lost phone |

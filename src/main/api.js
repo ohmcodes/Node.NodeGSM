@@ -133,6 +133,14 @@ function buildApi(ctx) {
     catalogueDetail: (id) => svc('catalogue').detail(id),
     catalogueInstall: async (id) => { const got = await svc('catalogue').install(id); return { id: got, state: svc('catalogue').state(installedPlugins()) }; },
     metrics: () => mgr.metrics(),
+    // Steam account for games that need one (SteamCMD caches the login; only the account name is saved, never the password)
+    steamStatus: () => ({ username: (mgr.settings.steam || {}).username || '' }),
+    steamLogin: async (user, pass, code) => {
+      const r = await mgr.steam.login({ user, pass, code }, (l) => mgr.emit('steamLog', l));
+      if (r.ok) mgr.saveSettings({ steam: { username: String(user).trim() } });
+      return { ok: r.ok, needGuard: !!r.needGuard, error: r.error || '', username: r.ok ? String(user).trim() : (mgr.settings.steam || {}).username || '' };
+    },
+    steamLogout: async () => { await mgr.steam.logout(); mgr.saveSettings({ steam: { username: '' } }); return { username: '' }; },
     discordBotStatus: () => svc('discordBot').status(),
     discordBotRestart: async () => svc('discordBot').restart(),
     // validates the token format only (no network); without an argument it checks the saved token

@@ -3,21 +3,18 @@
 Decisions deferred while implementing, to confirm with the project owner.
 
 ## Needs your input first
-Short list of the things that block or change the most. Details are in the sections below.
-1. **Embed reference image** (Phase 2): send an example of the Discord embed look you want; the defaults are a neutral guess.
-2. **Bot token live test** (Phase 6): create a throw-away bot and run the commands once; nothing was ever run against real Discord (also: a real webhook **Send test**, Phase 2).
-3. **Footer URLs** (Phase 1): Website, Discord, Patreon, PayPal and Buy Me a Coffee are placeholders in `src/renderer/links.js`; the website repository's `public/config.js` needs the real repo / Discord / API URLs too.
-4. **Logo direction review** (Phase 8): the logo is a first pass (N from stacked server blocks + a network link). Approve it or describe what to change; `npm run icons` regenerates every file.
-5. **`/send` policy** (Phase 6): keep, restrict to admin roles, or remove? It gives allowed users full console access.
-6. **Token encryption** (Phase 6): the bot token and webhook URLs are plain text in `settings.json`; use Electron `safeStorage` (breaks when the data folder moves to another PC)?
-7. **Real-server pattern checks for tick / RCON** (Phases 5 and 7): the `mc`, `csgo` and `rust` patterns were written from documentation, not from live output; RCON was only tested against a local fake.
-8. **Cluster preserve defaults** (Phase 4): only `mc`, `arkse` and `rust` ship `cluster.preserve`; a cluster update of any other game copies everything except configs. Refuse / confirm when a plugin declares none?
-9. **Real backups and clusters** (Phases 3 and 4): try one multi-GB server, a neat-pick restore-as-new that downloads the game, and a real two-server cluster update (back up first).
+Decisions made on 2026-11-27 are listed first; what is left is the real-world testing. Details are in the sections below.
+- **Decided:** the **logo** is approved as it is (N from stacked server blocks + a network link). The **Discord embed reference image** is dropped (the default embed stays). **`/send`** stays as it is: off by default, only for users the permission rules allow (it gives full console access). **Token encryption** is not needed (NodeGSM runs on the user's own machine or server; the bot token and webhook URLs stay plain text in `settings.json`). **BattlEye and Telnet RCON** are not planned.
+- **Decided:** **footer URLs** are set (Website https://nodegsm.ohmcodes.com, Patreon, PayPal, Buy Me a Coffee); the **Discord link is halted** (hidden while empty). The website is served at https://nodegsm.ohmcodes.com; only the Catalogue is published through GitHub Pages.
+1. **Bot token live test** (Phase 6): create a throw-away bot and run the commands once; nothing was ever run against real Discord (also: a real webhook **Send test**, Phase 2).
+2. **Real-server pattern checks for tick / RCON** (Phases 5 and 7): the `mc`, `csgo` and `rust` patterns were written from documentation, not from live output; RCON was only tested against local fakes.
+3. **Cluster preserve defaults** (Phase 4): only `mc`, `arkse` and `rust` ship `cluster.preserve`; a cluster update of any other game copies everything except configs. Refuse / confirm when a plugin declares none?
+4. **Real backups and clusters** (Phases 3 and 4): try one multi-GB server, a neat-pick restore-as-new that downloads the game, and a real two-server cluster update (back up first).
 
 The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md).
 
 ## Phase 1 - app shell
-- Footer URLs (Website, Discord, Patreon, PayPal, Buy Me a Coffee) are placeholders in `src/renderer/links.js`.
+- Footer URLs are set in `src/renderer/links.js` (Discord halted: hidden while its URL is empty).
 - Panel scope: the server-list panel shows only in the List view; the details and quick-settings panels also show in Table / System Metrics (following `state.sel`). In the Table view a single click does not change that selection (double-click does). Should Table selection drive them?
 - Only List / Table / System Metrics are remembered as the start view (`settings.view`); Games, Settings and Discord are not. Should the start view be extendable?
 - Tick header stat is a "-" placeholder until Phase 7. *(Resolved in Phase 7: it shows the worst tick of the running servers, `n/a` when none has one.)*
@@ -115,7 +112,7 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - The in-app header mark is inline SVG coloured by the accent; the website logo is a fixed-blue PNG (mark only, transparent) and the favicon is the dark tile.
 
 ## Phase 9 - docs, tests and release
-- Features not done and listed as ⏳ in FEATURES.md:  Steam login, mod manager, online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
+- Features not done and listed as ⏳ in FEATURES.md: mod manager, passkeys (WebAuthn), online plugin repository, release downloads, web / Linux version (planned last, starts only after you confirm the plan and the docs).
 - Which of the unverified (🧪) features do you want promoted to ✅ after the manual run in [TESTING-CHECKLIST.md](TESTING-CHECKLIST.md)?
 - *(Resolved: `GUIDE-web-linux.md` exists.)*
 
@@ -131,11 +128,11 @@ The manual steps for all of this are in [TESTING-CHECKLIST.md](TESTING-CHECKLIST
 - **Firewall on Linux** is not managed (a `ufw` hint is shown). Manage `ufw` / `firewalld` through an optional, explicitly configured sudo rule?
 - **Process isolation:** game servers are children of the NodeGSM process; a hard NodeGSM crash leaves them running (as orphans of init) and they are not re-attached after a restart. Re-attach by pid file, or run each server in its own systemd scope / container?
 - **Crash handling in web mode:** uncaught exceptions are logged to `logs/crash.log` and the process keeps running (the desktop app can relaunch itself, a service relies on systemd `Restart=`). Exit and let the supervisor restart instead?
-- **Windows web mode:** `npm run serve` also works on Windows (used for the automated tests); it is not packaged as a Windows service.
+- **Windows web mode:** `npm run serve` also works on Windows (used for the automated tests). Since 2026-11-27 the desktop app can install a **scheduled task** that starts it hidden (Settings > Web access > Run without the app); a real installed Windows service (WinSW / NSSM) is not planned. Open: should NodeGSM refuse to start the desktop window while the background task runs on the same data folder?
 - **New dependency:** `ws` 8.23.0 (about 0.2 MB; it was already installed transitively by `discord.js`, now pinned as a direct dependency).
 
 ## Website - WindowsGSM plugin converter
-- **Hosting for the backend:** option 3 (automated submission) needs the Website's Node server; the production site is static GitHub Pages, where the option is disabled automatically. Where should the backend run (a small VPS, a container host), and which URL goes into `API_URL` / `ALLOWED_ORIGINS`?
+- **Hosting for the backend:** option 3 (automated submission) needs the Website's Node server; the site at https://nodegsm.ohmcodes.com runs the Website's Node server (Docker / compose files in the Website repository), so the API is on the same origin (`API_URL: 'auto'`). Only the Catalogue is published through GitHub Pages.
 - **Moderation process:** who reviews submissions, how often, and what is the bar (the draft PR still needs icon, docs links, a test in NodeGSM and the Catalogue CI)? Should rejected submissions be kept, and for how long? There is only the `ADMIN_TOKEN` + curl / `admin-submissions.html`, no e-mail notification.
 - **Bot token scope:** `GITHUB_TOKEN` should be a **fine-grained token limited to the Catalogue repository** with *Contents* and *Pull requests* read/write only. Should the PRs come from a dedicated bot account / GitHub App instead of a personal token, and should branches `submit/*` be cleaned up after merge?
 - **Spam handling / captcha:** the only protections are per-hashed-IP limits (1 per 10 minutes, 3 per day), a 200-pending cap, size / character checks and owner review. Add a captcha, a proof-of-work, or require a verified contact?

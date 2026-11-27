@@ -181,10 +181,10 @@ async function startServer(opts = {}) {
       try { const raw = await readBody(req, maxBody); body = raw.length ? JSON.parse(raw.toString('utf8')) : {}; } catch (e) { return json(res, e.status || 400, { ok: false, error: e.status === 413 ? e.message : 'Invalid JSON' }); }
       let args = body && body.args !== undefined ? body.args : [];
       if (!Array.isArray(args)) return json(res, 400, { ok: false, error: '"args" must be an array' });
-      try { wa.authorize(name, a.actor); } catch (e) { return json(res, e.status || 403, { ok: false, error: e.message }); }
+      try { wa.authorize(name, a.actor, args); } catch (e) { return json(res, e.status || 403, { ok: false, error: e.message }); }
       // the bind address / port / HTTPS of the web access itself can only be changed from the desktop window or the settings file
       if (name === 'saveSettings' && args[0] && typeof args[0] === 'object' && 'web' in args[0]) { const { web, ...rest } = args[0]; args = [rest, ...args.slice(1)]; }
-      try { return json(res, 200, { ok: true, data: await (webNames.has(name) ? wa.api(a.actor)[name](...args) : api[name](...args)) }); } catch (e) { return json(res, e.status === 429 ? 429 : 200, { ok: false, error: e && e.message ? e.message : String(e) }); }
+      try { return json(res, 200, { ok: true, data: wa.scopeResult(name, await (webNames.has(name) ? wa.api(a.actor)[name](...args) : api[name](...args)), a.actor) }); } catch (e) { return json(res, e.status === 429 ? 429 : 200, { ok: false, error: e && e.message ? e.message : String(e) }); }
     }
 
     // ---- backup download ----
@@ -192,6 +192,7 @@ async function startServer(opts = {}) {
       const a = authenticate(req);
       if (!a.ok) return denied(res, a);
       if (a.actor.limited || a.actor.role === 'viewer') return json(res, 403, { ok: false, error: 'Not allowed for this account' });
+      try { wa.checkScope('backupDownload', [url.searchParams.get('folder')], a.actor); } catch (e) { return json(res, e.status || 403, { ok: false, error: e.message }); }
       let file; try { file = core.mgr.bk().filePath(url.searchParams.get('folder'), url.searchParams.get('file')); } catch (e) { return json(res, 400, { ok: false, error: e.message }); }
       let st; try { st = fs.statSync(file); if (!st.isFile()) throw new Error('x'); } catch { return json(res, 404, { ok: false, error: 'Backup not found' }); }
       const name = path.basename(file).replace(/[^A-Za-z0-9._-]/g, '_');
@@ -233,15 +234,22 @@ async function startServer(opts = {}) {
     if (a.actor && a.actor.limited) return reject(403, 'Forbidden');
     if (wss.clients.size >= MAX_WS) return reject(503, 'Service Unavailable');
     wss.handleUpgrade(req, socket, head, (ws) => {
-      ws.alive = true; ws.cookie = a.cookie || null;
+      ws.alive = true; ws.cookie = a.cookie || null; ws.actor = a.actor;
       ws.on('pong', () => { ws.alive = true; }); ws.on('message', () => { /* push only */ }); ws.on('error', () => {});
       wss.emit('connection', ws, req);
     });
   });
   const unsub = core.hub.on((ch, payload) => {
     if (!wss.clients.size) return;
-    let msg; try { msg = JSON.stringify({ ch, payload }); } catch { return; }
-    for (const ws of wss.clients) if (ws.readyState === 1 && ws.bufferedAmount < 8 * 1024 * 1024) ws.send(msg);
+    let full; try { full = JSON.stringify({ ch, payload }); } catch { return; }
+    for (const ws of wss.clients) {
+      if (ws.readyState !== 1 || ws.bufferedAmount >= 8 * 1024 * 1024) continue;
+      if (!ws.actor || ws.actor.local || ws.actor.role === 'owner' || ws.actor.role === 'admin') { ws.send(full); continue; }
+      // accounts limited to some servers only get the events of those servers
+      let p; try { p = wa.scopePush(ch, payload, ws.actor); } catch { continue; }
+      if (p === null) continue;
+      try { ws.send(p === payload ? full : JSON.stringify({ ch, payload: p })); } catch { /* socket closing */ }
+    }
   });
   const beat = setInterval(() => {
     wa.sweep();

@@ -499,6 +499,7 @@ async function openSettingsView() {
   paintSettings(s);
   if (state.features.dataLocation) paintDataLocation();
   if (typeof waPaint === 'function') waPaint(s);
+  if (typeof steamPaint === 'function') steamPaint();
   renderColChecks($('#setCols'));
 }
 

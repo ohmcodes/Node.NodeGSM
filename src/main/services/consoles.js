@@ -10,6 +10,7 @@ const configEdit = require('../configEdit');
 
 const MAX_COMMAND = 4096;
 const RCON_IDLE_CLOSE_MS = 5 * 60 * 1000;
+const MAX_BATCH = 20;   // commands in one scheduled job
 const MAX_QUICK = 30;   // quick-command buttons per console
 /** Value of a start-parameter option: "+rcon.port 28016", "-rcon.port 28016", "rcon.port=28016" (quotes around the value are removed). */
 function paramValue(param, name) {
@@ -200,9 +201,18 @@ class Consoles {
    * Run a command for automation (scheduled commands): through the rcon console consoleId (default: the first one), else the
    * game's own console (stdin). Shows up in the console and the event log like a typed command.
    */
-  async run(id, text, consoleId) {
+  async run(id, text, consoleId, { waitSec = 1 } = {}) {
     const cid = consoleId || this.rconConsoleId(id) || 'main';
-    return this.command(id, cid, text);
+    // one command per line (like several arguments of mcrcon); a pause between them (mcrcon -w), none after the last
+    const lines = String(text == null ? '' : text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, MAX_BATCH);
+    if (!lines.length) throw new Error('Empty command');
+    const wait = Math.min(Math.max(Number(waitSec) || 0, 0), 600) * 1000;
+    let out = '';
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0 && wait) await new Promise((r) => setTimeout(r, wait));
+      const r = await this.command(id, cid, lines[i]); out = (r && r.output) || '';
+    }
+    return { output: out };
   }
 
   // ---------- log consoles ----------

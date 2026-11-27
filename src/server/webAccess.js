@@ -5,11 +5,15 @@
 const crypto = require('crypto');
 const auth = require('./auth');
 const { UserStore } = require('./users');
+const scope = require('./scope');
 
 /** API channels a viewer may call: read-only, and nothing that returns secrets (settings / config files are admin only). */
 const VIEWER_OK = new Set(['games', 'list', 'get', 'console', 'backups', 'backupInfo', 'eventLogQuery', 'eventLogExport', 'clusters', 'consolesList', 'logsList', 'pluginDetail', 'pluginsInfo', 'platformInfo', 'settingsDefaults', 'metricsState', 'metrics', 'discordBotStatus', 'catalogueState', 'catalogueDetail']);
+/** What an operator may do on top of a viewer: run servers, use consoles, make backups (not edit settings, files, configs, plugins). */
+const OPERATOR_EXTRA = new Set(['start', 'stop', 'restart', 'kill', 'command', 'consoleCommand', 'consoleStart', 'consoleStop', 'logStart', 'logStop', 'backup', 'checkUpdate', 'bulk']);
+const OPERATOR_BULK = new Set(['start', 'stop', 'restart', 'kill', 'backup']);   // bulk actions an operator may use
 /** Channels only an owner may call over the web (besides every web* management call). */
-const OWNER_ONLY = new Set(['relaunch', 'eventLogClear', 'discordBotTest', 'discordTest', 'discordBotRestart', 'pluginsInstallZip', 'pluginsInstallFolder', 'pluginsReload', 'catalogueInstall', 'catalogueRefresh', 'dataLocation', 'dataLocationPlan', 'dataLocationMove', 'dataLocationOpenOld']);
+const OWNER_ONLY = new Set(['steamLogin', 'steamLogout', 'relaunch', 'eventLogClear', 'discordBotTest', 'discordTest', 'discordBotRestart', 'pluginsInstallZip', 'pluginsInstallFolder', 'pluginsReload', 'catalogueInstall', 'catalogueRefresh', 'dataLocation', 'dataLocationPlan', 'dataLocationMove', 'dataLocationOpenOld']);
 /** What a session that still has to set up two-factor authentication may call. */
 const LIMITED_OK = new Set(['webAccount', 'webPasswordChange', 'webTotpBegin', 'webTotpConfirm', 'platformInfo']);
 
@@ -114,14 +118,28 @@ class WebAccess {
   logout(cookie) { const s = this.sessions.get(cookie); if (s) this.audit('info', 'web:logout', `Web sign-out: ${s.user || 'token'}`, { ip: s.ip }); this.sessions.destroy(cookie); }
 
   /** Role gate for a normal API channel. actor = { local, role, limited }. Throws an Error with .status 403. */
-  authorize(name, actor) {
+  authorize(name, actor, args = []) {
     if (actor.local) return;
     if (actor.limited && !LIMITED_OK.has(name)) throw err('Two-factor authentication must be set up first (open the account page).', 403);
     if (name.startsWith('web')) return;   // checked inside api()
     if (actor.role === 'owner') return;
     if (OWNER_ONLY.has(name)) throw err('Only an owner can do this.', 403);
     if (actor.role === 'viewer' && !VIEWER_OK.has(name)) throw err('Your account is read-only (viewer).', 403);
+    if (actor.role === 'operator') {
+      if (!VIEWER_OK.has(name) && !OPERATOR_EXTRA.has(name)) throw err('Operators can run servers, use consoles and make backups, but not change settings, files or plugins.', 403);
+      if (name === 'bulk' && !OPERATOR_BULK.has(String(args[0]))) throw err('Operators can start, stop, restart, kill and back up servers in bulk, nothing else.', 403);
+    }
+    if (actor.role === 'admin' || actor.role === 'owner') return;
+    scope.check(name, args, this.scopeFor(actor));
   }
+
+  /** The servers an account may use: a Set of ids, or null for all (owners, admins, the desktop window, the access token). */
+  scopeFor(actor) { return actor.local || !actor.user || actor.role === 'owner' || actor.role === 'admin' ? null : this.users.scopeOf(actor.user); }
+  /** Throws 403 when the call names a server this account may not use (limited accounts only). */
+  checkScope(name, args, actor) { scope.check(name, args, this.scopeFor(actor)); }
+  /** Remove other servers from a channel's result (limited accounts only). */
+  scopeResult(name, data, actor) { return scope.filterResult(name, data, this.scopeFor(actor)); }
+  scopePush(ch, payload, actor) { return scope.filterPush(ch, payload, this.scopeFor(actor)); }
 
   /** The web* channels for one caller. actor = { local, user, role, cookie, limited }. */
   api(actor) {
@@ -133,7 +151,11 @@ class WebAccess {
       webStatus: () => ({ accounts: this.users.has(), setupNeeded: !this.users.has(), user: actor.local ? '' : actor.user || '', role: actor.local ? 'owner' : actor.role, local: !!actor.local, require2fa: this.require2fa, limited: !!actor.limited }),
       webAccount: () => { const u = this.users.find(self()); if (!u) throw err('Unknown account.'); return { ...this.users.pub(u), require2fa: this.require2fa, limited: !!actor.limited }; },
       webUsers: () => { needOwner(); return this.users.list(); },
-      webUserCreate: async (username, password, role) => { needOwner(); const u = await this.users.create({ username, password, role }); this.audit('info', 'web:user-created', `Account created: ${u.username} (${u.role})`, { by: actor.user || 'desktop' }); return u; },
+      webUserCreate: async (username, password, role, servers) => { needOwner(); const u = await this.users.create({ username, password, role, servers }); this.audit('info', 'web:user-created', `Account created: ${u.username} (${u.role})`, { by: actor.user || 'desktop' }); return u; },
+      webUserServers: (username, servers) => { needOwner(); this.users.setServers(username, servers); this.sessions.revoke({ user: this.users.find(username).username }); this.audit('warn', 'web:user-servers', 'Server access changed for ' + username + ': ' + (servers ? servers.length + ' server(s)' : 'all servers'), { by: actor.user || 'desktop' }); return this.users.list(); },
+      // two-factor enrolment of ANY account by the owner (the desktop window shows the secret to scan / type into the authenticator app; the account holder confirms with a code)
+      webUserTotpBegin: (username) => { needOwner(); const u = this.users.find(username); if (!u) throw err('No such user.'); return this.users.beginTotp(u.username); },
+      webUserTotpConfirm: (username, code) => { needOwner(); const u = this.users.find(username); if (!u) throw err('No such user.'); const codes = this.users.confirmTotp(u.username, code); this.sessions.revoke({ user: u.username }); this.audit('info', 'web:2fa-on', 'Two-factor authentication set up for ' + u.username + ' by an owner', { by: actor.user || 'desktop' }); return { recoveryCodes: codes }; },
       webUserRole: (username, role) => { needOwner(); this.users.setRole(username, role); this.sessions.revoke({ user: this.users.find(username).username }); this.audit('warn', 'web:user-role', `Role changed: ${username} -> ${role}`, { by: actor.user || 'desktop' }); return this.users.list(); },
       webUserPassword: async (username, password) => { needOwner(); await this.users.setPassword(username, password); this.sessions.revoke({ user: this.users.find(username).username }); this.audit('warn', 'web:password-reset', `Password reset for ${username}`, { by: actor.user || 'desktop' }); return true; },
       webUserTotpOff: (username) => { needOwner(); this.users.disableTotp(username); this.sessions.revoke({ user: this.users.find(username).username }); this.audit('warn', 'web:2fa-off', `Two-factor authentication removed for ${username}`, { by: actor.user || 'desktop' }); return this.users.list(); },
@@ -168,4 +190,4 @@ class WebAccess {
   get webChannels() { return Object.keys(this.api({ local: true })); }
 }
 
-module.exports = { WebAccess, VIEWER_OK, OWNER_ONLY, LIMITED_OK };
+module.exports = { WebAccess, VIEWER_OK, OWNER_ONLY, LIMITED_OK, OPERATOR_EXTRA };

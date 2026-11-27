@@ -21,4 +21,4 @@ Three buttons in the header toggle the panels. Everything you collapse is rememb
 Settings > **Header info bar**: pick any of CPU, RAM, Disk, Servers (running/total), Players, Tick. Tick shows the worst tick metric (TPS, tick rate, FPS or ms per tick, coloured) of the running servers whose game declares one; hover it for the server names. It shows `n/a` when no running server reports one - see [GUIDE-metrics.md](GUIDE-metrics.md).
 
 ## Footer
-**Website**, **Discord** and **Donate** (Patreon, PayPal, Buy Me a Coffee) open in your default browser. The addresses are PLACEHOLDERS in `src/renderer/links.js` - replace each `...-replace-me` URL.
+**Website** (https://nodegsm.ohmcodes.com) and **Donate** (Patreon, PayPal, Buy Me a Coffee) open in your default browser. The addresses are in `src/renderer/links.js`; a link with an empty address is hidden (the **Discord** link is halted for now).

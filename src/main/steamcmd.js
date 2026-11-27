@@ -79,7 +79,8 @@ class SteamCMD {
     // +@sSteamCmdForcePlatformType must come first; only added when the wanted platform differs from the host's
     if (forcePlatform && platform.steamPlatform(forcePlatform) !== platform.steamPlatform(this.platform)) a.push('+@sSteamCmdForcePlatformType', platform.steamPlatform(forcePlatform));
     a.push('+force_install_dir', installDir);
-    a.push('+login', ...(user ? [user, pass || ''] : ['anonymous']));
+    // a signed-in account without a password uses the login SteamCMD cached (Settings > Steam account)
+    a.push('+login', ...(user ? (pass ? [user, pass] : [user]) : ['anonymous']));
     // GoldSource games are a "mod" of the HLDS app (90): +app_set_config 90 mod <game>
     if (mod) a.push('+app_set_config', '90', 'mod', mod);
     for (let i = 0; i < Math.max(1, repeat); i++) {
@@ -113,6 +114,51 @@ class SteamCMD {
       pipe(p.stdout); pipe(p.stderr);
       p.on('error', (e) => { onLog(`SteamCMD failed to start: ${e.message}`); resolve(-1); });
       p.on('close', (code) => resolve(code));
+    });
+  }
+
+  /**
+   * Sign in once so SteamCMD caches the login (its own token in <steamcmd>/config, no password is kept by NodeGSM).
+   * Resolves { ok, needGuard?, error?, output } - never rejects. The password and the Steam Guard code only go to SteamCMD's command line
+   * (stdin is closed, so SteamCMD cannot wait for a prompt) and are never logged or returned.
+   */
+  async login({ user, pass, code }, onLog = () => {}) {
+    if (!/^[A-Za-z0-9_.@-]{2,64}$/.test(String(user || ''))) return { ok: false, error: 'Enter the Steam account name (not the e-mail address of a different service).' };
+    if (!pass || typeof pass !== 'string' || pass.length > 200 || /[\r\n\0]/.test(pass)) return { ok: false, error: 'Enter the password of the Steam account.' };
+    if (code !== undefined && code !== '' && !/^[A-Za-z0-9]{4,10}$/.test(String(code))) return { ok: false, error: 'The Steam Guard code is 5 letters / digits.' };
+    await this.ensure(onLog);
+    const args = ['+login', user, pass, ...(code ? [String(code)] : []), '+quit'];
+    onLog('Signing in to Steam as ' + user + ' ...');
+    return new Promise((resolve) => {
+      const p = spawn(this.exe, args, { cwd: this.dir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      const timer = setTimeout(() => { try { p.kill(); } catch { /* gone */ } }, this.loginTimeoutMs || 90000);
+      const take = (d) => { out += d.toString(); };
+      p.stdout.on('data', take); p.stderr.on('data', take);
+      p.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, error: 'SteamCMD failed to start: ' + e.message }); });
+      p.on('close', () => { clearTimeout(timer); resolve(SteamCMD.parseLogin(out, pass, code)); });
+    });
+  }
+
+  /** Reads the outcome of a sign-in from SteamCMD's output. */
+  static parseLogin(output, pass, code) {
+    let text = String(output || '');
+    if (pass && String(pass).length >= 6) text = text.split(pass).join('***');   // SteamCMD does not echo it, but never let it through (Steam passwords have 8+ characters)
+    const tail = text.split(/\r?\n/).filter(Boolean).slice(-8).join('\n');
+    if (/Logged in OK|Waiting for user info\.\.\.OK/i.test(text)) return { ok: true, output: tail };
+    if (/Rate Limit Exceeded|Too many login failures/i.test(text)) return { ok: false, error: 'Steam is rate limiting sign-ins. Wait a few minutes and try again.', output: tail };
+    if (/Invalid Password|InvalidPassword/i.test(text)) return { ok: false, error: 'Steam says the account name or the password is wrong.', output: tail };
+    if (/Two-factor code mismatch|Invalid Login Auth Code|ExpiredLoginAuthCode|Login Auth Code/i.test(text) && code) return { ok: false, needGuard: true, error: 'The Steam Guard code was wrong or expired. Enter a fresh one.', output: tail };
+    if (/Steam Guard|Two-factor|Account Logon Denied|need.*guard/i.test(text)) return { ok: false, needGuard: true, error: 'Steam Guard: enter the code from your e-mail or the Steam mobile app, then sign in again.', output: tail };
+    return { ok: false, error: 'Sign-in failed: ' + (tail.split('\n').pop() || 'no answer from SteamCMD'), output: tail };
+  }
+
+  /** Forget the cached login (best effort). */
+  async logout() {
+    try { await this.ensure(); } catch { return; }
+    await new Promise((resolve) => {
+      const p = spawn(this.exe, ['+logout', '+quit'], { cwd: this.dir, windowsHide: true, stdio: 'ignore' });
+      p.on('error', resolve); p.on('close', resolve); setTimeout(resolve, 30000).unref();
     });
   }
 

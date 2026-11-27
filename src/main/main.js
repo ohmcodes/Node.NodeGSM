@@ -140,6 +140,11 @@ app.whenReady().then(() => {
   // account management for the browser access: the desktop window is the local owner (no sign-in needed)
   const localWeb = webAccess.api({ local: true });
   for (const [name, fn] of Object.entries(localWeb)) handle(name, fn);
+  // background start of the web mode without the window (Windows scheduled task, see service.js); desktop only
+  const svc = require('./service');
+  handle('serviceStatus', () => svc.status());
+  handle('serviceInstall', (mode) => { const w = mgr.settings.web || {}; return svc.install({ mode, exe: process.execPath, script: path.join(__dirname, '..', 'server', 'headless.js'), dataDir, host: w.host, port: w.port, https: w.https, trustProxy: w.trustProxy, require2fa: w.require2fa }); });
+  handle('serviceUninstall', () => svc.uninstall());
   handle('webServerStatus', () => ({ ...webState, accounts: webAccess.hasAccounts, defaults: { host: '127.0.0.1', port: 8730 } }));
 
   createWindow();

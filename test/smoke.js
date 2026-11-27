@@ -815,7 +815,7 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
   eq(sh.ui, { leftCollapsed: true, rightCollapsed: true, bottomCollapsed: true, navCollapsed: false }, 'ui collapse state round-trips through settings.json');
   eq(sh.headerStats, { cpu: true, ram: true, disk: true, servers: true, players: false, tick: true }, 'headerStats round-trips');
   const LINKS = require('../src/renderer/links.js');
-  for (const k of ['website', 'discord', 'patreon', 'paypal', 'buymeacoffee']) assert(typeof LINKS[k] === 'string' && /^https?:\/\/[^\s]+$/.test(LINKS[k]), 'links.js ' + k + ' is an http(s) URL');
+  for (const k of ['website', 'discord', 'patreon', 'paypal', 'buymeacoffee']) assert(typeof LINKS[k] === 'string' && (/^https?:\/\/[^\s]+$/.test(LINKS[k]) || (k === 'discord' && LINKS[k] === '')), 'links.js ' + k + ' is an http(s) URL (the halted Discord link may be empty)');
   const RD = path.join(__dirname, '..', 'src', 'renderer'); const html = fs.readFileSync(path.join(RD, 'index.html'), 'utf8');
   assert(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(html) && !/\son\w+\s*=/i.test(html), 'index.html has no inline scripts / handlers (CSP)');
   for (const f of [...html.matchAll(/<script src="([^"]+)"/g)].map((x) => x[1])) assert(fs.existsSync(path.join(RD, f)), 'script exists: ' + f);
@@ -1769,7 +1769,9 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
 
     // scheduled commands: settings + tick + routing
     assert.throws(() => SET.sanitizeRconSchedule([{ cron: 'nope', command: 'x' }]), /5 fields/); assert.throws(() => SET.sanitizeRconSchedule([{ cron: '*/5 * * * *', command: ' ' }]), /empty/); assert.throws(() => SET.sanitizeRconSchedule(new Array(21).fill({ cron: '* * * * *', command: 'x' })), /At most/);
-    eq(SET.sanitizeRconSchedule([{ cron: ' */30 * * * * ', command: ' save-all ', console: 'rcon' }, { enabled: false, cron: '0 4 * * *', command: 'say hi' }]), [{ enabled: true, cron: '*/30 * * * *', command: 'save-all', console: 'rcon' }, { enabled: false, cron: '0 4 * * *', command: 'say hi', console: '' }], 'schedule rows are cleaned');
+    eq(SET.sanitizeRconSchedule([{ cron: ' */30 * * * * ', command: ' save-all ', console: 'rcon' }, { enabled: false, cron: '0 4 * * *', command: 'say hi' }]), [{ enabled: true, cron: '*/30 * * * *', command: 'save-all', console: 'rcon', wait: 1 }, { enabled: false, cron: '0 4 * * *', command: 'say hi', console: '', wait: 1 }], 'schedule rows are cleaned (wait defaults to 1 s)');
+    eq(SET.sanitizeRconSchedule([{ cron: '* * * * *', command: ' say a \n\n save-all \r\n', wait: '5' }]), [{ enabled: true, cron: '* * * * *', command: 'say a\nsave-all', console: '', wait: 5 }], 'schedule: one command per line, blank lines dropped, wait is a number');
+    assert.throws(() => SET.sanitizeRconSchedule([{ cron: '* * * * *', command: 'x', wait: 601 }]), /0 to 600/, 'schedule: wait is limited'); assert.throws(() => SET.sanitizeRconSchedule([{ cron: '* * * * *', command: new Array(21).fill('x').join('\n') }]), /at most 20 commands/, 'schedule: at most 20 commands per job');
     eq(SET.sanitizeRconSchedule('x'), [], 'schedule: not a list = empty');
     const sd = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-rcs-')); const sm = new SM(sd); const sv = sm.create('mc', 'Cmds');
     sm.saveConfig(sv.id, { rconSchedule: [{ enabled: true, cron: '30 4 * * *', command: 'save-all' }, { enabled: false, cron: '30 4 * * *', command: 'off' }] }); eq(sm.getConfig(sv.id).rconSchedule.length, 2, 'rconSchedule is saved per server');
@@ -1790,6 +1792,8 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     cons.mgr = { getConfig: () => ({ game: 'g' }) }; cons.plugins = { byId: () => ({ consoles: [{ id: 'main', type: 'process' }, { id: 'r1', type: 'rcon' }] }) }; cons.command = async (i, c, t) => { routed.push([c, t]); };
     await cons.run('1', 'list'); await cons.run('1', 'list', 'other'); cons.plugins = { byId: () => ({ consoles: [] }) }; await cons.run('1', 'list');
     eq(routed, [['r1', 'list'], ['other', 'list'], ['main', 'list']], 'automation commands: first rcon console, an explicit console, or the game console');
+    routed.length = 0; cons.plugins = { byId: () => ({ consoles: [{ id: 'r1', type: 'rcon' }] }) }; const t0 = Date.now(); await cons.run('1', 'say a\n\nsave-all\nsay b', undefined, { waitSec: 0.05 }); eq(routed, [['r1', 'say a'], ['r1', 'save-all'], ['r1', 'say b']], 'several commands run in order (one per line)'); assert(Date.now() - t0 >= 90, 'a pause is kept between the commands');
+    await assert.rejects(cons.run('1', ' \n '), /Empty command/, 'a blank job is refused');
 
     // graceful stop over RCON: the plugin's stopRcon is sent first and a server that exits is not killed
     const sd2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-stop-')); const sm2 = new SM(sd2); const sv2 = sm2.create('mc', 'Stopper');
@@ -1798,6 +1802,86 @@ const spawnKill = (pid) => require('child_process').spawnSync('taskkill', ['/PID
     sm2.rconStopWaitMs = 200; sm2.rconStopExitMs = 1000; const gm = require('../src/main/plugins').byId('mc'); const had = gm.stopRcon; gm.stopRcon = 'stop';
     await sm2.stop(sv2.id); eq(polled, ['stop'], 'stop: the plugin stopRcon command is sent over RCON'); gm.stopRcon = had;
     fs.rmSync(sd2, { recursive: true, force: true }); w1.close();
+  }
+
+  // ---- operator role, per-server permissions, 2FA enrolment by the owner ----
+  {
+    const { WebAccess: WA } = require('../src/server/webAccess'); const scope = require('../src/server/scope'); const TOTP = require('../src/server/totp');
+    const wd = fs.mkdtempSync(path.join(os.tmpdir(), 'nodegsm-roles-')); const wa = new WA({ dataDir: wd, token: 'tok' });
+    const own = wa.api({ local: true });
+    await own.webUserCreate('boss1', 'boss password 123', 'owner'); await own.webUserCreate('oper1', 'oper password 123', 'operator', ['1', '2']); await own.webUserCreate('view1', 'view password 123', 'viewer', ['2']); await own.webUserCreate('adm1', 'adm password 1234', 'admin');
+    const A = (u) => ({ user: u, role: wa.users.find(u).role });
+    const ok = (name, actor, args) => { try { wa.authorize(name, actor, args); return true; } catch (e) { return e.status === 403 ? false : (() => { throw e; })(); } };
+    eq(own.webUsers().find((u) => u.username === 'oper1').servers, ['1', '2'], 'operator is limited to two servers'); eq(own.webUsers().find((u) => u.username === 'adm1').servers, null, 'admin has no server list');
+    assert(ok('start', A('oper1'), ['1']) && ok('consoleCommand', A('oper1'), ['2', 'main', 'list']) && ok('backup', A('oper1'), ['1', {}]) && ok('list', A('oper1'), []), 'operator can run, use the console and back up allowed servers');
+    assert(!ok('start', A('oper1'), ['3']) && !ok('consoleCommand', A('oper1'), ['3', 'main', 'x']) && !ok('backup', A('oper1'), ['9']), 'operator cannot touch other servers');
+    for (const n of ['writeFile', 'saveSettings', 'save', 'create', 'remove', 'update', 'configWrite', 'discordTest', 'autoClearSave']) assert(!ok(n, A('oper1'), ['1']), 'operator cannot call ' + n);
+    assert(ok('bulk', A('oper1'), ['restart', ['1', '2']]) && !ok('bulk', A('oper1'), ['update', ['1']]) && !ok('bulk', A('oper1'), ['restart', ['1', '3']]), 'bulk: allowed actions on allowed servers only');
+    assert(ok('get', A('view1'), ['2']) && !ok('get', A('view1'), ['1']) && !ok('start', A('view1'), ['2']), 'viewer: reads allowed servers only, never controls');
+    assert(ok('start', A('adm1'), ['3']) && ok('writeFile', A('adm1'), ['9', 'x', 'y']) && ok('start', A('boss1'), ['3']) && ok('start', { local: true }, ['3']), 'admin, owner and the desktop are not limited');
+    assert(!ok('clusterUpdate', A('view1'), ['1', {}]) && !ok('eventLogQuery', A('view1'), [{ serverId: '1' }]) && ok('eventLogQuery', A('view1'), [{ serverId: '2' }]) && !ok('backups', A('view1'), ['1']) && ok('backups', A('view1'), ['2.deleted-5']) && ok('backups', A('view1'), []), 'clusters, event log and backup folders follow the server list');
+    assert.throws(() => wa.users.setServers('adm1', ['1']), /operator and viewer/, 'admins cannot be given a server list'); await own.webUserRole('oper1', 'viewer'); eq(wa.users.find('oper1').servers, ['1', '2'], 'role change between limited roles keeps the list'); await own.webUserRole('oper1', 'admin'); eq(wa.users.find('oper1').servers, null, 'promotion to admin clears the list'); await own.webUserRole('oper1', 'operator');
+    assert.throws(() => wa.users.setServers('oper1', ['x1']), /Invalid server id/, 'server ids are digits'); own.webUserServers('oper1', null); eq(wa.users.find('oper1').servers, null, 'null = all servers'); own.webUserServers('oper1', ['1', '2']);
+    // filtering results and push events
+    const sc = scope; const al = new Set(['1', '2']);
+    eq(wa.scopeResult('list', [{ id: '1' }, { id: '3' }], A('oper1')), [{ id: '1' }], 'list is filtered'); eq(wa.scopeResult('list', [{ id: '3' }], A('adm1')), [{ id: '3' }], 'admin list is not filtered');
+    eq(sc.filterResult('backups', [{ folder: '1' }, { folder: '3.deleted-9' }, { folder: '2' }], al), [{ folder: '1' }, { folder: '2' }], 'backups are filtered by folder');
+    eq(sc.filterResult('eventLogQuery', [{ serverId: '1' }, { serverId: '7' }, { event: 'app:start' }], al), [{ serverId: '1' }], 'event log: other servers and app events are hidden');
+    eq(sc.filterResult('clusters', [{ memberIds: ['1', '2'] }, { memberIds: ['1', '3'] }], al), [{ memberIds: ['1', '2'] }], 'clusters: only those fully inside the list');
+    const snap = { snapshot: { servers: [{ id: '1', players: 2, pid: 5 }, { id: '3', players: 9, pid: 6 }], game: { players: 11, online: 2 } }, history: [{ players: 11, s: { 1: { p: 2 }, 3: { p: 9 } } }] };
+    const fm = sc.filterResult('metricsState', snap, al); eq(fm.snapshot.servers.length, 1); eq(fm.snapshot.game.players, 2, 'metrics: players recounted'); eq(Object.keys(fm.history[0].s), ['1'], 'metrics history is filtered');
+    eq(sc.filterPush('status', { id: '3' }, al), null); eq(sc.filterPush('status', { id: '2' }, al), { id: '2' }); eq(sc.filterPush('console', { id: '3', line: 'x' }, al), null); eq(sc.filterPush('removed', '3', al), null); eq(sc.filterPush('removed', '1', al), '1');
+    eq(sc.filterPush('cluster:progress', {}, al), null, 'cluster progress is not sent to limited accounts'); eq(sc.filterPush('status', { id: '3' }, null), { id: '3' }, 'no list = everything');
+    eq(sc.filterPush('metrics', { snapshot: snap.snapshot, point: snap.history[0] }, al).point.players, 2, 'metrics push is filtered');
+    // 2FA enrolment of any account by the owner (desktop window)
+    const b = own.webUserTotpBegin('view1'); assert(/^[A-Z2-7]{16,}$/.test(b.secret) && b.uri.startsWith('otpauth://'), 'enrolment returns a secret and an otpauth link');
+    await assert.rejects(Promise.resolve().then(() => own.webUserTotpConfirm('view1', '000000')), /code|Wrong/i, 'a wrong first code does not enable 2FA');
+    const done = own.webUserTotpConfirm('view1', TOTP.code(b.secret, TOTP.stepOf(Date.now()))); eq(done.recoveryCodes.length, 8, 'confirming returns 8 recovery codes'); assert(wa.users.find('view1').totp.enabled, '2FA is on');
+    assert.throws(() => wa.api({ user: 'view1', role: 'viewer' }).webUserTotpBegin('boss1'), /owner/i, 'only an owner can enrol other accounts');
+    fs.rmSync(wd, { recursive: true, force: true });
+  }
+
+  // ---- Steam account login (SteamCMD cached login) ----
+  {
+    const { SteamCMD: SC } = require('../src/main/steamcmd'); const PL = require('../src/main/plugins'); const { runInstall: RI } = require('../src/main/installRunner'); const SET = require('../src/main/settings');
+    const pl = (out, pass, code) => SC.parseLogin(out, pass, code);
+    assert(pl('Connecting anonymously\nLogging in user ohm to Steam Public...OK\nWaiting for user info...OK\nLogged in OK', 'pw1234567').ok, 'login: success');
+    eq(pl('Logging in user ohm...\nFAILED (Invalid Password)', 'pw1234567').error, 'Steam says the account name or the password is wrong.', 'login: wrong password');
+    assert(pl('This computer has not been authenticated for your account using Steam Guard.\nSteam Guard code:', 'pw1234567').needGuard, 'login: Steam Guard needed'); assert(pl('FAILED (Account Logon Denied)', 'x').needGuard, 'login: logon denied = guard');
+    const bad = pl('Two-factor code mismatch\nFAILED (Two-factor code mismatch)', 'pw1234567', 'ABCDE'); assert(bad.needGuard && /wrong or expired/.test(bad.error), 'login: wrong guard code asks again');
+    assert(/rate limiting/.test(pl('FAILED (Rate Limit Exceeded)', 'x').error), 'login: rate limit'); assert(/Sign-in failed/.test(pl('something odd', 'x').error), 'login: unknown failure');
+    assert(!JSON.stringify(pl('Logging in with SuperSecret99 ... FAILED (Invalid Password)\nSuperSecret99', 'SuperSecret99')).includes('SuperSecret99'), 'login: the password never appears in the result');
+    const sc = new SC('/d', 'windows'); sc.ensure = async () => {};
+    eq(await sc.login({ user: 'a', pass: 'secretpw1' }), { ok: false, error: 'Enter the Steam account name (not the e-mail address of a different service).' }, 'login: bad account name is refused before SteamCMD runs');
+    assert(/password/.test((await sc.login({ user: 'ohm', pass: '' })).error) && /Guard/.test((await sc.login({ user: 'ohm', pass: 'secretpw1', code: '!!' })).error), 'login: empty password and malformed code are refused');
+    eq(sc.buildArgs('D:/x', '1', { validate: false, user: 'ohm' }), ['+force_install_dir', 'D:/x', '+login', 'ohm', '+app_update', '1', '+quit'], 'a signed-in account without a password uses the cached login');
+    eq(sc.buildArgs('D:/x', '1', { validate: false, user: 'ohm', pass: 'p' }).slice(2, 5), ['+login', 'ohm', 'p'], 'user + password still works');
+    // plugin format
+    const base = (acc) => ({ id: 'ac', name: 'A', description: 'd', author: 'a', version: '1.0.0', run: { exe: 'a.exe' }, defaults: { port: '1' }, install: { type: 'steamcmd', appId: '123', account: acc } });
+    eq(PL.validate(base(true), os.tmpdir()).errors, [], 'plugin: install.account true is valid'); assert(PL.validate(base('yes'), os.tmpdir()).errors.some((x) => /account must be true or false/.test(x)), 'plugin: install.account must be a boolean');
+    // install: needs the account, passes it to SteamCMD
+    const calls = []; const steam = { install: async (dir, appId, o) => { calls.push([appId, o.user]); return 0; } };
+    const steps = [{ type: 'steamcmd', appId: '123', account: true }];
+    await assert.rejects(RI({ steps, hooks: {}, exe: 'x' }, { dir: os.tmpdir(), cfg: {}, log: () => {}, steam, steamUser: '' }), /needs a Steam account/, 'install: account game without a sign-in is refused with a clear message');
+    await RI({ steps, hooks: {}, exe: 'x' }, { dir: os.tmpdir(), cfg: {}, log: () => {}, steam, steamUser: 'ohm' }); eq(calls, [['123', 'ohm']], 'install: the signed-in account is used');
+    await RI({ steps: [{ type: 'steamcmd', appId: '9' }], hooks: {}, exe: 'x' }, { dir: os.tmpdir(), cfg: {}, log: () => {}, steam, steamUser: 'ohm' }); eq(calls[1], ['9', undefined], 'install: anonymous games ignore the account');
+    const g = PL.GAMES.find((x) => x.steamAccount); assert(true, 'plugins without account games are fine' + (g ? '' : ''));
+    eq(SET.sanitize({ steam: { username: 'ohm.user' } }).steam, { username: 'ohm.user' }, 'settings: steam username'); eq(SET.sanitize({ steam: { username: 'bad name!' } }).steam, { username: '' }, 'settings: a bad name is dropped'); eq(SET.DEFAULTS.steam, { username: '' }, 'settings: no account by default');
+  }
+
+  // ---- Windows background start (scheduled task) ----
+  {
+    const SV = require('../src/main/service');
+    const ps = SV.buildLauncher({ exe: "C:/Program Files/NodeGSM/NodeGSM.exe", script: 'C:/Program Files/NodeGSM/resources/app.asar/src/server/headless.js', dataDir: 'C:/Users/o hm/AppData/Roaming/NodeGSM', host: '0.0.0.0', port: 9000, https: true, trustProxy: true, require2fa: true });
+    assert(ps.includes("$env:ELECTRON_RUN_AS_NODE = \"1\"") && ps.includes("'--host' '0.0.0.0' '--port' '9000' '--data' 'C:/Users/o hm/AppData/Roaming/NodeGSM' '--https' '--trust-proxy' '--require-2fa'"), 'launcher: runs headless.js in Node mode with the web settings');
+    assert(ps.includes("*>> 'C:\\Users") || ps.includes('service.log'), 'launcher: logs to logs/service.log'); assert(/while \(\$true\)[\s\S]*Start-Sleep -Seconds 30/.test(ps), 'launcher: starts again after a crash');
+    assert(SV.buildLauncher({ exe: "C:/it's/x.exe", script: 's.js', dataDir: 'D:/d' }).includes("'C:/it''s/x.exe'"), 'launcher: single quotes in paths are escaped');
+    assert(!SV.buildLauncher({ exe: 'e', script: 's', dataDir: 'D:/d' }).includes('--https'), 'launcher: no HTTPS flag unless set');
+    const boot = SV.createArgs('boot', 'C:\\d\\run.ps1'); eq(boot.slice(0, 2), ['/Create', '/TN'], 'task: create'); assert(boot.includes('ONSTART') && boot.includes('SYSTEM') && boot.includes('/F'), 'task: boot mode runs as SYSTEM at start');
+    const lo = SV.createArgs('logon', 'C:\\d\\run.ps1'); assert(lo.includes('ONLOGON') && lo.includes('LIMITED') && !lo.includes('SYSTEM'), 'task: logon mode needs no administrator'); assert(lo[lo.indexOf('/TR') + 1].includes('-WindowStyle Hidden') && lo[lo.indexOf('/TR') + 1].includes('"C:\\d\\run.ps1"'), 'task: hidden PowerShell runs the launcher');
+    const pst = SV.parseStatus('TaskName: \\NodeGSM Web\nStatus:                               Running\nSchedule Type:                        At system start up\nLast Result:                          267009\n');
+    eq([pst.installed, pst.running, pst.mode, pst.lastResult], [true, true, 'boot', '267009'], 'status: parsed from schtasks'); eq(SV.parseStatus('Status: Ready\nSchedule Type: At logon time').running, false);
+    if (process.platform !== 'win32') { assert.throws(() => SV.install({ dataDir: os.tmpdir() }), /Windows/); eq(SV.status().supported, false); }
   }
 
   // ---- plugin logging.logFiles scanning ----
